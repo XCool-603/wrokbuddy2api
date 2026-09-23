@@ -1,6 +1,7 @@
 package server
 
 import (
+	"archive/zip"
 	"bytes"
 	_ "embed"
 	"encoding/json"
@@ -34,6 +35,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/action/trial", h.handleActionTrial)
 	h.mux.HandleFunc("POST /ui/action/delete", h.handleActionDelete)
 	h.mux.HandleFunc("POST /ui/config/apikey", h.handleConfigAPIKey)
+	h.mux.HandleFunc("GET /ui/action/backup", h.handleActionBackup)
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
@@ -119,9 +121,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			"in_flight_full":  inFlightFull,
 			"sticky_sessions": sticky,
 		},
-		"accounts": accounts,
-		"models":   models,
-		"apiKey":   h.GetAPIKey(),
+		"accounts":   accounts,
+		"models":     models,
+		"apiKey":     h.GetAPIKey(),
+		"recentLogs": GetRecentLogs(),
 	})
 }
 
@@ -640,4 +643,31 @@ func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
 		"success": true,
 		"api_key": newKey,
 	})
+}
+
+func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
+	files, err := auth.LoadAuthFiles("./auths")
+	if err != nil {
+		http.Error(w, "无法读取凭证目录: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/zip")
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=workbuddy2api_auths_backup_%s.zip", time.Now().Format("20060102_150405")))
+
+	zw := zip.NewWriter(w)
+	defer zw.Close()
+
+	for _, f := range files {
+		data, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		base := filepath.Base(f)
+		fw, err := zw.Create(base)
+		if err != nil {
+			continue
+		}
+		_, _ = fw.Write(data)
+	}
 }

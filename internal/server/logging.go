@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -16,6 +17,42 @@ import (
 
 // chatSeq 进程级请求序号。
 var chatSeq atomic.Int64
+
+// RecentLogItem 供 Web 控制台展示的实时请求流水
+type RecentLogItem struct {
+	ID        int64   `json:"id"`
+	Time      string  `json:"time"`
+	Model     string  `json:"model"`
+	Mode      string  `json:"mode"`
+	Status    int     `json:"status"`
+	Account   string  `json:"account"`
+	TTFB      string  `json:"ttfb"`
+	Tokens    string  `json:"tokens"`
+	TokenRate string  `json:"token_rate"`
+	Duration  float64 `json:"duration"`
+}
+
+var (
+	recentLogsMu sync.RWMutex
+	recentLogs   []RecentLogItem
+)
+
+func AddRecentLog(item RecentLogItem) {
+	recentLogsMu.Lock()
+	defer recentLogsMu.Unlock()
+	recentLogs = append(recentLogs, item)
+	if len(recentLogs) > 100 {
+		recentLogs = recentLogs[len(recentLogs)-100:]
+	}
+}
+
+func GetRecentLogs() []RecentLogItem {
+	recentLogsMu.RLock()
+	defer recentLogsMu.RUnlock()
+	res := make([]RecentLogItem, len(recentLogs))
+	copy(res, recentLogs)
+	return res
+}
 
 // chatLogEnabled 聊天表格日志总开关。生产恒 true；
 // 测试包经 TestMain 置 false 关闭 stdout 噪音，需要断言行输出的测试用 withChatLog 临时开启（R5）。
@@ -263,9 +300,10 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 	if ttfb > 0 {
 		ttfbMS = fmt.Sprintf("%dms", ttfb.Milliseconds())
 	}
+	timeStr := time.Now().Format("15:04:05")
 	fmt.Fprintf(os.Stdout, "| #%03d | %s | %s | %s | %d | %s | TTFB=%s | tok=%s | %s | total=%.1fs |\n",
 		seq,
-		time.Now().Format("15:04:05"),
+		timeStr,
 		model,
 		mode,
 		status,
@@ -275,4 +313,17 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 		logfmt.Pad(tokpsField, chatRateWidth),
 		total.Seconds(),
 	)
+
+	AddRecentLog(RecentLogItem{
+		ID:        seq,
+		Time:      timeStr,
+		Model:     strings.TrimSpace(model),
+		Mode:      mode,
+		Status:    status,
+		Account:   strings.TrimSpace(acct),
+		TTFB:      ttfbMS,
+		Tokens:    tokField,
+		TokenRate: tokpsField,
+		Duration:  total.Seconds(),
+	})
 }
