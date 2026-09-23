@@ -48,6 +48,7 @@ func pauseOnExit() {
 func fatalExit(format string, v ...any) {
 	msg := fmt.Sprintf(format, v...)
 	log.Printf("[FATAL ERROR] %s", msg)
+	showNativeError("WorkBuddy 2API 启动失败", msg)
 	pauseOnExit()
 	os.Exit(1)
 }
@@ -96,7 +97,7 @@ func main() {
 			cfg, err = Load("")
 		}
 		if err != nil {
-			fatalExit("load config: %v", err)
+			fatalExit("加载配置文件失败: %v\n请检查 config.json 是否格式正确", err)
 		}
 	}
 
@@ -114,7 +115,8 @@ func main() {
 
 	auths, err := auth.LoadDir(cfg.AuthDir)
 	if err != nil {
-		fatalExit("load auths: %v", err)
+		log.Printf("WARN: load auths: %v (首次运行可能无账号，请在面板中添加)", err)
+		auths = nil
 	}
 	log.Printf("loaded %d account(s) from %s", len(auths), cfg.AuthDir)
 
@@ -332,7 +334,7 @@ func main() {
 	go func() {
 		log.Printf("workbuddy2api listening on %s (api_key=%v)", cfg.Listen, cfg.APIKey != "")
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			fatalExit("http: %v", err)
+			fatalExit("HTTP 端口监听失败: %v\n请检查端口 %s 是否被其他程序占用，或者以管理员身份运行", err, cfg.Listen)
 		}
 	}()
 

@@ -8,3 +8,5 @@ package main
 func runDesktopGUI(uiURL string, stopFunc func()) bool {
 	return false
 }
+
+func showNativeError(title, msg string) {}
