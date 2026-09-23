@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkBuddy 2API · 双域融合智能网关</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            surface: {
+              card: '#0f172a',
+              deep: '#030712',
+              border: '#1e293b',
+              glow: 'rgba(99, 102, 241, 0.15)',
+            }
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 25px -5px rgba(6, 182, 212, 0.3)',
+            'glow-purple': '0 0 25px -5px rgba(168, 85, 247, 0.3)',
+            'glow-emerald': '0 0 25px -5px rgba(16, 185, 129, 0.3)',
+            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.37)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #030712;
+      background-image: 
+        radial-gradient(at 100% 0%, rgba(99, 102, 241, 0.12) 0px, transparent 50%),
+        radial-gradient(at 0% 100%, rgba(16, 185, 129, 0.08) 0px, transparent 50%),
+        radial-gradient(at 50% 50%, rgba(14, 165, 233, 0.06) 0px, transparent 50%);
+      background-attachment: fixed;
+    }
+    .glass-panel {
+      background: rgba(15, 23, 42, 0.7);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-card {
+      background: rgba(30, 41, 59, 0.4);
+      backdrop-filter: blur(12px);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+    }
+    .neon-border-blue:hover {
+      border-color: rgba(99, 102, 241, 0.5);
+      box-shadow: 0 0 20px -3px rgba(99, 102, 241, 0.25);
+    }
+    .custom-scroll::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    .custom-scroll::-webkit-scrollbar-track {
+      background: rgba(15, 23, 42, 0.6);
+    }
+    .custom-scroll::-webkit-scrollbar-thumb {
+      background: #334155;
+      border-radius: 9999px;
+    }
+    .custom-scroll::-webkit-scrollbar-thumb:hover {
+      background: #475569;
+    }
+  </style>
+</head>
+<body class="text-slate-100 min-h-screen font-sans antialiased selection:bg-indigo-500 selection:text-white">
+  
+  <!-- Top Navigation / Header -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center gap-3.5">
+        <div class="relative flex items-center justify-center">
+          <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
+            <svg class="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+            </svg>
+          </div>
+          <span class="absolute -bottom-1 -right-1 flex h-3 w-3">
+            <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+            <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+          </span>
+        </div>
+        <div>
+          <div class="flex items-center gap-2">
+            <h1 class="text-lg font-bold tracking-tight text-white">WorkBuddy<span class="text-indigo-400">2API</span></h1>
+            <span class="px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 rounded-full tracking-wide">
+              CN + GLOBAL PRO
+            </span>
+          </div>
+          <p class="text-[11px] text-slate-400 font-mono">国内企微 / 国际多模型统一调度中枢</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2.5">
+        <button onclick="refreshData()" title="手动刷新" class="p-2.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 rounded-xl transition duration-200">
+          <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+          </svg>
+        </button>
+
+        <button onclick="openImportModal()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl transition duration-200 flex items-center gap-1.5 shadow-sm">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+          <span>导入凭证</span>
+        </button>
+
+        <div class="h-6 w-px bg-slate-800 mx-1"></div>
+
+        <button onclick="openOAuthModal('cn')" class="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition duration-200 flex items-center gap-2 group">
+          <span class="w-2 h-2 rounded-full bg-blue-300 group-hover:scale-125 transition"></span>
+          <span>授权国内版 (CN)</span>
+        </button>
+
+        <button onclick="openOAuthModal('global')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition duration-200 flex items-center gap-2 group">
+          <span class="w-2 h-2 rounded-full bg-emerald-300 group-hover:scale-125 transition"></span>
+          <span>授权国际版 (Global)</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Container -->
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    
+    <!-- Metrics Dashboard -->
+    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">总账号资产</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statTotal" class="text-2xl font-bold font-mono text-white">0</span>
+          <span class="text-[10px] text-slate-500">ACCOUNTS</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-indigo-400">
+          <span>双域智能负载</span>
+        </div>
+      </div>
+
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">健康可调度</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statHealthy" class="text-2xl font-bold font-mono text-emerald-400">0</span>
+          <span class="text-[10px] text-emerald-500/70">READY</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-emerald-400/80">
+          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5"></span>
+          <span>正常就绪</span>
+        </div>
+      </div>
+
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">限流冷却中</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statCooling" class="text-2xl font-bold font-mono text-amber-400">0</span>
+          <span class="text-[10px] text-amber-500/70">COOLING</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-amber-400/80">
+          <span>自动退避中</span>
+        </div>
+      </div>
+
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">异常/停用</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statDisabled" class="text-2xl font-bold font-mono text-rose-400">0</span>
+          <span class="text-[10px] text-rose-500/70">OFFLINE</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-rose-400/80">
+          <span>手动或熔断</span>
+        </div>
+      </div>
+
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">会话粘性绑定</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statSticky" class="text-2xl font-bold font-mono text-cyan-400">0</span>
+          <span class="text-[10px] text-cyan-500/70">SESSIONS</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-cyan-400/80">
+          <span>上下文稳定路由</span>
+        </div>
+      </div>
+
+      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+        <p class="text-xs font-medium text-slate-400">在途并发满载</p>
+        <div class="flex items-baseline gap-2 mt-1">
+          <span id="statInFlight" class="text-2xl font-bold font-mono text-purple-400">0</span>
+          <span class="text-[10px] text-purple-500/70">BUSY</span>
+        </div>
+        <div class="mt-2 flex items-center text-[11px] text-purple-400/80">
+          <span>最大并发保护</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- Layout Grid -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      
+      <!-- Left Column: Accounts & Automation (7 cols) -->
+      <section class="lg:col-span-8 space-y-8">
+        
+        <!-- Account Pool Card -->
+        <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-glass">
+          <div class="px-6 py-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/30">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2.5">
+                <span class="flex h-2 w-2 rounded-full bg-indigo-500"></span>
+                <span>账号池矩阵 (CN & Global Pool)</span>
+                <span id="accountCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">支持跨域自动轮询、故障自愈、积分跟踪与生命周期监控</p>
+            </div>
+
+            <div class="flex items-center gap-2">
+              <button onclick="runBatchSignin()" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>一键日常签到</span>
+              </button>
+              <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2"/></svg>
+                <span>领取国际试用包</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="overflow-x-auto">
+            <table class="w-full text-left text-xs text-slate-300">
+              <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/60 border-b border-slate-800">
+                <tr>
+                  <th class="px-6 py-3.5 font-semibold">域/环境</th>
+                  <th class="px-6 py-3.5 font-semibold">UID / 账号昵称</th>
+                  <th class="px-6 py-3.5 font-semibold">运行状态</th>
+                  <th class="px-6 py-3.5 font-semibold">积分余量</th>
+                  <th class="px-6 py-3.5 font-semibold text-right">调度操作</th>
+                </tr>
+              </thead>
+              <tbody id="accountsTable" class="divide-y divide-slate-800/60 font-mono">
+                <tr>
+                  <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
+                    <div class="flex flex-col items-center justify-center space-y-3">
+                      <div class="w-12 h-12 rounded-2xl bg-slate-800/50 flex items-center justify-center text-slate-600">
+                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                      </div>
+                      <p class="text-sm text-slate-400 font-medium">账号池当前为空</p>
+                      <p class="text-xs text-slate-500 max-w-sm">请点击上方按钮快速授权国内版或国际版账号，或导入已有凭证</p>
+                    </div>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Chat Playground -->
+        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+          <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+                <span>智能网关全链路调试</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">免客户端即可实时验证模型路由、负载均衡与响应流</p>
+            </div>
+            <div id="chatTiming" class="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20 hidden">
+              耗时: 0.00s
+            </div>
+          </div>
+
+          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">请求路由与模型选择</label>
+              <div class="relative">
+                <select id="chatModel" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 appearance-none font-mono">
+                  <option value="">正在检测并加载可服务模型...</option>
+                </select>
+                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <label class="block text-xs font-semibold text-slate-300 mb-1.5">接入 API Key</label>
+              <input id="chatApiKey" type="text" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono" value="test_key" />
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">Prompt 测试指令</label>
+            <textarea id="chatPrompt" rows="2" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="例如：你好！请用一句话告诉我你的模型名称和当前时间。"></textarea>
+          </div>
+
+          <div class="flex items-center justify-between pt-1">
+            <div class="text-[11px] text-slate-500">
+              采用 OpenAI 协议标准格式 (/v1/chat/completions)
+            </div>
+            <button onclick="sendChatMessage()" id="btnSendChat" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/25 transition duration-200 flex items-center gap-2">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+              <span>发送测试</span>
+            </button>
+          </div>
+
+          <div id="chatResponseBox" class="mt-4 p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-200 hidden whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto custom-scroll"></div>
+        </div>
+
+      </section>
+
+      <!-- Right Column: Downstream Config & Models (4 cols) -->
+      <section class="lg:col-span-4 space-y-8">
+        
+        <!-- Connection Config Card -->
+        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+          <div class="border-b border-slate-800/80 pb-4">
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>下游客户端接入</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">提供标准 OpenAI 兼容协议接入</p>
+          </div>
+
+          <div class="space-y-4">
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span class="font-medium">API Base URL</span>
+                <button onclick="copyText('displayBaseUrl')" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+              </div>
+              <div id="displayBaseUrl" class="bg-slate-900 border border-slate-800/80 p-3 rounded-xl font-mono text-xs text-indigo-300 break-all select-all flex items-center justify-between">
+                <span>http://127.0.0.1:7863/v1</span>
+              </div>
+            </div>
+
+            <div>
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span class="font-medium">API Key</span>
+                <button onclick="copyText('displayApiKey')" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+              </div>
+              <div id="displayApiKey" class="bg-slate-900 border border-slate-800/80 p-3 rounded-xl font-mono text-xs text-emerald-400 select-all">
+                test_key
+              </div>
+            </div>
+
+            <div class="p-3.5 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
+              <div class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
+                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>无缝适配软件</span>
+              </div>
+              <p class="text-[11px] text-slate-400 leading-relaxed">
+                可直连 <b class="text-slate-300">NextChat</b>、<b class="text-slate-300">LobeChat</b>、<b class="text-slate-300">Cherry Studio</b>、<b class="text-slate-300">Chatbox</b>、<b class="text-slate-300">Cursor</b>、<b class="text-slate-300">Cline</b> 等各种支持自定义端点的 AI 客户端。
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <!-- Models Catalog Card -->
+        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+          <div class="border-b border-slate-800/80 pb-4 flex items-center justify-between">
+            <div>
+              <h2 class="text-base font-bold text-white flex items-center gap-2">
+                <span class="w-2 h-2 rounded-full bg-purple-400"></span>
+                <span>聚合模型清单</span>
+              </h2>
+              <p class="text-xs text-slate-400 mt-0.5">当前由账号池动态派生的可路由模型</p>
+            </div>
+            <span id="modelCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
+          </div>
+
+          <div id="modelsList" class="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scroll text-xs">
+            <div class="text-slate-500 text-center py-8">正在加载模型列表...</div>
+          </div>
+        </div>
+
+      </section>
+    </div>
+  </main>
+
+  <!-- OAuth Modal -->
+  <div id="oauthModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
+
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 id="oauthModalTitle" class="text-base font-bold text-white flex items-center gap-2">
+          <span>授权添加账号</span>
+        </h3>
+        <button onclick="closeOAuthModal()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="py-5">
+        <!-- Step 1: Loading URL -->
+        <div id="oauthStep1" class="text-center py-6 space-y-3">
+          <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent"></div>
+          <p class="text-xs text-slate-300 font-medium">正在向腾讯 / WorkBuddy 服务器申请官方 OAuth 设备码...</p>
+        </div>
+
+        <!-- Step 2: Open browser & auto polling -->
+        <div id="oauthStep2" class="hidden space-y-4">
+          <div class="p-3.5 bg-indigo-950/40 rounded-xl border border-indigo-500/30 text-xs text-indigo-200 space-y-2">
+            <div class="font-semibold flex items-center gap-1.5 text-indigo-300">
+              <span class="w-2 h-2 rounded-full bg-indigo-400 animate-pulse"></span>
+              <span>第一步：在浏览器完成确认</span>
+            </div>
+            <p class="text-indigo-300/80 text-[11px] leading-relaxed">
+              请点击下方按钮或复制链接到浏览器完成授权。
+            </p>
+            <div class="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-lg text-amber-300/90 text-[11px] leading-relaxed">
+              💡 <b>想要授权不同账号？</b> 请复制链接在<b>浏览器的无痕/隐私窗口</b>（或先在官网退出上个账号）打开，否则浏览器会默认使用当前已登录的旧账号直接完成授权！
+            </div>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <a id="oauthLinkBtn" href="#" target="_blank" class="flex-1 py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200 flex items-center justify-center gap-2">
+              <span>🚀 打开授权网页</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </a>
+            <button onclick="copyOAuthUrl()" class="px-3.5 py-3 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition" title="复制链接去无痕窗口">
+              复制链接
+            </button>
+          </div>
+
+          <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 space-y-2">
+            <div class="flex items-center justify-between text-xs text-slate-400">
+              <span class="flex items-center gap-1.5">
+                <span id="pollIndicator" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
+                <span id="pollStatusText" class="text-emerald-400 font-mono text-[11px]">后台自动轮询检测中...</span>
+              </span>
+              <span id="pollCountdown" class="text-[11px] font-mono text-slate-500">60s</span>
+            </div>
+            <div class="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
+              <div id="pollProgressBar" class="bg-indigo-500 h-1 rounded-full transition-all duration-300" style="width: 100%"></div>
+            </div>
+          </div>
+
+          <div class="text-center pt-1">
+            <button onclick="triggerImmediatePoll()" class="text-xs text-slate-400 hover:text-white underline transition">
+              我已授权完毕，立即同步凭证
+            </button>
+          </div>
+        </div>
+
+        <!-- Step 3: Success info -->
+        <div id="oauthStep3" class="hidden text-center py-6 space-y-3">
+          <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
+          </div>
+          <p class="text-sm text-white font-bold" id="oauthSuccessTitle">授权入池成功！</p>
+          <p class="text-xs text-slate-400 font-mono" id="oauthSuccessDetail"></p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Manual JSON Import Modal -->
+  <div id="importModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <span>手动导入凭证 (JSON)</span>
+        </h3>
+        <button onclick="closeImportModal()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-3">
+        <p class="text-xs text-slate-400 leading-relaxed">
+          支持从其他机器或旧环境导出的凭证文件内容，系统将自动校验并写入 <code class="text-indigo-300">auths/</code> 目录：
+        </p>
+        <textarea id="importJsonText" rows="9" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500 custom-scroll" placeholder='{
+  "auth": {
+    "accessToken": "...",
+    "refreshToken": "...",
+    "realm": "cn"
+  },
+  "account": {
+    "uid": "12345"
+  }
+}'></textarea>
+        <div id="importError" class="text-xs text-rose-400 font-mono hidden"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+        <button onclick="closeImportModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white transition">取消</button>
+        <button onclick="submitImport()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition">确认导入</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentRealm = 'cn';
+    let currentOAuthUrl = '';
+    let pollTimer = null;
+    let pollCountdownInterval = null;
+    let pollRemainingSec = 60;
+
+    async function refreshData() {
+      const icon = document.getElementById('refreshIcon');
+      if (icon) icon.classList.add('animate-spin');
+      try {
+        const res = await fetch('/ui/data');
+        const data = await res.json();
+        
+        document.getElementById('statTotal').innerText = data.status.total || 0;
+        document.getElementById('statHealthy').innerText = data.status.healthy || 0;
+        document.getElementById('statCooling').innerText = data.status.cooling || 0;
+        document.getElementById('statDisabled').innerText = data.status.disabled || 0;
+        document.getElementById('statSticky').innerText = data.status.sticky_sessions || 0;
+        document.getElementById('statInFlight').innerText = data.status.in_flight_full || 0;
+        
+        document.getElementById('accountCountBadge').innerText = (data.accounts || []).length;
+        document.getElementById('modelCountBadge').innerText = (data.models || []).length;
+
+        if (data.apiKey) {
+          document.getElementById('displayApiKey').innerText = data.apiKey;
+          document.getElementById('chatApiKey').value = data.apiKey;
+        }
+
+        renderAccounts(data.accounts || []);
+        renderModels(data.models || []);
+      } catch (err) {
+        console.error('加载控制台数据失败:', err);
+      } finally {
+        if (icon) {
+          setTimeout(() => icon.classList.remove('animate-spin'), 400);
+        }
+      }
+    }
+
+    function renderAccounts(accounts) {
+      const tbody = document.getElementById('accountsTable');
+      if (!accounts.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
+              <div class="flex flex-col items-center justify-center space-y-3">
+                <div class="w-12 h-12 rounded-2xl bg-slate-800/50 flex items-center justify-center text-slate-600">
+                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                </div>
+                <p class="text-sm text-slate-400 font-medium">账号池当前为空</p>
+                <p class="text-xs text-slate-500 max-w-sm">请点击上方按钮快速授权国内版或国际版账号，或导入已有凭证</p>
+              </div>
+            </td>
+          </tr>`;
+        return;
+      }
+
+      let html = '';
+      for (const a of accounts) {
+        const isGlobal = a.realm === 'global';
+        const realmBadge = isGlobal
+          ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🌍 GLOBAL</span>'
+          : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">🇨🇳 CN</span>';
+
+        let statusBadge = '<span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>健康在线</span>';
+        if (a.manual_disabled) {
+          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.manual_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>手动停用</span>';
+        } else if (a.disabled) {
+          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.disabled_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>系统禁用</span>';
+        } else if (a.cooling) {
+          statusBadge = '<span class="inline-flex items-center gap-1.5 text-amber-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>限流冷却中</span>';
+        }
+
+        const isRevivable = a.disabled;
+        const isManualDisabled = a.manual_disabled;
+
+        html += `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="px-6 py-4">${realmBadge}</td>
+            <td class="px-6 py-4">
+              <div class="font-sans font-semibold text-white text-xs">${escapeHtml(a.nickname || a.uid)}</div>
+              <div class="text-[11px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
+            </td>
+            <td class="px-6 py-4">${statusBadge}</td>
+            <td class="px-6 py-4 font-mono font-medium text-slate-200">
+              ${a.credits !== undefined && a.credits >= 0 ? a.credits : '<span class="text-slate-500">-</span>'}
+            </td>
+            <td class="px-6 py-4 text-right font-sans space-x-2">
+              ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
+              ${isManualDisabled 
+                ? `<button onclick="controlAccount('${a.uid}', 'enable')" class="text-xs text-emerald-400 hover:text-emerald-300 hover:underline">启用</button>` 
+                : `<button onclick="controlAccount('${a.uid}', 'disable')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">停用</button>`}
+              <button onclick="deleteAccount('${a.filename}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">删除</button>
+            </td>
+          </tr>
+        `;
+      }
+      tbody.innerHTML = html;
+    }
+
+    function renderModels(models) {
+      const list = document.getElementById('modelsList');
+      const select = document.getElementById('chatModel');
+      const previouslySelected = select.value;
+      if (!models.length) {
+        list.innerHTML = '<div class="text-slate-500 text-center py-8">暂无可路由模型（请先接入账号）</div>';
+        return;
+      }
+
+      let listHtml = '';
+      let selectHtml = '';
+      let hasPrevious = false;
+      for (const m of models) {
+        const isGlobal = m.id.startsWith('global:');
+        const badge = isGlobal
+          ? '<span class="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded">Global</span>'
+          : '<span class="text-[10px] font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.2 rounded">CN</span>';
+
+        listHtml += `
+          <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80 hover:border-slate-700 transition flex items-center justify-between">
+            <div class="space-y-0.5 max-w-[240px]">
+              <div class="font-mono font-medium text-slate-200 flex items-center gap-1.5 truncate">
+                <span>${m.id}</span>
+                ${badge}
+              </div>
+              <div class="text-[11px] text-slate-400 truncate">${m.description || '官方模型'}</div>
+            </div>
+            <div class="text-[11px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700/50">
+              ${m.context_length ? (m.context_length / 1024) + 'k' : 'auto'}
+            </div>
+          </div>
+        `;
+        if (m.id === previouslySelected) {
+          hasPrevious = true;
+          selectHtml += `<option value="${m.id}" selected>${m.id}</option>`;
+        } else {
+          selectHtml += `<option value="${m.id}">${m.id}</option>`;
+        }
+      }
+      list.innerHTML = listHtml;
+      select.innerHTML = selectHtml;
+      if (hasPrevious) {
+        select.value = previouslySelected;
+      }
+    }
+
+    async function openOAuthModal(realm) {
+      currentRealm = realm;
+      stopPolling();
+
+      document.getElementById('oauthModalTitle').innerHTML = realm === 'global' 
+        ? '<span class="text-emerald-400">🌍 授权国际版 (Global) 账号</span>' 
+        : '<span class="text-blue-400">🇨🇳 授权国内版 (CN) 账号</span>';
+      
+      document.getElementById('oauthModal').classList.remove('hidden');
+      document.getElementById('oauthStep1').classList.remove('hidden');
+      document.getElementById('oauthStep2').classList.add('hidden');
+      document.getElementById('oauthStep3').classList.add('hidden');
+
+      try {
+        const res = await fetch('/ui/oauth/start', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ realm })
+        });
+        const data = await res.json();
+        if (data.url) {
+          const cleanUrl = data.url.trim();
+          currentOAuthUrl = cleanUrl;
+          document.getElementById('oauthLinkBtn').href = cleanUrl;
+          document.getElementById('oauthStep1').classList.add('hidden');
+          document.getElementById('oauthStep2').classList.remove('hidden');
+
+          // Auto open in new tab for seamless user experience
+          window.open(cleanUrl, '_blank');
+
+          // Start background auto polling
+          startAutoPolling();
+        } else {
+          alert('获取授权 URL 失败: ' + (data.error || '未知错误'));
+          closeOAuthModal();
+        }
+      } catch (e) {
+        alert('网络请求失败: ' + e);
+        closeOAuthModal();
+      }
+    }
+
+    function copyOAuthUrl() {
+      if (!currentOAuthUrl) return;
+      navigator.clipboard.writeText(currentOAuthUrl);
+      alert('已复制授权链接！请在浏览器的【无痕模式/隐私窗口】中粘贴打开，以登录其他账号。');
+    }
+
+    function startAutoPolling() {
+      stopPolling();
+      pollRemainingSec = 60;
+      updatePollUI();
+
+      pollCountdownInterval = setInterval(() => {
+        pollRemainingSec--;
+        updatePollUI();
+        if (pollRemainingSec <= 0) {
+          stopPolling();
+          document.getElementById('pollStatusText').innerText = '轮询超时，请重试';
+          document.getElementById('pollStatusText').className = 'text-rose-400 font-mono text-[11px]';
+        }
+      }, 1000);
+
+      pollTimer = setInterval(async () => {
+        const ok = await checkOAuthPoll();
+        if (ok) {
+          stopPolling();
+        }
+      }, 2500);
+    }
+
+    function stopPolling() {
+      if (pollTimer) clearInterval(pollTimer);
+      if (pollCountdownInterval) clearInterval(pollCountdownInterval);
+      pollTimer = null;
+      pollCountdownInterval = null;
+    }
+
+    function updatePollUI() {
+      document.getElementById('pollCountdown').innerText = pollRemainingSec + 's';
+      const pct = Math.max(0, (pollRemainingSec / 60) * 100);
+      document.getElementById('pollProgressBar').style.width = pct + '%';
+    }
+
+    async function checkOAuthPoll() {
+      try {
+        const res = await fetch('/ui/oauth/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ realm: currentRealm })
+        });
+        const data = await res.json();
+        if (data.success) {
+          // Success!
+          document.getElementById('oauthStep2').classList.add('hidden');
+          document.getElementById('oauthStep3').classList.remove('hidden');
+          document.getElementById('oauthSuccessDetail').innerText = `UID: ${data.uid} | 昵称: ${data.nickname || '无'}`;
+          refreshData();
+          setTimeout(() => {
+            closeOAuthModal();
+          }, 3000);
+          return true;
+        }
+      } catch (err) {
+        // continue polling
+      }
+      return false;
+    }
+
+    async function triggerImmediatePoll() {
+      const ok = await checkOAuthPoll();
+      if (!ok) {
+        alert('暂未检测到授权完成。请确认是否已在浏览器中点击确认授权。');
+      }
+    }
+
+    function closeOAuthModal() {
+      stopPolling();
+      document.getElementById('oauthModal').classList.add('hidden');
+    }
+
+    // Manual Import
+    function openImportModal() {
+      document.getElementById('importJsonText').value = '';
+      document.getElementById('importError').classList.add('hidden');
+      document.getElementById('importModal').classList.remove('hidden');
+    }
+
+    function closeImportModal() {
+      document.getElementById('importModal').classList.add('hidden');
+    }
+
+    async function submitImport() {
+      const jsonStr = document.getElementById('importJsonText').value.trim();
+      const errBox = document.getElementById('importError');
+      errBox.classList.add('hidden');
+
+      if (!jsonStr) {
+        errBox.innerText = '请填入凭证 JSON 文本';
+        errBox.classList.remove('hidden');
+        return;
+      }
+
+      try {
+        const res = await fetch('/ui/oauth/import', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ json: jsonStr })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert('✅ 凭证导入成功！UID: ' + data.uid);
+          closeImportModal();
+          refreshData();
+        } else {
+          errBox.innerText = data.error || '导入失败';
+          errBox.classList.remove('hidden');
+        }
+      } catch (e) {
+        errBox.innerText = '请求失败: ' + e;
+        errBox.classList.remove('hidden');
+      }
+    }
+
+    // Account Admin Actions
+    async function controlAccount(uid, action) {
+      try {
+        const res = await fetch('/ui/account/admin', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid, action })
+        });
+        const data = await res.json();
+        if (data.success) {
+          refreshData();
+        } else {
+          alert('操作失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('请求失败: ' + e);
+      }
+    }
+
+    async function deleteAccount(filename) {
+      if (!confirm('确认删除凭证文件 ' + filename + ' 吗？删除后账号将移出池。')) return;
+      await fetch('/ui/action/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename })
+      });
+      refreshData();
+    }
+
+    async function runBatchSignin() {
+      const res = await fetch('/ui/action/signin', { method: 'POST' });
+      const data = await res.json();
+      alert('批量签到执行完毕:\n' + (data.output || '成功'));
+      refreshData();
+    }
+
+    async function runBatchTrial() {
+      const res = await fetch('/ui/action/trial', { method: 'POST' });
+      const data = await res.json();
+      alert('国际版试用额度领取完毕:\n' + (data.output || '成功'));
+      refreshData();
+    }
+
+    async function sendChatMessage() {
+      const model = document.getElementById('chatModel').value;
+      const apiKey = document.getElementById('chatApiKey').value;
+      const prompt = document.getElementById('chatPrompt').value.trim();
+      const box = document.getElementById('chatResponseBox');
+      const timing = document.getElementById('chatTiming');
+      const btn = document.getElementById('btnSendChat');
+
+      if (!prompt) {
+        alert('请输入对话消息');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '响应生成中...';
+      box.classList.remove('hidden');
+      box.innerText = '正在等待 WorkBuddy 网关 SSE 响应...';
+      timing.classList.remove('hidden');
+      timing.innerText = '耗时: 计时中...';
+      const start = Date.now();
+
+      try {
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': 'Bearer ' + apiKey
+          },
+          body: JSON.stringify({
+            model: model,
+            messages: [{ role: 'user', content: prompt }]
+          })
+        });
+        const elapsed = ((Date.now() - start) / 1000).toFixed(2);
+        timing.innerText = '耗时: ' + elapsed + 's';
+
+        const data = await res.json();
+        if (data.choices && data.choices[0] && data.choices[0].message) {
+          box.innerText = data.choices[0].message.content;
+        } else {
+          box.innerText = JSON.stringify(data, null, 2);
+        }
+      } catch (err) {
+        box.innerText = '请求异常: ' + err;
+      } finally {
+        btn.disabled = false;
+        btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg><span>发送测试</span>`;
+      }
+    }
+
+    function copyText(elementId) {
+      const text = document.getElementById(elementId).innerText.trim();
+      navigator.clipboard.writeText(text);
+      alert('已复制到剪贴板: ' + text);
+    }
+
+    function escapeHtml(str) {
+      return String(str).replace(/[&<>"']/g, function(s) {
+        return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s];
+      });
+    }
+
+    // Init
+    refreshData();
+    setInterval(refreshData, 8000);
+  </script>
+</body>
+</html>

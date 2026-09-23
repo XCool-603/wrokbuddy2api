@@ -1,0 +1,54 @@
+name: Release Desktop Binary
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: '发布版本号 Tag (留空则使用 nightly 自动更新版本)'
+        required: false
+        default: 'nightly'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build & Release Single EXE
+    runs-on: windows-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache: true
+
+      - name: Build Standalone Windows GUI Binary
+        run: |
+          go build -trimpath -ldflags "-H windowsgui -s -w" -o workbuddy2api.exe ./cmd/server
+
+      # 1. 始终生成 GitHub Actions Artifact 下载产物 (在运行详情页最下方)
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: workbuddy2api-windows-amd64
+          path: workbuddy2api.exe
+          if-no-files-found: error
+
+      # 2. 无论手动点击还是推送 tag，都直接创建/更新 GitHub Releases 供任何人随时直接下载
+      - name: Create or Update GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (inputs.release_tag != '' && inputs.release_tag || 'nightly') }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'WorkBuddy 2API 桌面最新构建 (Nightly)' }}
+          draft: false
+          prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          files: |
+            workbuddy2api.exe
+            config.example.json
+          generate_release_notes: true
