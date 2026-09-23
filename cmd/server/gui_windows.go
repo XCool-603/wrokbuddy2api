@@ -4,10 +4,9 @@
 package main
 
 import (
-	"fmt"
-	"os/exec"
-	"strings"
+	"syscall"
 	"time"
+	"unsafe"
 
 	"github.com/jchv/go-webview2"
 )
@@ -40,9 +39,11 @@ func runDesktopGUI(uiURL string, stopFunc func()) bool {
 
 // showNativeError 在 GUI 模式发生致命错误时弹出 Windows 原生弹窗
 func showNativeError(title, msg string) {
-	// 使用 mshta 或 PowerShell 原生弹出 MessageBox
-	cmd := exec.Command("powershell", "-NoProfile", "-WindowStyle", "Hidden", "-Command",
-		fmt.Sprintf("[System.Reflection.Assembly]::LoadWithPartialName('System.Windows.Forms') | Out-Null; [System.Windows.Forms.MessageBox]::Show('%s', '%s', [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Error)",
-			strings.ReplaceAll(msg, "'", "''"), strings.ReplaceAll(title, "'", "''")))
-	_ = cmd.Run()
+	user32 := syscall.NewLazyDLL("user32.dll")
+	procMessageBoxW := user32.NewProc("MessageBoxW")
+	tPtr, _ := syscall.UTF16PtrFromString(title)
+	mPtr, _ := syscall.UTF16PtrFromString(msg)
+	// 0x10 = MB_ICONERROR | MB_OK
+	procMessageBoxW.Call(0, uintptr(unsafe.Pointer(mPtr)), uintptr(unsafe.Pointer(tPtr)), 0x10)
 }
+

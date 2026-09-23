@@ -33,6 +33,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/action/signin", h.handleActionSignin)
 	h.mux.HandleFunc("POST /ui/action/trial", h.handleActionTrial)
 	h.mux.HandleFunc("POST /ui/action/delete", h.handleActionDelete)
+	h.mux.HandleFunc("POST /ui/config/apikey", h.handleConfigAPIKey)
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
@@ -120,7 +121,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		},
 		"accounts": accounts,
 		"models":   models,
-		"apiKey":   h.cfg.APIKey,
+		"apiKey":   h.GetAPIKey(),
 	})
 }
 
@@ -602,4 +603,41 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 	target := filepath.Join("auths", req.Filename)
 	_ = os.Remove(target)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		APIKey string `json:"api_key"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求体 JSON 解析失败"})
+		return
+	}
+
+	newKey := strings.TrimSpace(req.APIKey)
+	h.SetAPIKey(newKey)
+
+	// 持久化到 config.json
+	cfgFile := h.cfg.ConfigPath
+	if cfgFile == "" {
+		cfgFile = "config.json"
+	}
+
+	var dataMap map[string]any
+	if raw, err := os.ReadFile(cfgFile); err == nil {
+		_ = json.Unmarshal(raw, &dataMap)
+	}
+	if dataMap == nil {
+		dataMap = make(map[string]any)
+	}
+	dataMap["api_key"] = newKey
+
+	if encoded, err := json.MarshalIndent(dataMap, "", "  "); err == nil {
+		_ = os.WriteFile(cfgFile, encoded, 0644)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"api_key": newKey,
+	})
 }

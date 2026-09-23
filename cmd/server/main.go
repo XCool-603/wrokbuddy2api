@@ -82,6 +82,7 @@ func main() {
 		if _, err := os.Stat("config.json"); os.IsNotExist(err) {
 			defaultCfg := Default()
 			defaultCfg.Admin.Enabled = true // 方便单机使用控制台
+			defaultCfg.APIKey = "sk-workbuddy2api" // 默认生成 API Key，避免 admin.enabled 导致启动校验冲突
 			if data, err := json.MarshalIndent(defaultCfg, "", "  "); err == nil {
 				_ = os.WriteFile("config.json", data, 0644)
 				log.Printf("已自动生成默认配置文件 config.json")
@@ -277,6 +278,7 @@ func main() {
 		GlobalEnabled: cfg.Global.Enabled,
 		// 运维管理端点开关（config admin.enabled，默认 false）。
 		AdminEnabled: cfg.Admin.Enabled,
+		ConfigPath:   *cfgPath,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

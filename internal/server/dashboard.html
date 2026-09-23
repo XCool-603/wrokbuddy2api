@@ -355,11 +355,16 @@
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
                 <span class="font-medium">API Key</span>
-                <button onclick="copyText('displayApiKey')" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+                <div class="space-x-2">
+                  <button onclick="copyApiKey()" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+                  <button id="btnSaveApiKey" onclick="saveApiKey()" class="text-emerald-400 hover:text-emerald-300 text-[11px] font-medium">保存修改</button>
+                </div>
               </div>
-              <div id="displayApiKey" class="bg-slate-900 border border-slate-800/80 p-3 rounded-xl font-mono text-xs text-emerald-400 select-all">
-                test_key
+              <div class="relative flex items-center">
+                <input id="inputApiKey" type="text" placeholder="留空则不鉴权（如 sk-workbuddy2api）" class="w-full bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-2.5 font-mono text-xs text-emerald-400 focus:outline-none focus:border-indigo-500 transition pr-20" />
+                <span id="saveKeyFeedback" class="absolute right-3 text-[11px] text-emerald-400 hidden">已保存</span>
               </div>
+              <p class="text-[10px] text-slate-500 mt-1">可在上方直接更改网关鉴权 API Key，保存后即时生效且自动写入 config.json。</p>
             </div>
 
             <div class="p-3.5 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
@@ -534,9 +539,15 @@
         document.getElementById('accountCountBadge').innerText = (data.accounts || []).length;
         document.getElementById('modelCountBadge').innerText = (data.models || []).length;
 
-        if (data.apiKey) {
-          document.getElementById('displayApiKey').innerText = data.apiKey;
-          document.getElementById('chatApiKey').value = data.apiKey;
+        if (data.apiKey !== undefined) {
+          const keyInput = document.getElementById('inputApiKey');
+          if (keyInput && document.activeElement !== keyInput) {
+            keyInput.value = data.apiKey;
+          }
+          const chatKey = document.getElementById('chatApiKey');
+          if (chatKey && (!chatKey.value || document.activeElement !== chatKey)) {
+            chatKey.value = data.apiKey;
+          }
         }
 
         renderAccounts(data.accounts || []);
@@ -914,8 +925,45 @@
       }
     }
 
+    function copyApiKey() {
+      const text = document.getElementById('inputApiKey').value.trim();
+      navigator.clipboard.writeText(text);
+      alert(text ? '已复制 API Key 到剪贴板: ' + text : '当前未设置 API Key（无须鉴权）');
+    }
+
+    async function saveApiKey() {
+      const key = document.getElementById('inputApiKey').value.trim();
+      const btn = document.getElementById('btnSaveApiKey');
+      const feedback = document.getElementById('saveKeyFeedback');
+      btn.disabled = true;
+      btn.innerText = '保存中...';
+
+      try {
+        const res = await fetch('/ui/config/apikey', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ api_key: key })
+        });
+        const data = await res.json();
+        if (data.success) {
+          feedback.classList.remove('hidden');
+          setTimeout(() => feedback.classList.add('hidden'), 2500);
+          const chatKey = document.getElementById('chatApiKey');
+          if (chatKey) chatKey.value = key;
+        } else {
+          alert('保存失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('网络或服务异常: ' + err);
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '保存修改';
+      }
+    }
+
     function copyText(elementId) {
-      const text = document.getElementById(elementId).innerText.trim();
+      const el = document.getElementById(elementId);
+      const text = (el.value !== undefined ? el.value : el.innerText).trim();
       navigator.clipboard.writeText(text);
       alert('已复制到剪贴板: ' + text);
     }

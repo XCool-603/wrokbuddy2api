@@ -51,6 +51,9 @@ type Config struct {
 	// AdminEnabled 运维管理端点开关（config admin.enabled，默认 false）。
 	// 关闭时 /admin/* 一律 404（而非 403——不向外暴露"这里存在管理面"）。
 	AdminEnabled bool
+
+	// ConfigPath 配置文件路径（用于面板动态修改保存配置，缺省 config.json）
+	ConfigPath string
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -80,11 +83,24 @@ const dumpReqMinBytes = 4 << 20
 // Handler 主路由。
 type Handler struct {
 	cfg     Config
+	keyMu   sync.RWMutex
 	mux     *http.ServeMux
 	degrade degradeGate
 	// wafIP WAF IP 级拦截状态机（fail-fast，wafip.go）：短窗多号 WAF 403 →
 	// 激活期轮转遇 WAF 403 直接终止（不放大请求量）。进程内状态、重启清零。
 	wafIP wafIPGate
+}
+
+func (h *Handler) GetAPIKey() string {
+	h.keyMu.RLock()
+	defer h.keyMu.RUnlock()
+	return h.cfg.APIKey
+}
+
+func (h *Handler) SetAPIKey(k string) {
+	h.keyMu.Lock()
+	defer h.keyMu.Unlock()
+	h.cfg.APIKey = k
 }
 
 // NewHandler 构建 handler。
@@ -129,13 +145,14 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		if h.cfg.APIKey != "" {
+		currentKey := h.GetAPIKey()
+		if currentKey != "" {
 			authz := r.Header.Get("Authorization")
 			// 常量时间比较（发现 7）：!= 短路时序随前缀长度变化，公网暴露下
 			// 理论上可逐字节探测 key 前缀；ConstantTimeCompare 消除该信号。
 			provided := strings.TrimPrefix(authz, "Bearer ")
 			if !strings.HasPrefix(authz, "Bearer ") ||
-				subtle.ConstantTimeCompare([]byte(provided), []byte(h.cfg.APIKey)) != 1 {
+				subtle.ConstantTimeCompare([]byte(provided), []byte(currentKey)) != 1 {
 				writeOpenAIError(w, http.StatusUnauthorized, "invalid_api_key", "missing or invalid API key")
 				return
 			}
