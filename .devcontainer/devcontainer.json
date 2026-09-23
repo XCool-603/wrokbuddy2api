@@ -1,0 +1,14 @@
+{
+  "name": "WorkBuddy 2API Web",
+  "image": "mcr.microsoft.com/devcontainers/go:1-1.24-bookworm",
+  "forwardPorts": [7863],
+  "portsAttributes": {
+    "7863": {
+      "label": "WorkBuddy 2API WebUI",
+      "onAutoForward": "openBrowser",
+      "visibility": "public"
+    }
+  },
+  "postCreateCommand": "go mod download",
+  "postStartCommand": "nohup go run ./cmd/server -headless > /tmp/wb2api.log 2>&1 &"
+}
