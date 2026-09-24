@@ -216,6 +216,72 @@
       </div>
     </section>
 
+    <!-- Token Analytics (Persistent Memory) -->
+    <section class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-5">
+      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-4">
+        <div>
+          <h2 class="text-base font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>Token 调用统计看板</span>
+            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">永久记忆</span>
+          </h2>
+          <p class="text-xs text-slate-400 mt-0.5">多模型 Prompt 输入、Completion 生成、缓存命中及消耗全维度自动落盘</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span id="tokenUptimeText" class="text-[11px] font-mono text-slate-400 bg-slate-900 px-3 py-1 rounded-xl border border-slate-800">
+            累计统计中...
+          </span>
+        </div>
+      </div>
+
+      <!-- Overview 4 metrics -->
+      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+          <div class="text-[11px] font-medium text-slate-400">总消耗 Token</div>
+          <div id="statTotalTokens" class="text-2xl font-bold font-mono text-emerald-400 mt-1">0</div>
+          <div class="text-[10px] text-slate-500 mt-1">Prompt + Completion</div>
+        </div>
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+          <div class="text-[11px] font-medium text-slate-400">生成 Tokens (输出)</div>
+          <div id="statCompTokens" class="text-2xl font-bold font-mono text-cyan-400 mt-1">0</div>
+          <div class="text-[10px] text-slate-500 mt-1">大模型实际回答输出</div>
+        </div>
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+          <div class="text-[11px] font-medium text-slate-400">提示 Tokens (输入)</div>
+          <div id="statPromptTokens" class="text-2xl font-bold font-mono text-indigo-400 mt-1">0</div>
+          <div class="text-[10px] text-slate-500 mt-1">客户端发送上下文提示</div>
+        </div>
+        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+          <div class="text-[11px] font-medium text-slate-400">总请求调用数</div>
+          <div id="statTotalReqs" class="text-2xl font-bold font-mono text-amber-400 mt-1">0</div>
+          <div id="statSuccessRate" class="text-[10px] text-slate-500 mt-1">成功率: 100%</div>
+        </div>
+      </div>
+
+      <!-- Models Breakdown Table -->
+      <div class="overflow-x-auto custom-scroll">
+        <table class="w-full text-left text-xs font-mono">
+          <thead>
+            <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
+              <th class="py-2.5 px-3 font-medium">模型名称</th>
+              <th class="py-2.5 px-3 font-medium">请求总量</th>
+              <th class="py-2.5 px-3 font-medium">总 Tokens</th>
+              <th class="py-2.5 px-3 font-medium">输入 (Prompt)</th>
+              <th class="py-2.5 px-3 font-medium">输出 (Completion)</th>
+              <th class="py-2.5 px-3 font-medium">平均速率</th>
+              <th class="py-2.5 px-3 font-medium">缓存命中率</th>
+              <th class="py-2.5 px-3 font-medium text-right">平均延迟</th>
+            </tr>
+          </thead>
+          <tbody id="tokenModelsTable" class="divide-y divide-slate-800/40 text-slate-300">
+            <tr>
+              <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此永久记录</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <!-- Layout Grid -->
     <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
       
@@ -599,6 +665,9 @@
         renderAccounts(data.accounts || []);
         renderModels(data.models || []);
         renderRequestLogs(data.recentLogs || []);
+        if (data.stats) {
+          renderTokenAnalytics(data.stats);
+        }
       } catch (err) {
         console.error('加载控制台数据失败:', err);
       } finally {
@@ -606,6 +675,68 @@
           setTimeout(() => icon.classList.remove('animate-spin'), 400);
         }
       }
+    }
+
+    function renderTokenAnalytics(stats) {
+      if (!stats) return;
+      const total = stats.total || {};
+      
+      const promptTok = total.prompt_tokens || 0;
+      const compTok = total.completion_tokens || 0;
+      const totalTok = total.total_tokens || (promptTok + compTok);
+      const reqs = total.requests || 0;
+      const succ = total.success || 0;
+
+      document.getElementById('statTotalTokens').innerText = totalTok.toLocaleString();
+      document.getElementById('statCompTokens').innerText = compTok.toLocaleString();
+      document.getElementById('statPromptTokens').innerText = promptTok.toLocaleString();
+      document.getElementById('statTotalReqs').innerText = reqs.toLocaleString();
+
+      const rate = reqs > 0 ? ((succ / reqs) * 100).toFixed(1) : '100.0';
+      document.getElementById('statSuccessRate').innerText = '成功率: ' + rate + '% (成功 ' + succ + ' / 失败 ' + (total.failed || 0) + ')';
+
+      if (stats.since) {
+        const sinceDate = new Date(stats.since);
+        document.getElementById('tokenUptimeText').innerText = '永久记忆起记于: ' + sinceDate.toLocaleDateString() + ' ' + sinceDate.toLocaleTimeString();
+      }
+
+      const tbody = document.getElementById('tokenModelsTable');
+      if (!tbody) return;
+
+      const models = stats.models || [];
+      if (!models.length) {
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此永久记录</td>
+          </tr>`;
+        return;
+      }
+
+      let html = '';
+      for (const m of models) {
+        const pTok = m.prompt_tokens || 0;
+        const cTok = m.completion_tokens || 0;
+        const tTok = m.total_tokens || (pTok + cTok);
+        const hitRate = (m.cache_hit_rate ? (m.cache_hit_rate * 100).toFixed(1) : '0.0') + '%';
+        const tps = m.tokens_per_sec ? m.tokens_per_sec.toFixed(1) + ' tok/s' : '-';
+        const lat = m.avg_latency_ms ? (m.avg_latency_ms / 1000).toFixed(2) + 's' : '-';
+
+        html += `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="py-2.5 px-3 font-semibold text-slate-200">
+              <span class="text-indigo-300">${escapeHtml(m.model)}</span>
+            </td>
+            <td class="py-2.5 px-3 text-slate-300 font-mono">${(m.requests || 0).toLocaleString()}</td>
+            <td class="py-2.5 px-3 text-emerald-400 font-mono font-bold">${tTok.toLocaleString()}</td>
+            <td class="py-2.5 px-3 text-indigo-300 font-mono">${pTok.toLocaleString()}</td>
+            <td class="py-2.5 px-3 text-cyan-300 font-mono">${cTok.toLocaleString()}</td>
+            <td class="py-2.5 px-3 text-indigo-400 font-mono">${tps}</td>
+            <td class="py-2.5 px-3 text-slate-400 font-mono">${hitRate}</td>
+            <td class="py-2.5 px-3 text-right text-slate-300 font-mono">${lat}</td>
+          </tr>
+        `;
+      }
+      tbody.innerHTML = html;
     }
 
     function renderRequestLogs(logs) {

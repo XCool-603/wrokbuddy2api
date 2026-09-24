@@ -12,8 +12,11 @@
 package server
 
 import (
+	"encoding/json"
 	"log"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sort"
 	"sync"
 	"time"
@@ -24,36 +27,154 @@ const metricsCap = 512
 
 // modelMetrics 单模型的累加器（全字段原子性由 metricsMu 保证，无需 atomic）。
 type modelMetrics struct {
-	requests  int64
-	success   int64
-	failed    int64
-	streaming int64
+	requests  int64 `json:"requests"`
+	success   int64 `json:"success"`
+	failed    int64 `json:"failed"`
+	streaming int64 `json:"streaming"`
 
-	ttfbSumMS  float64 // TTFB 累计（仅成功且有观测的请求）
-	ttfbCount  int64
-	latSumMS   float64 // 端到端耗时累计（全部请求）
-	genSecSum  float64 // 生成秒数累计（供 tokens/s）
-	promptTok  int64
-	compTok    int64
-	cacheHit   int64
-	cacheMiss  int64
-	cacheWrite int64
-	credit     float64
+	ttfbSumMS  float64 `json:"ttfb_sum_ms"` // TTFB 累计（仅成功且有观测的请求）
+	ttfbCount  int64   `json:"ttfb_count"`
+	latSumMS   float64 `json:"lat_sum_ms"`  // 端到端耗时累计（全部请求）
+	genSecSum  float64 `json:"gen_sec_sum"` // 生成秒数累计（供 tokens/s）
+	promptTok  int64   `json:"prompt_tok"`
+	compTok    int64   `json:"comp_tok"`
+	cacheHit   int64   `json:"cache_hit"`
+	cacheMiss  int64   `json:"cache_miss"`
+	cacheWrite int64   `json:"cache_write"`
+	credit     float64 `json:"credit"`
 
-	lastSeen time.Time
+	lastSeen time.Time `json:"last_seen"`
 }
 
 // metricsStore 全局聚合表。
 type metricsStore struct {
-	mu      sync.Mutex
-	since   time.Time
-	byModel map[string]*modelMetrics
-	warned  bool // 容量超限只告警一次，避免刷屏
+	mu       sync.Mutex
+	since    time.Time
+	byModel  map[string]*modelMetrics
+	warned   bool // 容量超限只告警一次，避免刷屏
+	filePath string
 }
 
 var globalMetrics = &metricsStore{
-	since:   time.Now(),
-	byModel: make(map[string]*modelMetrics),
+	since:    time.Now(),
+	byModel:  make(map[string]*modelMetrics),
+	filePath: "./data/metrics.json",
+}
+
+// InitMetricsPersistence 初始化持久化路径并从本地读取已有数据恢复
+type modelMetricsDTO struct {
+	Requests  int64 `json:"requests"`
+	Success   int64 `json:"success"`
+	Failed    int64 `json:"failed"`
+	Streaming int64 `json:"streaming"`
+
+	TTFBSumMS  float64 `json:"ttfb_sum_ms"`
+	TTFBCount  int64   `json:"ttfb_count"`
+	LatSumMS   float64 `json:"lat_sum_ms"`
+	GenSecSum  float64 `json:"gen_sec_sum"`
+	PromptTok  int64   `json:"prompt_tok"`
+	CompTok    int64   `json:"comp_tok"`
+	CacheHit   int64   `json:"cache_hit"`
+	CacheMiss  int64   `json:"cache_miss"`
+	CacheWrite int64   `json:"cache_write"`
+	Credit     float64 `json:"credit"`
+
+	LastSeen time.Time `json:"last_seen"`
+}
+
+func (mm *modelMetrics) toDTO() modelMetricsDTO {
+	return modelMetricsDTO{
+		Requests:   mm.requests,
+		Success:    mm.success,
+		Failed:     mm.failed,
+		Streaming:  mm.streaming,
+		TTFBSumMS:  mm.ttfbSumMS,
+		TTFBCount:  mm.ttfbCount,
+		LatSumMS:   mm.latSumMS,
+		GenSecSum:  mm.genSecSum,
+		PromptTok:  mm.promptTok,
+		CompTok:    mm.compTok,
+		CacheHit:   mm.cacheHit,
+		CacheMiss:  mm.cacheMiss,
+		CacheWrite: mm.cacheWrite,
+		Credit:     mm.credit,
+		LastSeen:   mm.lastSeen,
+	}
+}
+
+func fromDTO(dto modelMetricsDTO) *modelMetrics {
+	return &modelMetrics{
+		requests:   dto.Requests,
+		success:    dto.Success,
+		failed:     dto.Failed,
+		streaming:  dto.Streaming,
+		ttfbSumMS:  dto.TTFBSumMS,
+		ttfbCount:  dto.TTFBCount,
+		latSumMS:   dto.LatSumMS,
+		genSecSum:  dto.GenSecSum,
+		promptTok:  dto.PromptTok,
+		compTok:    dto.CompTok,
+		cacheHit:   dto.CacheHit,
+		cacheMiss:  dto.CacheMiss,
+		cacheWrite: dto.CacheWrite,
+		credit:     dto.Credit,
+		lastSeen:   dto.LastSeen,
+	}
+}
+
+func InitMetricsPersistence(filePath string) {
+	if filePath == "" {
+		filePath = "./data/metrics.json"
+	}
+	m := globalMetrics
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.filePath = filePath
+
+	if data, err := os.ReadFile(filePath); err == nil {
+		var persisted struct {
+			Since   time.Time                  `json:"since"`
+			ByModel map[string]modelMetricsDTO `json:"by_model"`
+		}
+		if err := json.Unmarshal(data, &persisted); err == nil && persisted.ByModel != nil {
+			if !persisted.Since.IsZero() {
+				m.since = persisted.Since
+			}
+			m.byModel = make(map[string]*modelMetrics, len(persisted.ByModel))
+			for k, v := range persisted.ByModel {
+				m.byModel[k] = fromDTO(v)
+			}
+		}
+	}
+}
+
+// SaveMetricsSnapshot 保存当前调用指标到本地文件
+func SaveMetricsSnapshot() {
+	m := globalMetrics
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if m.filePath == "" {
+		return
+	}
+
+	dtoMap := make(map[string]modelMetricsDTO, len(m.byModel))
+	for k, v := range m.byModel {
+		dtoMap[k] = v.toDTO()
+	}
+
+	payload := struct {
+		Since   time.Time                  `json:"since"`
+		ByModel map[string]modelMetricsDTO `json:"by_model"`
+	}{
+		Since:   m.since,
+		ByModel: dtoMap,
+	}
+
+	if data, err := json.MarshalIndent(payload, "", "  "); err == nil {
+		_ = os.MkdirAll(filepath.Dir(m.filePath), 0755)
+		_ = os.WriteFile(m.filePath, data, 0644)
+	}
 }
 
 // recordChatMetric 把一次请求的观测累加进聚合表。由 chatStat.done() 调用。
@@ -127,8 +248,27 @@ func recordChatMetric(s *chatStat, total time.Duration) {
 	if s.hasCredit {
 		mm.credit += s.credit
 	}
-
 	mm.lastSeen = time.Now()
+
+	saveMetricsAsync()
+}
+
+var (
+	saveMetricsTimer   *time.Timer
+	saveMetricsTimerMu sync.Mutex
+)
+
+// saveMetricsAsync 采用 1 秒防抖异步落盘，避免高频请求写磁盘拖慢性能
+func saveMetricsAsync() {
+	saveMetricsTimerMu.Lock()
+	defer saveMetricsTimerMu.Unlock()
+
+	if saveMetricsTimer != nil {
+		saveMetricsTimer.Stop()
+	}
+	saveMetricsTimer = time.AfterFunc(1*time.Second, func() {
+		SaveMetricsSnapshot()
+	})
 }
 
 // MetricsSnapshot 是 /v1/stats 的响应载荷（字段名与社区面板约定一致）。

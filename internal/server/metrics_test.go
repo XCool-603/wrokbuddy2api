@@ -146,3 +146,33 @@ func TestMetricsCapBounded(t *testing.T) {
 		t.Errorf("models=%d 超过上限 %d", len(snap.Models), metricsCap)
 	}
 }
+
+// TestMetricsPersistence 测试落盘与恢复机制
+func TestMetricsPersistence(t *testing.T) {
+	resetMetricsForTest(t)
+	tmpFile := t.TempDir() + "/test_metrics.json"
+
+	InitMetricsPersistence(tmpFile)
+	recordChatMetric(&chatStat{
+		model: "deepseek-chat", mode: "stream", status: 200,
+		toks: 50, hasUsage: true, prompt: 20,
+	}, time.Second)
+
+	SaveMetricsSnapshot()
+
+	// 重置内存
+	ResetMetrics()
+	if MetricsSnapshotOf().Total.Requests != 0 {
+		t.Fatal("ResetMetrics 应该清零")
+	}
+
+	// 重新从文件加载恢复
+	InitMetricsPersistence(tmpFile)
+	snap := MetricsSnapshotOf()
+	if snap.Total.Requests != 1 {
+		t.Fatalf("恢复后 Requests=%d want 1", snap.Total.Requests)
+	}
+	if snap.Total.PromptTokens != 20 || snap.Total.CompletionTokens != 50 {
+		t.Errorf("恢复后 prompt/comp = %d/%d want 20/50", snap.Total.PromptTokens, snap.Total.CompletionTokens)
+	}
+}

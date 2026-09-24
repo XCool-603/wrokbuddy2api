@@ -110,6 +110,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	models := h.modelList()
+	statsSnap := MetricsSnapshotOf()
+	h.enrichCredits(&statsSnap)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": ServiceName,
@@ -125,6 +127,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		"models":     models,
 		"apiKey":     h.GetAPIKey(),
 		"recentLogs": GetRecentLogs(),
+		"stats":      statsSnap,
 	})
 }
 

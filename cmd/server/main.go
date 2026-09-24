@@ -130,6 +130,10 @@ func main() {
 	// 仓库种子 embed；models.dev 按需拉取成功后原子写回。
 	upstream.SetModelCatalogPath(modelJSONPath(cfg.StateFile))
 
+	// 初始化 Token 与调用指标永久记忆
+	metricsPath := filepath.Join(filepath.Dir(cfg.StateFile), "metrics.json")
+	server.InitMetricsPersistence(metricsPath)
+
 	// redisstore：未配置/连接失败 → Noop（纯内存模式，一切功能照常）。
 	store := redisstore.New(cfg.Upstash.URL, cfg.Upstash.Token)
 
@@ -300,7 +304,8 @@ func main() {
 	}
 	go func() {
 		<-ctx.Done()
-		p.Flush() // 信号触发：先落盘再做优雅停机
+		server.SaveMetricsSnapshot() // 信号触发：先落盘指标数据
+		p.Flush()                   // 先落盘账号池状态再做优雅停机
 		// Flush 已把最后一笔状态快照提交给 Redis（fire-and-forget）；store.Close
 		// 等 Upstash 在途/排队写排空再关连接——最后一笔镜像必须写完才退出（发现 4）。
 		// Noop 的 Close 是空操作；单写上限 5s × 上限 8，Close 内部另有超时兜底。
