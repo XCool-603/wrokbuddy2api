@@ -50,14 +50,16 @@ type modelMetrics struct {
 type metricsStore struct {
 	mu       sync.Mutex
 	since    time.Time
-	byModel  map[string]*modelMetrics
-	warned   bool // 容量超限只告警一次，避免刷屏
+	byModel  map[string]*modelMetrics            // 历史全量聚合（兼容原有逻辑与 /v1/stats 全量）
+	byDay    map[string]map[string]*modelMetrics // 按日期聚合: "2006-01-02" -> model -> modelMetrics
+	warned   bool                                // 容量超限只告警一次，避免刷屏
 	filePath string
 }
 
 var globalMetrics = &metricsStore{
 	since:    time.Now(),
 	byModel:  make(map[string]*modelMetrics),
+	byDay:    make(map[string]map[string]*modelMetrics),
 	filePath: "./data/metrics.json",
 }
 
@@ -133,16 +135,39 @@ func InitMetricsPersistence(filePath string) {
 
 	if data, err := os.ReadFile(filePath); err == nil {
 		var persisted struct {
-			Since   time.Time                  `json:"since"`
-			ByModel map[string]modelMetricsDTO `json:"by_model"`
+			Since   time.Time                             `json:"since"`
+			ByModel map[string]modelMetricsDTO            `json:"by_model"`
+			ByDay   map[string]map[string]modelMetricsDTO `json:"by_day"`
 		}
-		if err := json.Unmarshal(data, &persisted); err == nil && persisted.ByModel != nil {
+		if err := json.Unmarshal(data, &persisted); err == nil {
 			if !persisted.Since.IsZero() {
 				m.since = persisted.Since
 			}
-			m.byModel = make(map[string]*modelMetrics, len(persisted.ByModel))
-			for k, v := range persisted.ByModel {
-				m.byModel[k] = fromDTO(v)
+			m.byModel = make(map[string]*modelMetrics)
+			if persisted.ByModel != nil {
+				for k, v := range persisted.ByModel {
+					m.byModel[k] = fromDTO(v)
+				}
+			}
+
+			m.byDay = make(map[string]map[string]*modelMetrics)
+			if persisted.ByDay != nil {
+				for day, dayModels := range persisted.ByDay {
+					m.byDay[day] = make(map[string]*modelMetrics, len(dayModels))
+					for model, dto := range dayModels {
+						m.byDay[day][model] = fromDTO(dto)
+					}
+				}
+			}
+
+			// 兼容平滑迁移：如果旧版本只有 by_model 而没有 by_day，将旧数据作为今天的起始数据
+			if len(m.byDay) == 0 && len(m.byModel) > 0 {
+				today := time.Now().Format("2006-01-02")
+				m.byDay[today] = make(map[string]*modelMetrics, len(m.byModel))
+				for k, v := range m.byModel {
+					cpy := *v
+					m.byDay[today][k] = &cpy
+				}
 			}
 		}
 	}
@@ -163,12 +188,22 @@ func SaveMetricsSnapshot() {
 		dtoMap[k] = v.toDTO()
 	}
 
+	dayMap := make(map[string]map[string]modelMetricsDTO, len(m.byDay))
+	for day, models := range m.byDay {
+		dayMap[day] = make(map[string]modelMetricsDTO, len(models))
+		for k, v := range models {
+			dayMap[day][k] = v.toDTO()
+		}
+	}
+
 	payload := struct {
-		Since   time.Time                  `json:"since"`
-		ByModel map[string]modelMetricsDTO `json:"by_model"`
+		Since   time.Time                             `json:"since"`
+		ByModel map[string]modelMetricsDTO            `json:"by_model"`
+		ByDay   map[string]map[string]modelMetricsDTO `json:"by_day"`
 	}{
 		Since:   m.since,
 		ByModel: dtoMap,
+		ByDay:   dayMap,
 	}
 
 	if data, err := json.MarshalIndent(payload, "", "  "); err == nil {
@@ -191,6 +226,7 @@ func recordChatMetric(s *chatStat, total time.Duration) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
+	// 1. 全量聚合累加
 	mm, ok := m.byModel[model]
 	if !ok {
 		if len(m.byModel) >= metricsCap {
@@ -203,6 +239,29 @@ func recordChatMetric(s *chatStat, total time.Duration) {
 		mm = &modelMetrics{}
 		m.byModel[model] = mm
 	}
+	accumulateMetric(mm, s, total)
+
+	// 2. 按天聚合累加 (按当前本地自然日)
+	today := time.Now().Format("2006-01-02")
+	if m.byDay == nil {
+		m.byDay = make(map[string]map[string]*modelMetrics)
+	}
+	dayModels, ok := m.byDay[today]
+	if !ok {
+		dayModels = make(map[string]*modelMetrics)
+		m.byDay[today] = dayModels
+	}
+	dayMM, ok := dayModels[model]
+	if !ok {
+		dayMM = &modelMetrics{}
+		dayModels[model] = dayMM
+	}
+	accumulateMetric(dayMM, s, total)
+
+	saveMetricsAsync()
+}
+
+func accumulateMetric(mm *modelMetrics, s *chatStat, total time.Duration) {
 
 	mm.requests++
 	if s.status == 200 {
@@ -249,8 +308,6 @@ func recordChatMetric(s *chatStat, total time.Duration) {
 		mm.credit += s.credit
 	}
 	mm.lastSeen = time.Now()
-
-	saveMetricsAsync()
 }
 
 var (
@@ -271,15 +328,24 @@ func saveMetricsAsync() {
 	})
 }
 
+// DailySummaryPayload 每日维度聚合统计
+type DailySummaryPayload struct {
+	Date     string             `json:"date"` // YYYY-MM-DD
+	Total    ModelStatPayload   `json:"total"`
+	Models   []ModelStatPayload `json:"models"`
+}
+
 // MetricsSnapshot 是 /v1/stats 的响应载荷（字段名与社区面板约定一致）。
 type MetricsSnapshot struct {
-	Enabled   bool               `json:"enabled"`
-	Message   string             `json:"message,omitempty"`
-	Since     time.Time          `json:"since"`
-	Now       time.Time          `json:"now"`
-	UptimeSec int64              `json:"uptime_sec"`
-	Total     ModelStatPayload   `json:"total"`
-	Models    []ModelStatPayload `json:"models"`
+	Enabled   bool                  `json:"enabled"`
+	Message   string                `json:"message,omitempty"`
+	Since     time.Time             `json:"since"`
+	Now       time.Time             `json:"now"`
+	UptimeSec int64                 `json:"uptime_sec"`
+	TodayDate string                `json:"today_date"`
+	Total     ModelStatPayload      `json:"total"`
+	Models    []ModelStatPayload    `json:"models"`
+	Daily     []DailySummaryPayload `json:"daily"`
 }
 
 // ModelStatPayload 单模型派生统计。
@@ -315,25 +381,11 @@ type ModelStatPayload struct {
 	LastSeen *time.Time `json:"last_seen,omitempty"`
 }
 
-// MetricsSnapshotOf 生成当前聚合快照。models 按请求数降序（面板表格默认序）。
-func MetricsSnapshotOf() MetricsSnapshot {
-	now := time.Now()
-	m := globalMetrics
-	m.mu.Lock()
-	defer m.mu.Unlock()
-
-	out := MetricsSnapshot{
-		Enabled:   true,
-		Since:     m.since,
-		Now:       now,
-		UptimeSec: int64(now.Sub(m.since).Seconds()),
-		Models:    make([]ModelStatPayload, 0, len(m.byModel)),
-	}
-
-	// total 由各模型累加得出（与 models 同口径，避免两处算法分叉）。
+func aggregateModelMap(modelsMap map[string]*modelMetrics) (ModelStatPayload, []ModelStatPayload) {
+	models := make([]ModelStatPayload, 0, len(modelsMap))
 	var tot modelMetrics
-	for name, mm := range m.byModel {
-		out.Models = append(out.Models, deriveModelStat(name, mm))
+	for name, mm := range modelsMap {
+		models = append(models, deriveModelStat(name, mm))
 		tot.requests += mm.requests
 		tot.success += mm.success
 		tot.failed += mm.failed
@@ -352,14 +404,52 @@ func MetricsSnapshotOf() MetricsSnapshot {
 			tot.lastSeen = mm.lastSeen
 		}
 	}
-	out.Total = deriveModelStat("total", &tot)
-
-	sort.Slice(out.Models, func(i, j int) bool {
-		if out.Models[i].Requests != out.Models[j].Requests {
-			return out.Models[i].Requests > out.Models[j].Requests
+	sort.Slice(models, func(i, j int) bool {
+		if models[i].Requests != models[j].Requests {
+			return models[i].Requests > models[j].Requests
 		}
-		return out.Models[i].Model < out.Models[j].Model
+		return models[i].Model < models[j].Model
 	})
+	total := deriveModelStat("total", &tot)
+	return total, models
+}
+
+// MetricsSnapshotOf 生成当前聚合快照。models 按请求数降序（面板表格默认序）。
+func MetricsSnapshotOf() MetricsSnapshot {
+	now := time.Now()
+	today := now.Format("2006-01-02")
+	m := globalMetrics
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	out := MetricsSnapshot{
+		Enabled:   true,
+		Since:     m.since,
+		Now:       now,
+		UptimeSec: int64(now.Sub(m.since).Seconds()),
+		TodayDate: today,
+		Daily:     make([]DailySummaryPayload, 0, len(m.byDay)),
+	}
+
+	// 历史全量
+	out.Total, out.Models = aggregateModelMap(m.byModel)
+
+	// 每日列表 (按日期倒序排列，最新的在前)
+	days := make([]string, 0, len(m.byDay))
+	for d := range m.byDay {
+		days = append(days, d)
+	}
+	sort.Sort(sort.Reverse(sort.StringSlice(days)))
+
+	for _, d := range days {
+		dayTot, dayModels := aggregateModelMap(m.byDay[d])
+		out.Daily = append(out.Daily, DailySummaryPayload{
+			Date:   d,
+			Total:  dayTot,
+			Models: dayModels,
+		})
+	}
+
 	return out
 }
 
@@ -407,6 +497,7 @@ func ResetMetrics() {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	m.byModel = make(map[string]*modelMetrics)
+	m.byDay = make(map[string]map[string]*modelMetrics)
 	m.since = time.Now()
 	m.warned = false
 }
@@ -452,6 +543,19 @@ func (h *Handler) enrichCredits(snap *MetricsSnapshot) {
 			snap.Models[i].Credits = global[bare]
 		} else {
 			snap.Models[i].Credits = cn[bare]
+		}
+	}
+	for d := range snap.Daily {
+		for i := range snap.Daily[d].Models {
+			realm, bare := resolveModel(snap.Daily[d].Models[i].Model)
+			if bare == "" || bare == "-" {
+				continue
+			}
+			if realm == "global" {
+				snap.Daily[d].Models[i].Credits = global[bare]
+			} else {
+				snap.Daily[d].Models[i].Credits = cn[bare]
+			}
 		}
 	}
 }

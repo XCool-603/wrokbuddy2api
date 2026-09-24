@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -175,4 +176,53 @@ func TestMetricsPersistence(t *testing.T) {
 	if snap.Total.PromptTokens != 20 || snap.Total.CompletionTokens != 50 {
 		t.Errorf("恢复后 prompt/comp = %d/%d want 20/50", snap.Total.PromptTokens, snap.Total.CompletionTokens)
 	}
+	if len(snap.Daily) != 1 {
+		t.Fatalf("恢复后 Daily 长度 want 1, got %d", len(snap.Daily))
+	}
+	today := time.Now().Format("2006-01-02")
+	if snap.Daily[0].Date != today {
+		t.Errorf("Daily 日期 want %s, got %s", today, snap.Daily[0].Date)
+	}
+	if snap.Daily[0].Total.PromptTokens != 20 {
+		t.Errorf("Daily PromptTokens want 20, got %d", snap.Daily[0].Total.PromptTokens)
+	}
 }
+
+// TestDailyMetricsMigrationFromLegacy 测试从无 by_day 的旧版 JSON 自动平滑迁移
+func TestDailyMetricsMigrationFromLegacy(t *testing.T) {
+	resetMetricsForTest(t)
+	tmpFile := t.TempDir() + "/legacy_metrics.json"
+
+	// 写入旧版 json 结构
+	legacyJSON := `{
+		"since": "2026-09-24T00:00:00Z",
+		"by_model": {
+			"gpt-4o": {
+				"requests": 5,
+				"success": 5,
+				"prompt_tok": 500,
+				"comp_tok": 200
+			}
+		}
+	}`
+	if err := os.WriteFile(tmpFile, []byte(legacyJSON), 0644); err != nil {
+		t.Fatal(err)
+	}
+
+	InitMetricsPersistence(tmpFile)
+	snap := MetricsSnapshotOf()
+	if snap.Total.Requests != 5 {
+		t.Errorf("迁移后 Total.Requests want 5, got %d", snap.Total.Requests)
+	}
+	if len(snap.Daily) != 1 {
+		t.Fatalf("迁移后 Daily 应该有 1 天, got %d", len(snap.Daily))
+	}
+	today := time.Now().Format("2006-01-02")
+	if snap.Daily[0].Date != today {
+		t.Errorf("迁移后 Daily[0].Date want %s, got %s", today, snap.Daily[0].Date)
+	}
+	if snap.Daily[0].Total.PromptTokens != 500 {
+		t.Errorf("迁移后 PromptTokens want 500, got %d", snap.Daily[0].Total.PromptTokens)
+	}
+}
+

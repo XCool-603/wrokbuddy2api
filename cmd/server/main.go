@@ -67,10 +67,13 @@ func openBrowser(url string) {
 }
 
 func main() {
-	// 确保工作目录为可执行文件所在目录（双击运行/快捷方式运行时至关重要）
+	// 确保工作目录为可执行文件所在目录（双击运行/快捷方式运行时至关重要，但开发时 go run 避开临时目录）
 	if exePath, err := os.Executable(); err == nil {
 		exeDir := filepath.Dir(exePath)
-		_ = os.Chdir(exeDir)
+		// 如果不是 go run 产生的临时构建目录，才切换工作目录到 exeDir
+		if !strings.Contains(strings.ToLower(exeDir), "go-build") && !strings.Contains(strings.ToLower(exeDir), "temp") {
+			_ = os.Chdir(exeDir)
+		}
 	}
 
 	cfgPath := flag.String("config", "config.json", "path to config json")
