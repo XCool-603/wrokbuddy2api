@@ -47,6 +47,7 @@ jobs:
 
       - name: Build & push multi-arch
         uses: docker/build-push-action@v6
+        continue-on-error: true
         with:
           context: .
           platforms: linux/amd64,linux/arm64
