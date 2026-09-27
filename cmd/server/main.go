@@ -286,6 +286,7 @@ func main() {
 		// 运维管理端点开关（config admin.enabled，默认 false）。
 		AdminEnabled: cfg.Admin.Enabled,
 		ConfigPath:   *cfgPath,
+		WebPassword:  cfg.WebPassword,
 	})
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

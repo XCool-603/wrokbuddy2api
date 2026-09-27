@@ -15,10 +15,11 @@ import (
 
 // Config 顶层配置。
 type Config struct {
-	Listen    string `json:"listen"`     // ":7863"
-	APIKey    string `json:"api_key"`    // 空 = 不鉴权
-	AuthDir   string `json:"auth_dir"`   // ./auths
-	StateFile string `json:"state_file"` // ./data/state.json
+	Listen      string `json:"listen"`       // ":7863"
+	APIKey      string `json:"api_key"`      // 空 = 不鉴权
+	WebPassword string `json:"web_password"` // 控制台 Web 面板访问密码，非空时需登录才能查看和操作
+	AuthDir     string `json:"auth_dir"`     // ./auths
+	StateFile   string `json:"state_file"`   // ./data/state.json
 
 	Server struct{} `json:"server"` // 已退役段：max_body_mb 移除后无字段；旧配置该段下任意键因 JSON 未知字段而自然忽略
 
@@ -235,6 +236,9 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("WB2A_API_KEY"); v != "" {
 		c.APIKey = v
+	}
+	if v := os.Getenv("WB2A_WEB_PASSWORD"); v != "" {
+		c.WebPassword = v
 	}
 	if v := os.Getenv("WB2A_AUTH_DIR"); v != "" {
 		c.AuthDir = v

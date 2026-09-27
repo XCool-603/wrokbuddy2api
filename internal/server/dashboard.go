@@ -3,7 +3,10 @@ package server
 import (
 	"archive/zip"
 	"bytes"
+	"crypto/rand"
+	"crypto/subtle"
 	_ "embed"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -26,16 +29,20 @@ var dashboardHTML string
 
 func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("GET /{$}", h.handleDashboardHTML)
-	h.mux.HandleFunc("GET /ui/data", h.handleDashboardData)
-	h.mux.HandleFunc("POST /ui/oauth/start", h.handleOAuthStart)
-	h.mux.HandleFunc("POST /ui/oauth/poll", h.handleOAuthPoll)
-	h.mux.HandleFunc("POST /ui/oauth/import", h.handleOAuthImport)
-	h.mux.HandleFunc("POST /ui/account/admin", h.handleAccountAdmin)
-	h.mux.HandleFunc("POST /ui/action/signin", h.handleActionSignin)
-	h.mux.HandleFunc("POST /ui/action/trial", h.handleActionTrial)
-	h.mux.HandleFunc("POST /ui/action/delete", h.handleActionDelete)
-	h.mux.HandleFunc("POST /ui/config/apikey", h.handleConfigAPIKey)
-	h.mux.HandleFunc("GET /ui/action/backup", h.handleActionBackup)
+	h.mux.HandleFunc("POST /ui/auth/login", h.handleWebLogin)
+	h.mux.HandleFunc("POST /ui/auth/logout", h.handleWebLogout)
+
+	h.mux.HandleFunc("GET /ui/data", h.withWebAuth(h.handleDashboardData))
+	h.mux.HandleFunc("POST /ui/oauth/start", h.withWebAuth(h.handleOAuthStart))
+	h.mux.HandleFunc("POST /ui/oauth/poll", h.withWebAuth(h.handleOAuthPoll))
+	h.mux.HandleFunc("POST /ui/oauth/import", h.withWebAuth(h.handleOAuthImport))
+	h.mux.HandleFunc("POST /ui/account/admin", h.withWebAuth(h.handleAccountAdmin))
+	h.mux.HandleFunc("POST /ui/action/signin", h.withWebAuth(h.handleActionSignin))
+	h.mux.HandleFunc("POST /ui/action/trial", h.withWebAuth(h.handleActionTrial))
+	h.mux.HandleFunc("POST /ui/action/delete", h.withWebAuth(h.handleActionDelete))
+	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))
+	h.mux.HandleFunc("POST /ui/config/password", h.withWebAuth(h.handleConfigPassword))
+	h.mux.HandleFunc("GET /ui/action/backup", h.withWebAuth(h.handleActionBackup))
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
@@ -125,9 +132,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		},
 		"accounts":   accounts,
 		"models":     models,
-		"apiKey":     h.GetAPIKey(),
-		"recentLogs": GetRecentLogs(),
-		"stats":      statsSnap,
+		"apiKey":      h.GetAPIKey(),
+		"hasPassword": h.GetWebPassword() != "",
+		"recentLogs":  GetRecentLogs(),
+		"stats":       statsSnap,
 	})
 }
 
@@ -674,3 +682,161 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 		_, _ = fw.Write(data)
 	}
 }
+
+// webSessionCookieName Web 控制台会话 Cookie 名
+const webSessionCookieName = "wb2a_session"
+
+// webSessions 存储已登录的 Web 会话 (token -> expireTime)
+var webSessions sync.Map
+
+func generateSessionToken() string {
+	b := make([]byte, 32)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+func (h *Handler) checkWebAuth(r *http.Request) bool {
+	pw := h.GetWebPassword()
+	if pw == "" {
+		return true // 未设密码，单机免密模式
+	}
+
+	// 1. 支持 Header 鉴权: X-Web-Password
+	if customPw := r.Header.Get("X-Web-Password"); customPw != "" {
+		if subtle.ConstantTimeCompare([]byte(customPw), []byte(pw)) == 1 {
+			return true
+		}
+	}
+
+	// 2. Cookie 会话校验
+	cookie, err := r.Cookie(webSessionCookieName)
+	if err != nil || cookie.Value == "" {
+		return false
+	}
+
+	if val, ok := webSessions.Load(cookie.Value); ok {
+		if exp, ok := val.(time.Time); ok {
+			if time.Now().Before(exp) {
+				return true
+			}
+			webSessions.Delete(cookie.Value)
+		}
+	}
+	return false
+}
+
+func (h *Handler) withWebAuth(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		if !h.checkWebAuth(r) {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{
+				"error":        "需要登录 Web 控制台密码",
+				"need_login":   true,
+				"has_password": true,
+			})
+			return
+		}
+		next(w, r)
+	}
+}
+
+func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
+	pw := h.GetWebPassword()
+	if pw == "" {
+		// 未设置密码，直接视作登录成功
+		writeJSON(w, http.StatusOK, map[string]any{"success": true})
+		return
+	}
+
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求格式错误"})
+		return
+	}
+
+	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(pw)) != 1 {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "控制台访问密码错误"})
+		return
+	}
+
+	token := generateSessionToken()
+	exp := time.Now().Add(7 * 24 * time.Hour) // 7 天有效期
+	webSessions.Store(token, exp)
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     webSessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  exp,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleWebLogout(w http.ResponseWriter, r *http.Request) {
+	if cookie, err := r.Cookie(webSessionCookieName); err == nil && cookie.Value != "" {
+		webSessions.Delete(cookie.Value)
+	}
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     webSessionCookieName,
+		Value:    "",
+		Path:     "/",
+		Expires:  time.Unix(0, 0),
+		MaxAge:   -1,
+		HttpOnly: true,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		OldPassword string `json:"old_password"`
+		NewPassword string `json:"new_password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求体 JSON 解析失败"})
+		return
+	}
+
+	currentPw := h.GetWebPassword()
+	// 如果当前已设置了密码，修改时需要核验旧密码
+	if currentPw != "" {
+		if subtle.ConstantTimeCompare([]byte(req.OldPassword), []byte(currentPw)) != 1 {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": "原管理密码不正确"})
+			return
+		}
+	}
+
+	newPw := strings.TrimSpace(req.NewPassword)
+	h.SetWebPassword(newPw)
+
+	// 持久化到 config.json
+	cfgFile := h.cfg.ConfigPath
+	if cfgFile == "" {
+		cfgFile = "config.json"
+	}
+
+	var dataMap map[string]any
+	if raw, err := os.ReadFile(cfgFile); err == nil {
+		_ = json.Unmarshal(raw, &dataMap)
+	}
+	if dataMap == nil {
+		dataMap = make(map[string]any)
+	}
+	dataMap["web_password"] = newPw
+
+	if encoded, err := json.MarshalIndent(dataMap, "", "  "); err == nil {
+		_ = os.WriteFile(cfgFile, encoded, 0644)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":      true,
+		"has_password": newPw != "",
+	})
+}
+

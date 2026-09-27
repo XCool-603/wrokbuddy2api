@@ -133,6 +133,16 @@
           <span class="w-2 h-2 rounded-full bg-emerald-300 group-hover:scale-125 transition"></span>
           <span>授权国际版 (Global)</span>
         </button>
+
+        <div class="h-6 w-px bg-slate-800 mx-1"></div>
+
+        <a href="/ui/action/backup" target="_blank" title="一键备份下载所有凭证" class="p-2.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 rounded-xl transition duration-200">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+        </a>
+
+        <button id="navLogoutBtn" onclick="doLogout()" title="退出控制台登录" class="p-2.5 text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition duration-200 hidden">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+        </button>
       </div>
     </div>
   </header>
@@ -531,6 +541,17 @@
               <p class="text-[10px] text-slate-500 mt-1">可在上方直接更改网关鉴权 API Key，保存后即时生效且自动写入 config.json。</p>
             </div>
 
+            <div class="pt-2 border-t border-slate-800/60">
+              <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
+                <span class="font-medium flex items-center gap-1.5">
+                  <span>控制台管理密码</span>
+                  <span id="webPasswordStatusBadge" class="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400">检测中</span>
+                </span>
+                <button onclick="openChangePasswordModal()" class="text-indigo-400 hover:text-indigo-300 text-[11px] font-medium">设置/修改密码</button>
+              </div>
+              <p class="text-[10px] text-slate-500">开启密码后，访问控制台、导入凭证、查看Token流水均需登录，防止被他人盗用。</p>
+            </div>
+
             <div class="p-3.5 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
               <div class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
                 <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
@@ -679,6 +700,78 @@
     </div>
   </div>
 
+  <!-- Change Web Password Modal -->
+  <div id="changePasswordModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          <span>设置 / 修改控制台管理密码</span>
+        </h3>
+        <button onclick="closeChangePasswordModal()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <div class="py-4 space-y-4">
+        <p class="text-xs text-slate-400 leading-relaxed">
+          设置管理密码后，任何访问控制台 Web 页面、查看 Token 数据或导入凭证的操作都需要密码验证。清空密码则恢复为单机免密模式。
+        </p>
+
+        <div id="oldPasswordGroup" class="space-y-1.5 hidden">
+          <label class="block text-xs font-medium text-slate-300">原管理密码</label>
+          <input id="inputOldPassword" type="password" placeholder="输入当前控制台密码" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono" />
+        </div>
+
+        <div class="space-y-1.5">
+          <label class="block text-xs font-medium text-slate-300">新管理密码</label>
+          <input id="inputNewPassword" type="password" placeholder="输入新密码（留空表示清除密码、恢复免密）" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-600 focus:outline-none focus:border-indigo-500 font-mono" />
+        </div>
+
+        <div id="changePasswordError" class="text-xs text-rose-400 font-mono hidden"></div>
+        <div id="changePasswordSuccess" class="text-xs text-emerald-400 font-mono hidden">密码更新成功！</div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+        <button onclick="closeChangePasswordModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white transition">取消</button>
+        <button id="btnSubmitPassword" onclick="submitChangePassword()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition">保存密码</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Fullscreen Login Overlay -->
+  <div id="loginOverlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50 hidden">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-sm w-full p-8 shadow-2xl relative overflow-hidden text-center space-y-6">
+      <div class="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
+      <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
+
+      <div class="flex flex-col items-center justify-center space-y-2">
+        <div class="w-14 h-14 rounded-2xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/30">
+          <svg class="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/>
+          </svg>
+        </div>
+        <h2 class="text-xl font-bold text-white tracking-tight">WorkBuddy<span class="text-indigo-400">2API</span></h2>
+        <p class="text-xs text-slate-400">控制台已启用密码保护，请输入访问密码</p>
+      </div>
+
+      <form onsubmit="doLogin(event)" class="space-y-4">
+        <div>
+          <input id="loginPasswordInput" type="password" placeholder="请输入控制台访问密码" autofocus class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono tracking-wider transition" />
+        </div>
+        <div id="loginErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
+
+        <button type="submit" id="loginBtn" class="w-full py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200">
+          验证并进入控制台
+        </button>
+      </form>
+
+      <div class="text-[11px] text-slate-500 font-mono">
+        可通过环境变量 WB2A_WEB_PASSWORD 或 config.json 更改密码
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentRealm = 'cn';
     let currentOAuthUrl = '';
@@ -686,13 +779,33 @@
     let pollCountdownInterval = null;
     let pollRemainingSec = 60;
 
+    let hasWebPassword = false;
+
     async function refreshData() {
       const icon = document.getElementById('refreshIcon');
       if (icon) icon.classList.add('animate-spin');
       try {
         const res = await fetch('/ui/data');
+        if (res.status === 401) {
+          const errData = await res.json().catch(() => ({}));
+          if (errData.need_login) {
+            hasWebPassword = true;
+            showLoginModal(true);
+            return;
+          }
+        }
+        if (!res.ok) {
+          console.error('获取控制台数据异常状态:', res.status);
+          return;
+        }
+
         const data = await res.json();
-        
+        // 成功获取数据，隐藏登录框
+        showLoginModal(false);
+
+        hasWebPassword = !!data.hasPassword;
+        updatePasswordBadge(hasWebPassword);
+
         document.getElementById('statTotal').innerText = data.status.total || 0;
         document.getElementById('statHealthy').innerText = data.status.healthy || 0;
         document.getElementById('statCooling').innerText = data.status.cooling || 0;
@@ -1425,6 +1538,171 @@
       return String(str).replace(/[&<>"']/g, function(s) {
         return ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[s];
       });
+    }
+
+    function updatePasswordBadge(hasPw) {
+      const badge = document.getElementById('webPasswordStatusBadge');
+      const logoutBtn = document.getElementById('navLogoutBtn');
+      if (badge) {
+        if (hasPw) {
+          badge.className = 'text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+          badge.innerText = '已启用保护';
+        } else {
+          badge.className = 'text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-400';
+          badge.innerText = '未设密码(免密)';
+        }
+      }
+      if (logoutBtn) {
+        if (hasPw) {
+          logoutBtn.classList.remove('hidden');
+        } else {
+          logoutBtn.classList.add('hidden');
+        }
+      }
+    }
+
+    function showLoginModal(show) {
+      const overlay = document.getElementById('loginOverlay');
+      if (!overlay) return;
+      if (show) {
+        overlay.classList.remove('hidden');
+        const input = document.getElementById('loginPasswordInput');
+        if (input) {
+          input.value = '';
+          setTimeout(() => input.focus(), 100);
+        }
+      } else {
+        overlay.classList.add('hidden');
+      }
+    }
+
+    async function doLogin(e) {
+      if (e) e.preventDefault();
+      const pw = document.getElementById('loginPasswordInput').value;
+      const errMsg = document.getElementById('loginErrorMsg');
+      const btn = document.getElementById('loginBtn');
+      if (!pw) {
+        if (errMsg) {
+          errMsg.innerText = '请输入访问密码';
+          errMsg.classList.remove('hidden');
+        }
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '正在验证...';
+      if (errMsg) errMsg.classList.add('hidden');
+
+      try {
+        const res = await fetch('/ui/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: pw })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showLoginModal(false);
+          refreshData();
+        } else {
+          if (errMsg) {
+            errMsg.innerText = data.error || '密码错误，请重试';
+            errMsg.classList.remove('hidden');
+          }
+        }
+      } catch (err) {
+        if (errMsg) {
+          errMsg.innerText = '网络异常: ' + err;
+          errMsg.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '验证并进入控制台';
+      }
+    }
+
+    async function doLogout() {
+      if (!confirm('确定要退出控制台登录吗？')) return;
+      try {
+        await fetch('/ui/auth/logout', { method: 'POST' });
+        showLoginModal(true);
+      } catch (e) {
+        location.reload();
+      }
+    }
+
+    function openChangePasswordModal() {
+      const modal = document.getElementById('changePasswordModal');
+      const oldGroup = document.getElementById('oldPasswordGroup');
+      const oldInput = document.getElementById('inputOldPassword');
+      const newInput = document.getElementById('inputNewPassword');
+      const errEl = document.getElementById('changePasswordError');
+      const succEl = document.getElementById('changePasswordSuccess');
+
+      if (errEl) errEl.classList.add('hidden');
+      if (succEl) succEl.classList.add('hidden');
+      if (oldInput) oldInput.value = '';
+      if (newInput) newInput.value = '';
+
+      if (hasWebPassword) {
+        oldGroup.classList.remove('hidden');
+      } else {
+        oldGroup.classList.add('hidden');
+      }
+
+      modal.classList.remove('hidden');
+      if (hasWebPassword && oldInput) {
+        setTimeout(() => oldInput.focus(), 100);
+      } else if (newInput) {
+        setTimeout(() => newInput.focus(), 100);
+      }
+    }
+
+    function closeChangePasswordModal() {
+      document.getElementById('changePasswordModal').classList.add('hidden');
+    }
+
+    async function submitChangePassword() {
+      const oldPw = document.getElementById('inputOldPassword').value;
+      const newPw = document.getElementById('inputNewPassword').value;
+      const btn = document.getElementById('btnSubmitPassword');
+      const errEl = document.getElementById('changePasswordError');
+      const succEl = document.getElementById('changePasswordSuccess');
+
+      errEl.classList.add('hidden');
+      succEl.classList.add('hidden');
+
+      btn.disabled = true;
+      btn.innerText = '保存中...';
+
+      try {
+        const res = await fetch('/ui/config/password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            old_password: oldPw,
+            new_password: newPw
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          hasWebPassword = !!data.has_password;
+          updatePasswordBadge(hasWebPassword);
+          succEl.classList.remove('hidden');
+          setTimeout(() => {
+            closeChangePasswordModal();
+            refreshData();
+          }, 1200);
+        } else {
+          errEl.innerText = data.error || '保存失败';
+          errEl.classList.remove('hidden');
+        }
+      } catch (err) {
+        errEl.innerText = '网络异常: ' + err;
+        errEl.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '保存密码';
+      }
     }
 
     // Init

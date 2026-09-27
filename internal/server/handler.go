@@ -54,6 +54,9 @@ type Config struct {
 
 	// ConfigPath 配置文件路径（用于面板动态修改保存配置，缺省 config.json）
 	ConfigPath string
+
+	// WebPassword 控制台访问密码（非空时启用 WebUI 登录鉴权，空则单机免密）
+	WebPassword string
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -84,6 +87,7 @@ const dumpReqMinBytes = 4 << 20
 type Handler struct {
 	cfg     Config
 	keyMu   sync.RWMutex
+	webMu   sync.RWMutex
 	mux     *http.ServeMux
 	degrade degradeGate
 	// wafIP WAF IP 级拦截状态机（fail-fast，wafip.go）：短窗多号 WAF 403 →
@@ -101,6 +105,18 @@ func (h *Handler) SetAPIKey(k string) {
 	h.keyMu.Lock()
 	defer h.keyMu.Unlock()
 	h.cfg.APIKey = k
+}
+
+func (h *Handler) GetWebPassword() string {
+	h.webMu.RLock()
+	defer h.webMu.RUnlock()
+	return h.cfg.WebPassword
+}
+
+func (h *Handler) SetWebPassword(p string) {
+	h.webMu.Lock()
+	defer h.webMu.Unlock()
+	h.cfg.WebPassword = p
 }
 
 // NewHandler 构建 handler。
