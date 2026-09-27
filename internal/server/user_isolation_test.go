@@ -29,8 +29,11 @@ func TestUserAuthAndIsolation(t *testing.T) {
 	}
 
 	p := pool.New("")
-	// 添加公共账号（无 owner 或 owner="admin"）
-	p.Add(&auth.Auth{UID: "pub1", AccessToken: "tok_pub", Domain: "copilot.tencent.com", Owner: ""})
+	// 添加管理员私有账号（旧账号无 owner 或 owner="admin"）
+	p.Add(&auth.Auth{UID: "admin_legacy", AccessToken: "tok_admin_leg", Domain: "copilot.tencent.com", Owner: ""})
+	p.Add(&auth.Auth{UID: "admin_explicit", AccessToken: "tok_admin_exp", Domain: "copilot.tencent.com", Owner: "admin"})
+	// 添加显式公共账号
+	p.Add(&auth.Auth{UID: "pub_shared", AccessToken: "tok_pub", Domain: "copilot.tencent.com", Owner: "public"})
 	// 添加属于 bob 的专属账号
 	p.Add(&auth.Auth{UID: "bob1", AccessToken: "tok_bob", Domain: "copilot.tencent.com", Owner: bob.ID})
 	// 添加属于 alice 的专属账号
@@ -63,19 +66,30 @@ func TestUserAuthAndIsolation(t *testing.T) {
 		t.Fatalf("Invalid API Key should return 401, got code %d", wBad.Code)
 	}
 
-	// 3. 测试选号隔离逻辑：
-	// bob 选号，只能选中 pub1 或 bob1，绝不能选到 alice1
+	// 3. 测试选号严格隔离逻辑：
+	// bob 选号，只能选中 bob1 或 pub_shared，绝不能选到 admin_legacy、admin_explicit 或 alice1
 	for i := 0; i < 20; i++ {
 		picked := p.PickExcludingForRealmAndOwner(nil, "", "", bob.ID)
 		if picked == nil {
 			t.Fatalf("Pick for bob should return an account")
 		}
-		if picked.UID == "alice1" {
-			t.Fatalf("Bob should NEVER pick Alice's private account, got: %s", picked.UID)
+		if picked.UID != "bob1" && picked.UID != "pub_shared" {
+			t.Fatalf("Bob should NEVER pick unowned/admin/Alice's accounts, got: %s", picked.UID)
 		}
 	}
 
-	// 管理员选号（owner="" 或 "admin"），全池账号均可调度
+	// 4. 新用户 charlie 没有自己的账号，池内只有 pub_shared，绝不能选到管理员账号
+	for i := 0; i < 20; i++ {
+		picked := p.PickExcludingForRealmAndOwner(nil, "", "", "u_charlie")
+		if picked == nil {
+			t.Fatalf("Pick for charlie should return pub_shared")
+		}
+		if picked.UID != "pub_shared" {
+			t.Fatalf("Charlie with no accounts should only pick pub_shared, got: %s", picked.UID)
+		}
+	}
+
+	// 5. 管理员选号（owner="" 或 "admin"），全池账号均可调度
 	pickedAdmin := p.PickExcludingForRealmAndOwner(nil, "", "", "admin")
 	if pickedAdmin == nil {
 		t.Fatalf("Admin pick should succeed")

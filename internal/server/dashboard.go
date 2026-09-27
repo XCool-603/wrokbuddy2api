@@ -113,15 +113,16 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 账号隔离逻辑：
-		// 如果当前登录的是普通用户（非 admin），只列出属于该用户自己的账号或公共系统账号
+		// 如果当前登录的是普通用户（非 admin），只列出属于该用户自己的账号或明确为 public 的公共账号
+		// 严禁普通用户看到管理员账号或 legacy 空 owner 账号（属于管理员私有）
 		isMine := false
 		if user != nil {
 			if a.Owner == user.ID || a.Owner == user.Username {
 				isMine = true
 			}
 			if user.Role != usermgr.RoleAdmin {
-				if !isMine && a.Owner != "" && a.Owner != "admin" {
-					// 不属于公共且不属于该普通用户，跳过（隔离保密）
+				if !isMine && a.Owner != "public" {
+					// 不属于当前普通用户且非显式 public，跳过隔离
 					continue
 				}
 			}
@@ -153,6 +154,22 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		accounts = append(accounts, item)
 	}
 
+	// 状态统计：普通用户只统计属于自己的账号状态，管理员统计全局
+	statTotal, statHealthy, statCooling, statDisabled, statInFlight := total, healthy, cooling, disabled, inFlightFull
+	if user != nil && user.Role != usermgr.RoleAdmin {
+		statTotal = len(accounts)
+		statHealthy, statCooling, statDisabled = 0, 0, 0
+		for _, it := range accounts {
+			if it.Disabled || it.ManualDisabled {
+				statDisabled++
+			} else if it.Cooling {
+				statCooling++
+			} else {
+				statHealthy++
+			}
+		}
+	}
+
 	models := h.modelList()
 	statsSnap := MetricsSnapshotOf()
 	h.enrichCredits(&statsSnap)
@@ -166,11 +183,11 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": ServiceName,
 		"status": map[string]any{
-			"total":           total,
-			"healthy":         healthy,
-			"cooling":         cooling,
-			"disabled":        disabled,
-			"in_flight_full":  inFlightFull,
+			"total":           statTotal,
+			"healthy":         statHealthy,
+			"cooling":         statCooling,
+			"disabled":        statDisabled,
+			"in_flight_full":  statInFlight,
 			"sticky_sessions": sticky,
 		},
 		"accounts":       accounts,
@@ -399,6 +416,14 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 立即将新账号同步入账号池，无需等待文件监听延迟
+	if newAuth, err := auth.Parse(docBytes); err == nil {
+		newAuth.FilePath = targetFile
+		if h.cfg.Pool != nil {
+			h.cfg.Pool.Add(newAuth)
+		}
+	}
+
 	// 清理当前状态
 	oauthStateMutex.Lock()
 	if oauthStateStore[req.Realm] == state {
@@ -447,6 +472,11 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 	if err := a.SaveAtomic(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": fmt.Sprintf("保存失败: %v", err)})
 		return
+	}
+
+	// 立即将新账号同步入账号池
+	if h.cfg.Pool != nil {
+		h.cfg.Pool.Add(a)
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -821,10 +851,24 @@ func (h *Handler) getWebSessionUser(r *http.Request) *usermgr.User {
 		}
 	}
 
-	// 兼容 X-Web-Password 或者是免密单机模式，默认返回管理员
-	if h.cfg.UserMgr != nil {
-		if admin, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
-			return admin
+	// 兼容 X-Web-Password 或者是免密单机模式
+	pw := h.GetWebPassword()
+	if customPw := r.Header.Get("X-Web-Password"); customPw != "" && pw != "" {
+		if subtle.ConstantTimeCompare([]byte(customPw), []byte(pw)) == 1 {
+			if h.cfg.UserMgr != nil {
+				if admin, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
+					return admin
+				}
+			}
+		}
+	}
+
+	// 纯单机免密模式（既无密码又无用户管理器）才返回 admin
+	if pw == "" && h.cfg.UserMgr == nil {
+		return &usermgr.User{
+			ID:       "admin",
+			Username: "admin",
+			Role:     usermgr.RoleAdmin,
 		}
 	}
 	return nil

@@ -94,7 +94,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.1.2"
+const CurrentVersion = "v1.1.3"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -617,6 +617,14 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	tried := map[string]bool{}
 	var lastErr error
 
+	// 获取当前请求用户（多租户/角色隔离）
+	reqOwner := ""
+	if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
+		if u.Role != usermgr.RoleAdmin {
+			reqOwner = u.ID // 普通用户仅路由自己的私有账号或系统公共账号
+		}
+	}
+
 	// 会话粘性：从请求体提取会话键并解析绑定号（找不到/无效则 stickyUID 为空，走普通轮换）。
 	// 按模型解析：同一个会话可能换模型，绑定号若在当前模型上被 6004 限额（对其他模型
 	// 仍可用），必须重分配——否则会被钉在这个号上反复失败。
@@ -631,6 +639,10 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	stickyKey := sessKey
 	if stickyKey == "" {
 		stickyKey = session.StickyFallbackKey(body)
+	}
+	// 多租户隔离：会话粘性键加上用户身份前缀，防止不同用户相同 conversationId 互相绑定
+	if stickyKey != "" && reqOwner != "" {
+		stickyKey = reqOwner + ":" + stickyKey
 	}
 	stickyUID := ""
 	if h.cfg.Session != nil && stickyKey != "" {
@@ -755,17 +767,15 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			if acct == nil || (realm != "" && acct.Realm() != realm) {
 				// 粘性号在当前模型不可用（冷却/占满/该模型被 6004 限额）或 realm 不符 → 解绑。
 				unbindSticky()
+			} else if reqOwner != "" && reqOwner != "admin" {
+				// 普通用户隔离校验：若粘性号不属于该普通用户且非 public，解绑并重新轮换
+				if acct.OwnerValue() != reqOwner && acct.OwnerValue() != "public" {
+					unbindSticky()
+					acct = nil
+				}
 			}
 		}
 		if acct == nil {
-			// 获取当前请求用户（多租户/角色隔离）
-			reqOwner := ""
-			if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
-				if u.Role != usermgr.RoleAdmin {
-					reqOwner = u.ID // 普通用户仅路由自己的私有账号或系统公共账号
-				}
-			}
-
 			// 模型感知 + realm 感知 + 用户隔离选号：模型非空时启用 6004 模型级冷却豁免
 			// （healthyForModel），realm 谓词过滤跨域账号。
 			acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)

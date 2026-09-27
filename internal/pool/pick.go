@@ -60,9 +60,9 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 		if owner == "" || owner == "admin" {
 			return true // 管理员或未限定 owner 可用全部账号（包含公共账号与所有用户账号）
 		}
-		// 普通用户：优先使用绑定在自己名下的账号（owner == 用户标识）；
-		// 若无私有账号，或账号属于公共系统账号（owner == "" 或 owner == "admin"），可共享调用
-		return e.a.OwnerValue() == owner || e.a.OwnerValue() == "" || e.a.OwnerValue() == "admin"
+		// 普通用户：严格只能使用绑定在自己名下的账号（owner == 用户标识）或明确标记为 public 的共享公共账号；
+		// 严禁路由到 admin 或 owner 为空的未指定账号
+		return e.a.OwnerValue() == owner || e.a.OwnerValue() == "public"
 	}
 	healthyOf := func(e *entry) bool { return realmOK(e) && ownerOK(e) && e.healthy(now) }
 	if reqModel != "" {
@@ -257,8 +257,8 @@ func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, re
 			continue // 域过滤：池内跨 realm 的冷却账号不参与本 realm 兜底
 		}
 		if owner != "" && owner != "admin" {
-			// 普通用户兜底同样隔离
-			if e.a.OwnerValue() != owner && e.a.OwnerValue() != "" && e.a.OwnerValue() != "admin" {
+			// 普通用户兜底同样严格隔离：只能使用自己名下账号或明确标记为 public 的公共账号
+			if e.a.OwnerValue() != owner && e.a.OwnerValue() != "public" {
 				continue
 			}
 		}
