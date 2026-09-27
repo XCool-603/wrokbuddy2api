@@ -34,6 +34,14 @@ jobs:
         run: |
           go build -trimpath -ldflags "-H windowsgui -s -w" -o workbuddy2api.exe ./cmd/server
 
+      - name: Build Standalone Linux amd64 Binary
+        run: |
+          $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-linux-amd64 ./cmd/server
+
+      - name: Build Standalone Linux arm64 Binary
+        run: |
+          $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="arm64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-linux-arm64 ./cmd/server
+
       # 1. 始终生成 GitHub Actions Artifact 下载产物 (在运行详情页最下方)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
@@ -52,5 +60,7 @@ jobs:
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           files: |
             workbuddy2api.exe
+            workbuddy2api-linux-amd64
+            workbuddy2api-linux-arm64
             config.example.json
           generate_release_notes: true

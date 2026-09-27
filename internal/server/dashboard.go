@@ -942,21 +942,6 @@ func (h *Handler) handleSystemUpdateCheck(w http.ResponseWriter, r *http.Request
 var updateLock sync.Mutex
 
 func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
-	if isDockerEnvironment() {
-		// Docker 环境下提示用户通过 compose 拉取升级
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": "当前运行在 Docker 容器中，请在宿主机执行 `git pull origin main && docker compose up -d --build` 完成更新",
-		})
-		return
-	}
-
-	if runtime.GOOS != "windows" {
-		writeJSON(w, http.StatusBadRequest, map[string]any{
-			"error": "在线自动替换二进制当前仅支持 Windows 桌面/服务环境",
-		})
-		return
-	}
-
 	if !updateLock.TryLock() {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "已有升级任务正在进行中，请勿重复操作",
@@ -973,16 +958,30 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var exeURL string
+	var targetAssetURL string
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
+	// 匹配对应的资产文件
 	for _, a := range rel.Assets {
-		if strings.HasSuffix(strings.ToLower(a.Name), ".exe") {
-			exeURL = a.BrowserDownloadURL
+		name := strings.ToLower(a.Name)
+		if goos == "windows" && strings.HasSuffix(name, ".exe") {
+			targetAssetURL = a.BrowserDownloadURL
 			break
+		} else if goos == "linux" {
+			if goarch == "arm64" && strings.Contains(name, "linux-arm64") {
+				targetAssetURL = a.BrowserDownloadURL
+				break
+			} else if goarch == "amd64" && strings.Contains(name, "linux-amd64") {
+				targetAssetURL = a.BrowserDownloadURL
+				break
+			}
 		}
 	}
-	if exeURL == "" {
+
+	if targetAssetURL == "" {
 		writeJSON(w, http.StatusNotFound, map[string]any{
-			"error": "最新 Release 中未找到可执行文件 (.exe) 资产包",
+			"error": fmt.Sprintf("最新 Release 中未找到适用于当前系统平台 (%s/%s) 的安装包", goos, goarch),
 		})
 		return
 	}
@@ -998,7 +997,7 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 	// 1. 下载新版本到临时文件 .new
 	newExePath := currentExe + ".new"
 	downloadClient := &http.Client{Timeout: 5 * time.Minute}
-	req, _ := http.NewRequest("GET", exeURL, nil)
+	req, _ := http.NewRequest("GET", targetAssetURL, nil)
 	req.Header.Set("User-Agent", "workbuddy2api-updater")
 	resp, err := downloadClient.Do(req)
 	if err != nil {
@@ -1032,8 +1031,9 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
+	_ = os.Chmod(newExePath, 0755)
 
-	// 2. Windows 允许重命名正在运行的 exe (将当前 running.exe 重命名为 running.exe.old)
+	// 2. 跨平台二进制替换
 	oldExePath := currentExe + ".old"
 	_ = os.Remove(oldExePath) // 若存在旧残留先移除
 	if err := os.Rename(currentExe, oldExePath); err != nil {
@@ -1058,20 +1058,28 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":        true,
 		"latest_version": rel.TagName,
-		"message":        "更新包已成功下载并就绪，系统将在 2 秒后自动重启更新！",
+		"message":        "最新版本已成功下载并就绪，系统将在 2 秒后自动重启更新！",
 	})
 
 	// 4. 异步重启新进程并退出当前进程
 	go func() {
 		time.Sleep(1500 * time.Millisecond)
-		// 启动新进程
+		if isDockerEnvironment() {
+			// 在 Docker 容器中作为 PID 1 或主进程，通过退出并由 restart: unless-stopped 策略拉起新版本
+			if h.cfg.StopFunc != nil {
+				h.cfg.StopFunc()
+			}
+			os.Exit(0)
+			return
+		}
+
+		// 本地桌面或独立进程模式：启动新进程并退出旧进程
 		cmd := exec.Command(currentExe, os.Args[1:]...)
 		cmd.Dir = filepath.Dir(currentExe)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		_ = cmd.Start()
 
-		// 触发停机
 		if h.cfg.StopFunc != nil {
 			h.cfg.StopFunc()
 		} else {

@@ -1811,12 +1811,12 @@
               notesBox.classList.add('hidden');
             }
 
+            // 无论是桌面版还是容器版，都直接允许点击一键自动升级
+            btnDo.classList.remove('hidden');
             if (data.is_docker) {
               dockerTip.classList.remove('hidden');
-              btnDo.classList.add('hidden');
             } else {
               dockerTip.classList.add('hidden');
-              btnDo.classList.remove('hidden');
             }
           } else {
             badge.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
