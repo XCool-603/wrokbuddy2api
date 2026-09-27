@@ -289,6 +289,7 @@ func main() {
 		// 运维管理端点开关（config admin.enabled，默认 false）。
 		AdminEnabled: cfg.Admin.Enabled,
 		ConfigPath:   *cfgPath,
+		StateFile:    cfg.StateFile,
 		WebPassword:  cfg.WebPassword,
 		StopFunc:     stop,
 	})

@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
@@ -211,7 +212,7 @@ func Default() *Config {
 	return c
 }
 
-// Load 从文件读，再用 WB2A_* env 覆盖。
+// Load 从文件读，再用持久化 settings.json 及 WB2A_* env 覆盖。
 func Load(path string) (*Config, error) {
 	c := Default()
 	if path != "" {
@@ -223,6 +224,26 @@ func Load(path string) (*Config, error) {
 			return nil, fmt.Errorf("parse config: %w", err)
 		}
 	}
+
+	// 从持久化目录（如 ./data/settings.json）加载用户通过面板修改的设置，防止 git pull/更新代码/重建容器后重置
+	if c.StateFile != "" {
+		settingsFile := filepath.Join(filepath.Dir(c.StateFile), "settings.json")
+		if raw, err := os.ReadFile(settingsFile); err == nil {
+			var s struct {
+				APIKey      string `json:"api_key"`
+				WebPassword string `json:"web_password"`
+			}
+			if err := json.Unmarshal(raw, &s); err == nil {
+				if s.APIKey != "" {
+					c.APIKey = s.APIKey
+				}
+				if s.WebPassword != "" {
+					c.WebPassword = s.WebPassword
+				}
+			}
+		}
+	}
+
 	applyEnv(c)
 	if err := c.normalize(); err != nil {
 		return nil, err

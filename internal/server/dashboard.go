@@ -625,6 +625,46 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+func (h *Handler) savePersistentSetting(key, val string) {
+	// 1. 持久化到 ./data/settings.json（Docker volume 及跨更新持久化目录）
+	stateFile := h.cfg.StateFile
+	if stateFile == "" {
+		stateFile = "./data/state.json"
+	}
+	settingsDir := filepath.Dir(stateFile)
+	_ = os.MkdirAll(settingsDir, 0755)
+	settingsPath := filepath.Join(settingsDir, "settings.json")
+
+	var sMap map[string]any
+	if raw, err := os.ReadFile(settingsPath); err == nil {
+		_ = json.Unmarshal(raw, &sMap)
+	}
+	if sMap == nil {
+		sMap = make(map[string]any)
+	}
+	sMap[key] = val
+	if encoded, err := json.MarshalIndent(sMap, "", "  "); err == nil {
+		_ = os.WriteFile(settingsPath, encoded, 0644)
+	}
+
+	// 2. 同时尝试更新 config.json（若非只读）
+	cfgFile := h.cfg.ConfigPath
+	if cfgFile == "" {
+		cfgFile = "config.json"
+	}
+	var dataMap map[string]any
+	if raw, err := os.ReadFile(cfgFile); err == nil {
+		_ = json.Unmarshal(raw, &dataMap)
+	}
+	if dataMap == nil {
+		dataMap = make(map[string]any)
+	}
+	dataMap[key] = val
+	if encoded, err := json.MarshalIndent(dataMap, "", "  "); err == nil {
+		_ = os.WriteFile(cfgFile, encoded, 0644)
+	}
+}
+
 func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		APIKey string `json:"api_key"`
@@ -636,25 +676,7 @@ func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
 
 	newKey := strings.TrimSpace(req.APIKey)
 	h.SetAPIKey(newKey)
-
-	// 持久化到 config.json
-	cfgFile := h.cfg.ConfigPath
-	if cfgFile == "" {
-		cfgFile = "config.json"
-	}
-
-	var dataMap map[string]any
-	if raw, err := os.ReadFile(cfgFile); err == nil {
-		_ = json.Unmarshal(raw, &dataMap)
-	}
-	if dataMap == nil {
-		dataMap = make(map[string]any)
-	}
-	dataMap["api_key"] = newKey
-
-	if encoded, err := json.MarshalIndent(dataMap, "", "  "); err == nil {
-		_ = os.WriteFile(cfgFile, encoded, 0644)
-	}
+	h.savePersistentSetting("api_key", newKey)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
@@ -820,25 +842,7 @@ func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
 
 	newPw := strings.TrimSpace(req.NewPassword)
 	h.SetWebPassword(newPw)
-
-	// 持久化到 config.json
-	cfgFile := h.cfg.ConfigPath
-	if cfgFile == "" {
-		cfgFile = "config.json"
-	}
-
-	var dataMap map[string]any
-	if raw, err := os.ReadFile(cfgFile); err == nil {
-		_ = json.Unmarshal(raw, &dataMap)
-	}
-	if dataMap == nil {
-		dataMap = make(map[string]any)
-	}
-	dataMap["web_password"] = newPw
-
-	if encoded, err := json.MarshalIndent(dataMap, "", "  "); err == nil {
-		_ = os.WriteFile(cfgFile, encoded, 0644)
-	}
+	h.savePersistentSetting("web_password", newPw)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":      true,

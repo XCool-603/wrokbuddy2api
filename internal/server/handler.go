@@ -55,6 +55,9 @@ type Config struct {
 	// ConfigPath 配置文件路径（用于面板动态修改保存配置，缺省 config.json）
 	ConfigPath string
 
+	// StateFile 状态文件路径（用于推导 persistent settings.json，位于 ./data/）
+	StateFile string
+
 	// WebPassword 控制台访问密码（非空时启用 WebUI 登录鉴权，空则单机免密）
 	WebPassword string
 
@@ -82,7 +85,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.0.6"
+const CurrentVersion = "v1.0.9"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
