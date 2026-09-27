@@ -20,13 +20,19 @@ import (
 	"workbuddy2api/internal/prompt"
 	"workbuddy2api/internal/session"
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
+
+// contextKey 用于在 HTTP Context 中传递用户信息
+type contextKey string
+
+const userContextKey contextKey = "wb2a_user"
 
 // Config handler 依赖。
 type Config struct {
 	Pool      *pool.Pool
 	Upstream  *upstream.Client
-	APIKey    string // 空 = 不鉴权
+	APIKey    string // 空 = 不鉴权（兼容单机模式）
 	MaxRotate int    // 单请求最多换号次数，默认 3
 	// Session 会话粘性路由器（可选；nil = 关闭粘性，纯 Pick 轮换）。
 	Session *session.Router
@@ -61,6 +67,9 @@ type Config struct {
 	// WebPassword 控制台访问密码（非空时启用 WebUI 登录鉴权，空则单机免密）
 	WebPassword string
 
+	// UserMgr 用户与角色权限管理器
+	UserMgr *usermgr.Manager
+
 	// StopFunc 终止服务上下文（用于升级完成后触发优雅重启或退出）
 	StopFunc func()
 }
@@ -85,7 +94,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.0.9"
+const CurrentVersion = "v1.1.0"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -171,17 +180,37 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		currentKey := h.GetAPIKey()
+		authz := r.Header.Get("Authorization")
+		provided := strings.TrimPrefix(authz, "Bearer ")
+
+		// 1. 如果配置了 UserMgr，优先尝试校验用户专属 API Key
+		if h.cfg.UserMgr != nil && strings.HasPrefix(authz, "Bearer ") && provided != "" {
+			if u, ok := h.cfg.UserMgr.FindByAPIKey(provided); ok {
+				// 命中用户专属 API Key，注入 Request Context 并放行
+				ctx := context.WithValue(r.Context(), userContextKey, u)
+				next(w, r.WithContext(ctx))
+				return
+			}
+		}
+
+		// 2. 校验全局主 API Key（系统/管理员 Key）
 		if currentKey != "" {
-			authz := r.Header.Get("Authorization")
-			// 常量时间比较（发现 7）：!= 短路时序随前缀长度变化，公网暴露下
-			// 理论上可逐字节探测 key 前缀；ConstantTimeCompare 消除该信号。
-			provided := strings.TrimPrefix(authz, "Bearer ")
 			if !strings.HasPrefix(authz, "Bearer ") ||
 				subtle.ConstantTimeCompare([]byte(provided), []byte(currentKey)) != 1 {
 				writeOpenAIError(w, http.StatusUnauthorized, "invalid_api_key", "missing or invalid API key")
 				return
 			}
 		}
+
+		// 未设置 currentKey 或命中全局 Key，视为系统管理员身份
+		if h.cfg.UserMgr != nil {
+			if adminUser, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
+				ctx := context.WithValue(r.Context(), userContextKey, adminUser)
+				next(w, r.WithContext(ctx))
+				return
+			}
+		}
+
 		next(w, r)
 	}
 }
@@ -729,9 +758,17 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if acct == nil {
-			// 模型感知 + realm 感知选号：模型非空时启用 6004 模型级冷却豁免
+			// 获取当前请求用户（多租户/角色隔离）
+			reqOwner := ""
+			if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
+				if u.Role != usermgr.RoleAdmin {
+					reqOwner = u.ID // 普通用户仅路由自己的私有账号或系统公共账号
+				}
+			}
+
+			// 模型感知 + realm 感知 + 用户隔离选号：模型非空时启用 6004 模型级冷却豁免
 			// （healthyForModel），realm 谓词过滤跨域账号。
-			acct = h.cfg.Pool.PickExcludingForRealm(tried, bareModel, realm)
+			acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
 			// 如果原始请求未带显式域前缀（即纯裸模型名，如 "auto" 或 "deepseek-v4.1-flash"），
 			// 当默认 realm 无可用账号时，自动降级选择另一个域（如 global），实现双域容灾互补。
 			// 若显式传了 "global:" 或 "cn:"，则严格遵循客户端指定的域，不跨域顶替。
@@ -741,10 +778,10 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					otherRealm = "cn"
 				}
 				// 尝试在另一个域选号
-				acct = h.cfg.Pool.PickExcludingForRealm(tried, bareModel, otherRealm)
+				acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
 				if acct == nil {
-					// 兜底：全池任意可用健康号
-					acct = h.cfg.Pool.PickExcludingForRealm(tried, bareModel, "")
+					// 兜底：全池任意可用健康号（仍受 reqOwner 隔离限制）
+					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
 				}
 			}
 		}

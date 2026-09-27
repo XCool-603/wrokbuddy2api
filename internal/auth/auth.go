@@ -42,6 +42,31 @@ type Auth struct {
 	// 手写扁平形 auth 文件可直接写 "device_token": "..."；插件 OAuth 嵌套形
 	// 顶层 device_token 也会被解析（与桌面端共用状态文件的部署方式）。
 	DeviceToken string
+
+	// Owner 所属用户账号 ID/用户名（多租户/用户角色隔离）。
+	// 为空或 "admin" 表示公共/系统账号（管理员或共享池）；若为特定用户（如 "u_xxx" 或 "alice"），
+	// 则仅该用户的请求或 API Key 可以调用此账号。
+	Owner string
+}
+
+// OwnerValue 加锁读取 Owner。
+func (a *Auth) OwnerValue() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.Owner
+}
+
+// SetOwner 加锁设置 Owner。
+func (a *Auth) SetOwner(owner string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.Owner = strings.TrimSpace(owner)
 }
 
 // Lock 供同进程内其他包（upstream.RefreshToken）在改写 Auth 字段期间加锁。
@@ -230,6 +255,7 @@ func Parse(raw []byte) (*Auth, error) {
 			// DeviceToken 顶层 device_token（嵌套形与扁平形共用）。
 			// 放在 auth 段之外，手写时无需嵌进 auth 对象，降低配置门槛。
 			DeviceToken string `json:"device_token"`
+			Owner       string `json:"owner"`
 		}
 		if err := json.Unmarshal(raw, &n); err != nil {
 			return nil, fmt.Errorf("storage_parse_error: %w", err)
@@ -244,6 +270,7 @@ func Parse(raw []byte) (*Auth, error) {
 			EnterpriseID: n.Account.EnterpriseID,
 			Nickname:     n.Account.Nickname,
 			DeviceToken:  n.DeviceToken,
+			Owner:        n.Owner,
 		}
 	} else {
 		var f struct {
@@ -260,6 +287,7 @@ func Parse(raw []byte) (*Auth, error) {
 			EnterpriseIDSnake string `json:"enterprise_id"`
 			Nickname         string `json:"nickname"`
 			DeviceToken      string `json:"device_token"`
+			Owner            string `json:"owner"`
 		}
 		if err := json.Unmarshal(raw, &f); err != nil {
 			return nil, fmt.Errorf("storage_parse_error: %w", err)
@@ -290,6 +318,7 @@ func Parse(raw []byte) (*Auth, error) {
 			EnterpriseID: ent,
 			Nickname:     f.Nickname,
 			DeviceToken:  f.DeviceToken,
+			Owner:        f.Owner,
 		}
 	}
 	if strings.TrimSpace(a.AccessToken) == "" {
@@ -328,6 +357,9 @@ func (a *Auth) SaveAtomic() error {
 	// （保持与插件 OAuth 输出形状一致，插件读取忽略未知键）。
 	if a.DeviceToken != "" {
 		doc["device_token"] = a.DeviceToken
+	}
+	if a.Owner != "" {
+		doc["owner"] = a.Owner
 	}
 	raw, err := json.MarshalIndent(doc, "", "  ")
 	if err != nil {

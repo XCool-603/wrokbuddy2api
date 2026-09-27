@@ -12,7 +12,13 @@ import (
 // 可选做请求级轮换（tried）与模型感知（reqModel，6004 模型豁免照常生效）；
 // reqModel 非空时健康口径换成 healthyForModel。realm 不匹配的全冷却兜底同样排除。
 func (p *Pool) PickExcludingForRealm(tried map[string]bool, reqModel, realm string) *auth.Auth {
-	return p.pick(tried, reqModel, realm)
+	return p.pick(tried, reqModel, realm, "")
+}
+
+// PickExcludingForRealmAndOwner 按 realm 与 user owner 过滤的轮换选号：
+// 支持用户多租户隔离，普通用户仅能调用自己绑定的账号或系统共享账号。
+func (p *Pool) PickExcludingForRealmAndOwner(tried map[string]bool, reqModel, realm, owner string) *auth.Auth {
+	return p.pick(tried, reqModel, realm, owner)
 }
 
 // AvailableUIDsForRealm 同 AvailableUIDs，但仅返回 Realm()==realm 的账号。

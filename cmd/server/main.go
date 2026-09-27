@@ -25,6 +25,7 @@ import (
 	"workbuddy2api/internal/server"
 	"workbuddy2api/internal/session"
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
 
 // modelJSONPath 由 state.json 路径推导 model.json 路径（同目录同名换缀）：
@@ -274,6 +275,16 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	// 初始化用户与角色管理器（数据落盘于 ./data/users.json）
+	usersFile := filepath.Join("./data", "users.json")
+	if cfg.StateFile != "" {
+		usersFile = filepath.Join(filepath.Dir(cfg.StateFile), "users.json")
+	}
+	userMgr, err := usermgr.New(usersFile, cfg.WebPassword, cfg.APIKey)
+	if err != nil {
+		log.Printf("WARN: [usermgr] 初始化用户数据失败: %v", err)
+	}
+
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
@@ -291,6 +302,7 @@ func main() {
 		ConfigPath:   *cfgPath,
 		StateFile:    cfg.StateFile,
 		WebPassword:  cfg.WebPassword,
+		UserMgr:      userMgr,
 		StopFunc:     stop,
 	})
 

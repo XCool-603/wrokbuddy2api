@@ -21,8 +21,17 @@ import (
 // 意图是打散热点，避免永远打同一个账号。
 // model 非空时启用 6004 模型级冷却豁免（healthyForModel）；空则等价账号级 healthy。
 // 需要请求级轮换（tried）或分池（realm）时用 PickExcludingForRealm。
+// Pick 单一选号入口（无请求级轮换、无 realm 过滤，模型感知）。
+// DeptestOnly: 全库仅 pool 包测试引用；生产选号全走 PickExcludingForRealm /
+// PickByUIDForModel。保留是因为测试需要无轮换/无 realm 的最小选号原语；
+// 迁 export_test.go 不可行——export_test 对包外不可见，而本方法的语义文档
+// （挑选策略全文）对生产簇（pick 私有实现）仍有维护参考价值。
+// 挑选策略：healthy 账号中按三因子权重取前 5 名，再在 Top5 内按同一权重加权随机抽签，
+// 意图是打散热点，避免永远打同一个账号。
+// model 非空时启用 6004 模型级冷却豁免（healthyForModel）；空则等价账号级 healthy。
+// 需要请求级轮换（tried）或分池（realm）时用 PickExcludingForRealm。
 func (p *Pool) Pick(model string) *auth.Auth {
-	return p.pick(nil, model, "")
+	return p.pick(nil, model, "", "")
 }
 
 // pick 在 healthy 候选集中按三因子权重加权随机选出账号，并记录 lastUsed（防并发撞号）。
@@ -33,9 +42,10 @@ func (p *Pool) Pick(model string) *auth.Auth {
 // minPickGap=0（测试用）时过滤恒通过，退化为纯加权随机。
 // reqModel 非空时把健康口径换成 healthyForModel（6004 模型豁免生效；PickExcluding 传 ""）。
 // realm 非空时候选过滤叠加 Realm()==realm 谓词（分池选号域；PickExcluding 传 ""）。
+// owner 非空时候选过滤限定 ownerMatch(e.a.Owner, owner)。
 // 注意：模型豁免只进 normal 选号（候选 healthy 判定）；全冷却兜底不参与模型豁免——
 // 兜底本来就是在"无任何 direct 可用"时的降级，切模型可用性已在 normal 阶段体现。
-func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
+func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string) *auth.Auth {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
@@ -46,9 +56,17 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 		e.pruneExpiredModelCosts(now)
 	}
 	realmOK := func(e *entry) bool { return realm == "" || e.a.Realm() == realm }
-	healthyOf := func(e *entry) bool { return realmOK(e) && e.healthy(now) }
+	ownerOK := func(e *entry) bool {
+		if owner == "" || owner == "admin" {
+			return true // 管理员或未限定 owner 可用全部账号（包含公共账号与所有用户账号）
+		}
+		// 普通用户：优先使用绑定在自己名下的账号（owner == 用户标识）；
+		// 若无私有账号，或账号属于公共系统账号（owner == "" 或 owner == "admin"），可共享调用
+		return e.a.OwnerValue() == owner || e.a.OwnerValue() == "" || e.a.OwnerValue() == "admin"
+	}
+	healthyOf := func(e *entry) bool { return realmOK(e) && ownerOK(e) && e.healthy(now) }
 	if reqModel != "" {
-		healthyOf = func(e *entry) bool { return realmOK(e) && e.healthyForModel(now, reqModel) }
+		healthyOf = func(e *entry) bool { return realmOK(e) && ownerOK(e) && e.healthyForModel(now, reqModel) }
 	}
 	var cands []*entry
 	for uid, e := range p.byUID {
@@ -66,7 +84,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 	if len(cands) == 0 {
 		// 全冷却兜底：无 healthy 候选时，从冷却账号里选 until 最早到期的一个
 		// （熔断/冷却共用 expiry 口径，取较早截止者）。禁用的账号永不参与兜底。
-		return p.pickEarliestExpiryLocked(tried, now, realm)
+		return p.pickEarliestExpiryLocked(tried, now, realm, owner)
 	}
 	// top5 短名单按三因子权重降序截断（而非 credits 单纯降序）：否则闲置补偿
 	// 根本进不了短名单决策，低 credits 但久置的账号会永远排不进 top5。
@@ -229,7 +247,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string) *auth.Auth {
 // 分级：disabled 永不参与；CoolHard（余额耗尽，等签到的号）同样排除——调了必 402，浪费轮换并产生噪音日志；
 // CoolSoft 与熔断号允许参与（可能已恢复，失败成本仅一轮换）。
 // 被 tried 排除、在途占满的账号同样跳过（维持请求级轮换 + 租约语义）。无任何可用返回 nil。
-func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, realm string) *auth.Auth {
+func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, realm string, owner string) *auth.Auth {
 	var best *entry
 	for uid, e := range p.byUID {
 		if tried != nil && tried[uid] {
@@ -237,6 +255,12 @@ func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, re
 		}
 		if realm != "" && e.a.Realm() != realm {
 			continue // 域过滤：池内跨 realm 的冷却账号不参与本 realm 兜底
+		}
+		if owner != "" && owner != "admin" {
+			// 普通用户兜底同样隔离
+			if e.a.OwnerValue() != owner && e.a.OwnerValue() != "" && e.a.OwnerValue() != "admin" {
+				continue
+			}
 		}
 		if e.disabled || e.manualDisabled {
 			continue // 禁用/手动停用的账号永不参与兜底

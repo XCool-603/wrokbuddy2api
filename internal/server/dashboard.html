@@ -144,6 +144,19 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
         </a>
 
+        <!-- Admin User Management Modal Trigger -->
+        <button id="navAdminUsersBtn" onclick="openAdminUsersModal()" title="用户与角色权限管理" class="px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-xs font-semibold rounded-xl transition duration-200 flex items-center gap-1.5 hidden">
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <span>用户权限管理</span>
+        </button>
+
+        <!-- Current User Badge -->
+        <div id="navUserBadge" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-300 hidden">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span id="navUsernameText">admin</span>
+          <span id="navUserRoleTag" class="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">管理员</span>
+        </div>
+
         <button id="navLogoutBtn" onclick="doLogout()" title="退出控制台登录" class="p-2.5 text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition duration-200 hidden">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
         </button>
@@ -532,9 +545,10 @@
 
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-                <span class="font-medium">API Key</span>
+                <span class="font-medium">专属 API Key</span>
                 <div class="space-x-2">
                   <button onclick="copyApiKey()" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+                  <button onclick="resetMyAPIKey()" class="text-amber-400 hover:text-amber-300 text-[11px] font-medium" title="生成全新的 API Key 并让旧 Key 立即失效">重置Key</button>
                   <button id="btnSaveApiKey" onclick="saveApiKey()" class="text-emerald-400 hover:text-emerald-300 text-[11px] font-medium">保存修改</button>
                 </div>
               </div>
@@ -542,7 +556,7 @@
                 <input id="inputApiKey" type="text" placeholder="留空则不鉴权（如 sk-workbuddy2api）" class="w-full bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-2.5 font-mono text-xs text-emerald-400 focus:outline-none focus:border-indigo-500 transition pr-20" />
                 <span id="saveKeyFeedback" class="absolute right-3 text-[11px] text-emerald-400 hidden">已保存</span>
               </div>
-              <p class="text-[10px] text-slate-500 mt-1">可在上方直接更改网关鉴权 API Key，保存后即时生效且自动写入 config.json。</p>
+              <p class="text-[10px] text-slate-500 mt-1">每个用户账号拥有独立隔离的 API Key，调用时自动锁定路由至属于您自己的账号池。</p>
             </div>
 
             <div class="pt-2 border-t border-slate-800/60">
@@ -743,7 +757,7 @@
     </div>
   </div>
 
-  <!-- Fullscreen Login Overlay -->
+  <!-- Fullscreen Login & Register Overlay -->
   <div id="loginOverlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50 hidden">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-sm w-full p-8 shadow-2xl relative overflow-hidden text-center space-y-6">
       <div class="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
@@ -756,22 +770,54 @@
           </svg>
         </div>
         <h2 class="text-xl font-bold text-white tracking-tight">WorkBuddy<span class="text-indigo-400">2API</span></h2>
-        <p class="text-xs text-slate-400">控制台已启用密码保护，请输入访问密码</p>
+        <p id="loginOverlaySub" class="text-xs text-slate-400">多用户智能网关 · 权限隔离控制台</p>
       </div>
 
-      <form onsubmit="doLogin(event)" class="space-y-4">
+      <!-- Login / Register Switch Tabs -->
+      <div class="flex p-1 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium">
+        <button id="tabAuthLogin" onclick="switchAuthTab('login')" class="flex-1 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold transition">
+          账号登录
+        </button>
+        <button id="tabAuthRegister" onclick="switchAuthTab('register')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition">
+          用户注册
+        </button>
+      </div>
+
+      <!-- Login Form -->
+      <form id="formLogin" onsubmit="doLogin(event)" class="space-y-3.5">
         <div>
-          <input id="loginPasswordInput" type="password" placeholder="请输入控制台访问密码" autofocus class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-3 text-sm text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono tracking-wider transition" />
+          <input id="loginUsernameInput" type="text" placeholder="用户名（默认管理员为 admin）" autofocus class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono transition" />
+        </div>
+        <div>
+          <input id="loginPasswordInput" type="password" placeholder="请输入密码" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono tracking-wider transition" />
         </div>
         <div id="loginErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
 
         <button type="submit" id="loginBtn" class="w-full py-3 bg-gradient-to-r from-indigo-600 via-purple-600 to-indigo-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-indigo-600/30 transition duration-200">
-          验证并进入控制台
+          登 录 进 入
+        </button>
+      </form>
+
+      <!-- Register Form -->
+      <form id="formRegister" onsubmit="doRegister(event)" class="space-y-3.5 hidden">
+        <div>
+          <input id="regUsernameInput" type="text" placeholder="设定用户名 (字母数字/3-32位)" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono transition" />
+        </div>
+        <div>
+          <input id="regPasswordInput" type="password" placeholder="设定登录密码 (至少6位)" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono tracking-wider transition" />
+        </div>
+        <div>
+          <input id="regPasswordConfirmInput" type="password" placeholder="再次确认登录密码" class="w-full bg-slate-900/90 border border-slate-700 rounded-xl px-4 py-2.5 text-xs text-center text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500 font-mono tracking-wider transition" />
+        </div>
+        <div id="regErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
+
+        <button type="submit" id="regBtn" class="w-full py-3 bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/30 transition duration-200">
+          立即注册并登录
         </button>
       </form>
 
       <div class="text-[11px] text-slate-500 font-mono">
-        可通过环境变量 WB2A_WEB_PASSWORD 或 config.json 更改密码
+        多用户 API Key 隔离 · 账号绑定归属管理
       </div>
     </div>
   </div>
@@ -826,6 +872,64 @@
     </div>
   </div>
 
+  <!-- Admin User Management Modal -->
+  <div id="adminUsersModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-4xl w-full p-6 shadow-2xl relative overflow-hidden space-y-4 max-h-[90vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <h3 class="text-base font-bold text-white">用户权限与角色管理 (User & Role Management)</h3>
+        </div>
+        <button onclick="closeAdminUsersModal()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Settings Bar -->
+      <div class="flex items-center justify-between p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-xs">
+        <div class="flex items-center gap-2">
+          <span class="text-slate-300 font-medium">开放自主用户注册:</span>
+          <span id="allowRegisterStatusText" class="text-emerald-400 font-semibold">已开放</span>
+        </div>
+        <div class="flex items-center gap-2">
+          <button id="btnToggleAllowRegister" onclick="toggleAllowRegister()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs transition">
+            切换注册状态
+          </button>
+          <button onclick="loadAdminUsers()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs transition">
+            刷新用户列表
+          </button>
+        </div>
+      </div>
+
+      <!-- Users Table -->
+      <div class="overflow-y-auto custom-scroll flex-1 border border-slate-800 rounded-xl">
+        <table class="w-full text-left text-xs text-slate-300">
+          <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/80 sticky top-0 border-b border-slate-800">
+            <tr>
+              <th class="px-4 py-3 font-semibold">用户标识</th>
+              <th class="px-4 py-3 font-semibold">用户名</th>
+              <th class="px-4 py-3 font-semibold">角色</th>
+              <th class="px-4 py-3 font-semibold">API Key 授权凭据</th>
+              <th class="px-4 py-3 font-semibold">状态</th>
+              <th class="px-4 py-3 font-semibold">注册时间</th>
+              <th class="px-4 py-3 font-semibold text-right">操作</th>
+            </tr>
+          </thead>
+          <tbody id="adminUsersTableBody" class="divide-y divide-slate-800/60 font-mono">
+            <tr>
+              <td colspan="7" class="py-8 text-center text-slate-500 font-sans">正在加载用户列表...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
+        <div>💡 普通用户仅能访问其绑定的账号或系统公共账号，且拥有独立隔离的 API Key。</div>
+        <button onclick="closeAdminUsersModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition">关闭</button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentRealm = 'cn';
     let currentOAuthUrl = '';
@@ -874,6 +978,40 @@
         
         document.getElementById('accountCountBadge').innerText = (data.accounts || []).length;
         document.getElementById('modelCountBadge').innerText = (data.models || []).length;
+
+        currentUser = data.currentUser || null;
+        const navUserBadge = document.getElementById('navUserBadge');
+        const navUsernameText = document.getElementById('navUsernameText');
+        const navUserRoleTag = document.getElementById('navUserRoleTag');
+        const navAdminUsersBtn = document.getElementById('navAdminUsersBtn');
+        const navLogoutBtn = document.getElementById('navLogoutBtn');
+
+        if (currentUser) {
+          if (navUserBadge) {
+            navUserBadge.classList.remove('hidden');
+            if (navUsernameText) navUsernameText.innerText = currentUser.username;
+            if (navUserRoleTag) {
+              if (currentUser.role === 'admin') {
+                navUserRoleTag.innerText = '管理员';
+                navUserRoleTag.className = 'text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30';
+              } else {
+                navUserRoleTag.innerText = '普通用户';
+                navUserRoleTag.className = 'text-[10px] px-1.5 py-0.2 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30';
+              }
+            }
+          }
+          if (navAdminUsersBtn) {
+            if (currentUser.role === 'admin') {
+              navAdminUsersBtn.classList.remove('hidden');
+            } else {
+              navAdminUsersBtn.classList.add('hidden');
+            }
+          }
+          if (navLogoutBtn) navLogoutBtn.classList.remove('hidden');
+        } else {
+          if (navUserBadge) navUserBadge.classList.add('hidden');
+          if (navAdminUsersBtn) navAdminUsersBtn.classList.add('hidden');
+        }
 
         if (data.apiKey !== undefined) {
           const keyInput = document.getElementById('inputApiKey');
@@ -1175,26 +1313,42 @@
         const isRevivable = a.disabled;
         const isManualDisabled = a.manual_disabled;
 
-        html += `
-          <tr class="hover:bg-slate-800/40 transition">
-            <td class="px-6 py-4">${realmBadge}</td>
-            <td class="px-6 py-4">
-              <div class="font-sans font-semibold text-white text-xs">${escapeHtml(a.nickname || a.uid)}</div>
-              <div class="text-[11px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
-            </td>
-            <td class="px-6 py-4">${statusBadge}</td>
-            <td class="px-6 py-4 font-mono font-medium text-slate-200">
-              ${a.credits !== undefined && a.credits >= 0 ? a.credits : '<span class="text-slate-500">-</span>'}
-            </td>
-            <td class="px-6 py-4 text-right font-sans space-x-2">
-              ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
-              ${isManualDisabled 
-                ? `<button onclick="controlAccount('${a.uid}', 'enable')" class="text-xs text-emerald-400 hover:text-emerald-300 hover:underline">启用</button>` 
-                : `<button onclick="controlAccount('${a.uid}', 'disable')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">停用</button>`}
-              <button onclick="deleteAccount('${a.filename}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">删除</button>
-            </td>
-          </tr>
-        `;
+          let ownerTag = '';
+          if (a.owner) {
+            if (a.is_my_account) {
+              ownerTag = '<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-400 font-sans border border-emerald-500/30">我的账号</span>';
+            } else {
+              ownerTag = `<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-purple-500/20 text-purple-400 font-sans border border-purple-500/30" title="归属于: ${escapeHtml(a.owner)}">专属账号</span>`;
+            }
+          } else {
+            ownerTag = '<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-400 font-sans border border-slate-700">公共账号</span>';
+          }
+
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-6 py-4">${realmBadge}</td>
+              <td class="px-6 py-4">
+                <div class="font-sans font-semibold text-white text-xs flex items-center">
+                  <span>${escapeHtml(a.nickname || a.uid)}</span>
+                  ${ownerTag}
+                </div>
+                <div class="text-[11px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
+              </td>
+              <td class="px-6 py-4">${statusBadge}</td>
+              <td class="px-6 py-4 font-mono font-medium text-slate-200">
+                ${a.credits !== undefined && a.credits >= 0 ? a.credits : '<span class="text-slate-500">-</span>'}
+              </td>
+              <td class="px-6 py-4 text-right font-sans space-x-2">
+                ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
+                ${isManualDisabled 
+                  ? `<button onclick="controlAccount('${a.uid}', 'enable')" class="text-xs text-emerald-400 hover:text-emerald-300 hover:underline">启用</button>` 
+                  : `<button onclick="controlAccount('${a.uid}', 'disable')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">停用</button>`}
+                ${(currentUser && currentUser.role === 'admin') || a.is_my_account 
+                  ? `<button onclick="deleteAccount('${a.filename}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">删除</button>` 
+                  : ''}
+              </td>
+            </tr>
+          `;
       }
       tbody.innerHTML = html;
     }
@@ -1620,16 +1774,39 @@
       }
     }
 
+    let currentUser = null;
+    let systemAllowRegister = true;
+
+    function switchAuthTab(tab) {
+      const btnLogin = document.getElementById('tabAuthLogin');
+      const btnReg = document.getElementById('tabAuthRegister');
+      const formLogin = document.getElementById('formLogin');
+      const formReg = document.getElementById('formRegister');
+      const sub = document.getElementById('loginOverlaySub');
+
+      if (tab === 'login') {
+        btnLogin.className = 'flex-1 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold transition';
+        btnReg.className = 'flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+        formLogin.classList.remove('hidden');
+        formReg.classList.add('hidden');
+        sub.innerText = '多用户智能网关 · 权限隔离控制台';
+        setTimeout(() => document.getElementById('loginUsernameInput').focus(), 50);
+      } else {
+        btnReg.className = 'flex-1 py-1.5 rounded-lg bg-emerald-600 text-white font-semibold transition';
+        btnLogin.className = 'flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition';
+        formReg.classList.remove('hidden');
+        formLogin.classList.add('hidden');
+        sub.innerText = '注册普通用户 · 获专属独立 API Key';
+        setTimeout(() => document.getElementById('regUsernameInput').focus(), 50);
+      }
+    }
+
     function showLoginModal(show) {
       const overlay = document.getElementById('loginOverlay');
       if (!overlay) return;
       if (show) {
         overlay.classList.remove('hidden');
-        const input = document.getElementById('loginPasswordInput');
-        if (input) {
-          input.value = '';
-          setTimeout(() => input.focus(), 100);
-        }
+        switchAuthTab('login');
       } else {
         overlay.classList.add('hidden');
       }
@@ -1637,6 +1814,7 @@
 
     async function doLogin(e) {
       if (e) e.preventDefault();
+      const uname = document.getElementById('loginUsernameInput').value;
       const pw = document.getElementById('loginPasswordInput').value;
       const errMsg = document.getElementById('loginErrorMsg');
       const btn = document.getElementById('loginBtn');
@@ -1656,7 +1834,7 @@
         const res = await fetch('/ui/auth/login', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ password: pw })
+          body: JSON.stringify({ username: uname, password: pw })
         });
         const data = await res.json();
         if (res.ok && data.success) {
@@ -1664,7 +1842,7 @@
           refreshData();
         } else {
           if (errMsg) {
-            errMsg.innerText = data.error || '密码错误，请重试';
+            errMsg.innerText = data.error || '登录失败，请检查账号密码';
             errMsg.classList.remove('hidden');
           }
         }
@@ -1675,17 +1853,231 @@
         }
       } finally {
         btn.disabled = false;
-        btn.innerText = '验证并进入控制台';
+        btn.innerText = '登 录 进 入';
+      }
+    }
+
+    async function doRegister(e) {
+      if (e) e.preventDefault();
+      const uname = document.getElementById('regUsernameInput').value.trim();
+      const pw = document.getElementById('regPasswordInput').value;
+      const confirmPw = document.getElementById('regPasswordConfirmInput').value;
+      const errMsg = document.getElementById('regErrorMsg');
+      const btn = document.getElementById('regBtn');
+
+      if (!uname || !pw) {
+        errMsg.innerText = '请填写完整的用户名和密码';
+        errMsg.classList.remove('hidden');
+        return;
+      }
+      if (pw !== confirmPw) {
+        errMsg.innerText = '两次输入的密码不一致';
+        errMsg.classList.remove('hidden');
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '正在注册...';
+      errMsg.classList.add('hidden');
+
+      try {
+        const res = await fetch('/ui/auth/register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: uname, password: pw })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          showLoginModal(false);
+          refreshData();
+        } else {
+          errMsg.innerText = data.error || '注册失败';
+          errMsg.classList.remove('hidden');
+        }
+      } catch (err) {
+        errMsg.innerText = '网络请求失败: ' + err;
+        errMsg.classList.remove('hidden');
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '立即注册并登录';
       }
     }
 
     async function doLogout() {
-      if (!confirm('确定要退出控制台登录吗？')) return;
+      if (!confirm('确定要退出当前账号吗？')) return;
       try {
         await fetch('/ui/auth/logout', { method: 'POST' });
         showLoginModal(true);
       } catch (e) {
         location.reload();
+      }
+    }
+
+    async function resetMyAPIKey() {
+      if (!confirm('确定重置您的专属 API Key 吗？重置后原 Key 将立即失效！')) return;
+      try {
+        const res = await fetch('/ui/user/apikey/reset', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert('API Key 重置成功！');
+          refreshData();
+        } else {
+          alert('重置失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
+      }
+    }
+
+    function openAdminUsersModal() {
+      document.getElementById('adminUsersModal').classList.remove('hidden');
+      loadAdminUsers();
+    }
+
+    function closeAdminUsersModal() {
+      document.getElementById('adminUsersModal').classList.add('hidden');
+    }
+
+    async function loadAdminUsers() {
+      const tbody = document.getElementById('adminUsersTableBody');
+      tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">正在加载用户数据...</td></tr>';
+      try {
+        const res = await fetch('/ui/admin/users');
+        const data = await res.json();
+        if (!res.ok) {
+          tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-rose-400 font-sans">${escapeHtml(data.error || '无权加载')}</td></tr>`;
+          return;
+        }
+
+        systemAllowRegister = !!data.allow_register;
+        const regText = document.getElementById('allowRegisterStatusText');
+        if (regText) {
+          regText.innerText = systemAllowRegister ? '已开放' : '已关闭自主注册';
+          regText.className = systemAllowRegister ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
+        }
+
+        const users = data.users || [];
+        if (!users.length) {
+          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">暂无用户记录</td></tr>';
+          return;
+        }
+
+        let html = '';
+        for (const u of users) {
+          const isAdmin = (u.role === 'admin');
+          const roleBadge = isAdmin
+            ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">管理员</span>'
+            : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">普通用户</span>';
+
+          const statusBadge = u.disabled
+            ? '<span class="text-rose-400 text-xs">已禁用</span>'
+            : '<span class="text-emerald-400 text-xs">正常</span>';
+
+          const created = u.created_at ? new Date(u.created_at).toLocaleString('zh-CN', { hour12: false }) : '-';
+
+          html += `
+            <tr class="hover:bg-slate-800/40 transition">
+              <td class="px-4 py-3 text-slate-500">${escapeHtml(u.id)}</td>
+              <td class="px-4 py-3 font-semibold text-white">${escapeHtml(u.username)}</td>
+              <td class="px-4 py-3">${roleBadge}</td>
+              <td class="px-4 py-3 text-indigo-300 font-mono text-[11px] truncate max-w-[180px]" title="${escapeHtml(u.api_key)}">${escapeHtml(u.api_key)}</td>
+              <td class="px-4 py-3">${statusBadge}</td>
+              <td class="px-4 py-3 text-slate-400 text-[11px] font-sans">${escapeHtml(created)}</td>
+              <td class="px-4 py-3 text-right space-x-2 font-sans">
+                ${!isAdmin ? `
+                  <button onclick="toggleUserDisabled('${escapeHtml(u.username)}', ${!u.disabled})" class="text-xs ${u.disabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-amber-400 hover:text-amber-300'} hover:underline">
+                    ${u.disabled ? '启用' : '禁用'}
+                  </button>
+                  <button onclick="toggleUserRole('${escapeHtml(u.username)}', '${u.role === 'admin' ? 'user' : 'admin'}')" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
+                    ${u.role === 'admin' ? '设为普通用户' : '升为管理员'}
+                  </button>
+                  <button onclick="deleteUser('${escapeHtml(u.username)}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">
+                    删除
+                  </button>
+                ` : '<span class="text-slate-600 text-xs">-</span>'}
+              </td>
+            </tr>
+          `;
+        }
+        tbody.innerHTML = html;
+      } catch (err) {
+        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-rose-400 font-sans">网络错误: ${escapeHtml(err)}</td></tr>`;
+      }
+    }
+
+    async function toggleUserDisabled(username, disabled) {
+      if (!confirm(`确定${disabled ? '禁用' : '启用'}用户 "${username}" 吗？`)) return;
+      try {
+        const res = await fetch('/ui/admin/user/toggle', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, disabled })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          loadAdminUsers();
+        } else {
+          alert('操作失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
+      }
+    }
+
+    async function toggleUserRole(username, role) {
+      if (!confirm(`确定将用户 "${username}" 的角色更改为 "${role}" 吗？`)) return;
+      try {
+        const res = await fetch('/ui/admin/user/role', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, role })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          loadAdminUsers();
+        } else {
+          alert('操作失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
+      }
+    }
+
+    async function deleteUser(username) {
+      if (!confirm(`确定永久删除用户 "${username}" 吗？此操作不可逆！`)) return;
+      try {
+        const res = await fetch('/ui/admin/user/delete', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          loadAdminUsers();
+        } else {
+          alert('删除失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
+      }
+    }
+
+    async function toggleAllowRegister() {
+      const newStatus = !systemAllowRegister;
+      try {
+        const res = await fetch('/ui/admin/system/allow_register', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ allow: newStatus })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          loadAdminUsers();
+        } else {
+          alert('切换失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
       }
     }
 

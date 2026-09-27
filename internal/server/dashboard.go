@@ -24,6 +24,7 @@ import (
 	"workbuddy2api/internal/logfmt"
 	"workbuddy2api/internal/pool"
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
 
 //go:embed dashboard.html
@@ -33,6 +34,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("GET /{$}", h.handleDashboardHTML)
 	h.mux.HandleFunc("POST /ui/auth/login", h.handleWebLogin)
 	h.mux.HandleFunc("POST /ui/auth/logout", h.handleWebLogout)
+	h.mux.HandleFunc("POST /ui/auth/register", h.handleWebRegister)
 
 	h.mux.HandleFunc("GET /ui/data", h.withWebAuth(h.handleDashboardData))
 	h.mux.HandleFunc("POST /ui/oauth/start", h.withWebAuth(h.handleOAuthStart))
@@ -47,6 +49,14 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("GET /ui/action/backup", h.withWebAuth(h.handleActionBackup))
 	h.mux.HandleFunc("GET /ui/system/update/check", h.withWebAuth(h.handleSystemUpdateCheck))
 	h.mux.HandleFunc("POST /ui/system/update/do", h.withWebAuth(h.handleSystemUpdateDo))
+
+	// 用户中心与多用户管理端点
+	h.mux.HandleFunc("POST /ui/user/apikey/reset", h.withWebAuth(h.handleUserAPIKeyReset))
+	h.mux.HandleFunc("GET /ui/admin/users", h.withWebAuth(h.handleAdminListUsers))
+	h.mux.HandleFunc("POST /ui/admin/user/toggle", h.withWebAuth(h.handleAdminToggleUser))
+	h.mux.HandleFunc("POST /ui/admin/user/role", h.withWebAuth(h.handleAdminSetUserRole))
+	h.mux.HandleFunc("POST /ui/admin/user/delete", h.withWebAuth(h.handleAdminDeleteUser))
+	h.mux.HandleFunc("POST /ui/admin/system/allow_register", h.withWebAuth(h.handleAdminSetAllowRegister))
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
@@ -65,6 +75,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		sticky = h.cfg.StickyCount()
 	}
 
+	user := h.getWebSessionUser(r)
+
 	authDir := "./auths"
 	files, _ := auth.LoadAuthFiles(authDir)
 	type AccountItem struct {
@@ -78,6 +90,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		ManualDisabled bool   `json:"manual_disabled"`
 		ManualReason   string `json:"manual_reason"`
 		Cooling        bool   `json:"cooling"`
+		Owner          string `json:"owner"`
+		IsMyAccount    bool   `json:"is_my_account"`
 	}
 
 	poolList := h.cfg.Pool.List()
@@ -96,11 +110,29 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+
+		// 账号隔离逻辑：
+		// 如果当前登录的是普通用户（非 admin），只列出属于该用户自己的账号或公共系统账号
+		isMine := false
+		if user != nil {
+			if a.Owner == user.ID || a.Owner == user.Username {
+				isMine = true
+			}
+			if user.Role != usermgr.RoleAdmin {
+				if !isMine && a.Owner != "" && a.Owner != "admin" {
+					// 不属于公共且不属于该普通用户，跳过（隔离保密）
+					continue
+				}
+			}
+		}
+
 		item := AccountItem{
-			UID:      a.UID,
-			Realm:    a.Realm(),
-			Nickname: a.Nickname,
-			Filename: filepath.Base(f),
+			UID:         a.UID,
+			Realm:       a.Realm(),
+			Nickname:    a.Nickname,
+			Filename:    filepath.Base(f),
+			Owner:       a.Owner,
+			IsMyAccount: isMine,
 		}
 		if p, ok := poolMap[a.UID]; ok {
 			item.Credits = p.Credits
@@ -124,6 +156,12 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	statsSnap := MetricsSnapshotOf()
 	h.enrichCredits(&statsSnap)
 
+	// APIKey：普通用户显示用户自己的 APIKey，管理员显示全局 APIKey
+	displayAPIKey := h.GetAPIKey()
+	if user != nil && user.APIKey != "" {
+		displayAPIKey = user.APIKey
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"service": ServiceName,
 		"status": map[string]any{
@@ -134,14 +172,16 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			"in_flight_full":  inFlightFull,
 			"sticky_sessions": sticky,
 		},
-		"accounts":   accounts,
-		"models":     models,
-		"apiKey":         h.GetAPIKey(),
+		"accounts":       accounts,
+		"models":         models,
+		"apiKey":         displayAPIKey,
 		"hasPassword":    h.GetWebPassword() != "",
 		"currentVersion": CurrentVersion,
 		"isDocker":       isDockerEnvironment(),
 		"recentLogs":     GetRecentLogs(),
 		"stats":          statsSnap,
+		"currentUser":    user,
+		"allowRegister":  h.cfg.UserMgr != nil && h.cfg.UserMgr.AllowRegister(),
 	})
 }
 
@@ -324,6 +364,12 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		expiresAt = time.Now().Unix() + tok.ExpiresIn
 	}
 
+	user := h.getWebSessionUser(r)
+	ownerID := ""
+	if user != nil {
+		ownerID = user.ID
+	}
+
 	doc := map[string]any{
 		"account": map[string]any{
 			"uid":          uid,
@@ -337,6 +383,9 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			"domain":       tok.Domain,
 			"realm":        req.Realm,
 		},
+	}
+	if ownerID != "" {
+		doc["owner"] = ownerID
 	}
 	docBytes, _ := json.MarshalIndent(doc, "", "  ")
 
@@ -385,6 +434,12 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 	if uid == "" {
 		uid = fmt.Sprintf("account_%d", time.Now().Unix())
 	}
+
+	user := h.getWebSessionUser(r)
+	if user != nil {
+		a.Owner = user.ID
+	}
+
 	_ = os.MkdirAll("./auths", 0755)
 	targetFile := filepath.Join("./auths", fmt.Sprintf("workbuddy-%s.json", uid))
 	a.FilePath = targetFile
@@ -620,7 +675,25 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "非法文件名"})
 		return
 	}
+
 	target := filepath.Join("auths", req.Filename)
+	raw, err := os.ReadFile(target)
+	if err != nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "凭证文件不存在"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	if user != nil && user.Role != usermgr.RoleAdmin {
+		// 普通用户只能删除自己名下的账号
+		if a, err := auth.Parse(raw); err == nil {
+			if a.Owner != user.ID && a.Owner != user.Username {
+				writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足：只能删除自己绑定的账号"})
+				return
+			}
+		}
+	}
+
 	_ = os.Remove(target)
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
@@ -714,7 +787,12 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 // webSessionCookieName Web 控制台会话 Cookie 名
 const webSessionCookieName = "wb2a_session"
 
-// webSessions 存储已登录的 Web 会话 (token -> expireTime)
+type webSessionInfo struct {
+	User      *usermgr.User
+	ExpiresAt time.Time
+}
+
+// webSessions 存储已登录的 Web 会话 (token -> webSessionInfo)
 var webSessions sync.Map
 
 func generateSessionToken() string {
@@ -723,14 +801,39 @@ func generateSessionToken() string {
 	return hex.EncodeToString(b)
 }
 
-func (h *Handler) checkWebAuth(r *http.Request) bool {
-	pw := h.GetWebPassword()
-	if pw == "" {
-		return true // 未设密码，单机免密模式
+func (h *Handler) getWebSessionUser(r *http.Request) *usermgr.User {
+	cookie, err := r.Cookie(webSessionCookieName)
+	if err == nil && cookie.Value != "" {
+		if val, ok := webSessions.Load(cookie.Value); ok {
+			if sess, ok := val.(webSessionInfo); ok {
+				if time.Now().Before(sess.ExpiresAt) {
+					// 刷新最新用户状态（从 UserMgr 获取以防被禁用或被改角色）
+					if h.cfg.UserMgr != nil && sess.User != nil {
+						if fresh, ok := h.cfg.UserMgr.FindByUsername(sess.User.Username); ok {
+							return fresh
+						}
+					}
+					return sess.User
+				}
+				webSessions.Delete(cookie.Value)
+			}
+		}
 	}
 
+	// 兼容 X-Web-Password 或者是免密单机模式，默认返回管理员
+	if h.cfg.UserMgr != nil {
+		if admin, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
+			return admin
+		}
+	}
+	return nil
+}
+
+func (h *Handler) checkWebAuth(r *http.Request) bool {
+	pw := h.GetWebPassword()
+
 	// 1. 支持 Header 鉴权: X-Web-Password
-	if customPw := r.Header.Get("X-Web-Password"); customPw != "" {
+	if customPw := r.Header.Get("X-Web-Password"); customPw != "" && pw != "" {
 		if subtle.ConstantTimeCompare([]byte(customPw), []byte(pw)) == 1 {
 			return true
 		}
@@ -738,17 +841,27 @@ func (h *Handler) checkWebAuth(r *http.Request) bool {
 
 	// 2. Cookie 会话校验
 	cookie, err := r.Cookie(webSessionCookieName)
-	if err != nil || cookie.Value == "" {
-		return false
+	if err == nil && cookie.Value != "" {
+		if val, ok := webSessions.Load(cookie.Value); ok {
+			if sess, ok := val.(webSessionInfo); ok {
+				if time.Now().Before(sess.ExpiresAt) {
+					// 检查用户是否被禁用
+					if h.cfg.UserMgr != nil && sess.User != nil {
+						if fresh, ok := h.cfg.UserMgr.FindByUsername(sess.User.Username); ok && fresh.Disabled {
+							webSessions.Delete(cookie.Value)
+							return false
+						}
+					}
+					return true
+				}
+				webSessions.Delete(cookie.Value)
+			}
+		}
 	}
 
-	if val, ok := webSessions.Load(cookie.Value); ok {
-		if exp, ok := val.(time.Time); ok {
-			if time.Now().Before(exp) {
-				return true
-			}
-			webSessions.Delete(cookie.Value)
-		}
+	// 未设密码且未启用多用户注册模式时，单机免密放行
+	if pw == "" && (h.cfg.UserMgr == nil) {
+		return true
 	}
 	return false
 }
@@ -757,9 +870,10 @@ func (h *Handler) withWebAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		if !h.checkWebAuth(r) {
 			writeJSON(w, http.StatusUnauthorized, map[string]any{
-				"error":        "需要登录 Web 控制台密码",
-				"need_login":   true,
-				"has_password": true,
+				"error":          "需要登录控制台",
+				"need_login":     true,
+				"has_password":   h.GetWebPassword() != "",
+				"allow_register": h.cfg.UserMgr != nil && h.cfg.UserMgr.AllowRegister(),
 			})
 			return
 		}
@@ -768,14 +882,8 @@ func (h *Handler) withWebAuth(next http.HandlerFunc) http.HandlerFunc {
 }
 
 func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
-	pw := h.GetWebPassword()
-	if pw == "" {
-		// 未设置密码，直接视作登录成功
-		writeJSON(w, http.StatusOK, map[string]any{"success": true})
-		return
-	}
-
 	var req struct {
+		Username string `json:"username"`
 		Password string `json:"password"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -783,14 +891,49 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if subtle.ConstantTimeCompare([]byte(req.Password), []byte(pw)) != 1 {
-		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "控制台访问密码错误"})
-		return
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+
+	var loggedUser *usermgr.User
+
+	// 1. 如果启用了 UserMgr，优先走多用户体系
+	if h.cfg.UserMgr != nil {
+		// 如果未传用户名，默认按 admin 登录
+		uname := req.Username
+		if uname == "" {
+			uname = "admin"
+		}
+		u, err := h.cfg.UserMgr.Authenticate(uname, req.Password)
+		if err != nil {
+			// 如果尝试 admin 失败，且此时配置了独立的 WebPassword，尝试核验 WebPassword
+			pw := h.GetWebPassword()
+			if uname == "admin" && pw != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(pw)) == 1 {
+				if admin, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
+					loggedUser = admin
+				}
+			}
+			if loggedUser == nil {
+				writeJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
+				return
+			}
+		} else {
+			loggedUser = u
+		}
+	} else {
+		// 传统单机模式：核验 WebPassword
+		pw := h.GetWebPassword()
+		if pw != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(pw)) != 1 {
+			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "控制台访问密码错误"})
+			return
+		}
 	}
 
 	token := generateSessionToken()
 	exp := time.Now().Add(7 * 24 * time.Hour) // 7 天有效期
-	webSessions.Store(token, exp)
+	webSessions.Store(token, webSessionInfo{
+		User:      loggedUser,
+		ExpiresAt: exp,
+	})
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     webSessionCookieName,
@@ -801,7 +944,54 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteLaxMode,
 	})
 
-	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"user":    loggedUser,
+	})
+}
+
+func (h *Handler) handleWebRegister(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.UserMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未启用用户系统"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求格式错误"})
+		return
+	}
+
+	u, err := h.cfg.UserMgr.Register(req.Username, req.Password)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// 注册成功自动创建会话登录
+	token := generateSessionToken()
+	exp := time.Now().Add(7 * 24 * time.Hour)
+	webSessions.Store(token, webSessionInfo{
+		User:      u,
+		ExpiresAt: exp,
+	})
+
+	http.SetCookie(w, &http.Cookie{
+		Name:     webSessionCookieName,
+		Value:    token,
+		Path:     "/",
+		Expires:  exp,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+	})
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"user":    u,
+	})
 }
 
 func (h *Handler) handleWebLogout(w http.ResponseWriter, r *http.Request) {
@@ -821,6 +1011,152 @@ func (h *Handler) handleWebLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
+func (h *Handler) handleUserAPIKeyReset(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil {
+		writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "未登录"})
+		return
+	}
+
+	if h.cfg.UserMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未启用用户系统"})
+		return
+	}
+
+	newKey, err := h.cfg.UserMgr.ResetUserAPIKey(user.Username)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	// 如果当前是 admin 用户，同时更新并持久化主全局 APIKey
+	if user.Role == usermgr.RoleAdmin || user.Username == "admin" {
+		h.SetAPIKey(newKey)
+		h.savePersistentSetting("api_key", newKey)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"api_key": newKey,
+	})
+}
+
+func (h *Handler) handleAdminListUsers(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可访问"})
+		return
+	}
+
+	if h.cfg.UserMgr == nil {
+		writeJSON(w, http.StatusOK, map[string]any{"users": []any{}})
+		return
+	}
+
+	users := h.cfg.UserMgr.ListUsers()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"users":          users,
+		"allow_register": h.cfg.UserMgr.AllowRegister(),
+	})
+}
+
+func (h *Handler) handleAdminToggleUser(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可操作"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Disabled bool   `json:"disabled"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求参数错误"})
+		return
+	}
+
+	if err := h.cfg.UserMgr.ToggleUserDisabled(req.Username, req.Disabled); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleAdminSetUserRole(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可操作"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求参数错误"})
+		return
+	}
+
+	if err := h.cfg.UserMgr.SetUserRole(req.Username, req.Role); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可操作"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求参数错误"})
+		return
+	}
+
+	if err := h.cfg.UserMgr.DeleteUser(req.Username); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleAdminSetAllowRegister(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可操作"})
+		return
+	}
+
+	var req struct {
+		Allow bool `json:"allow"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求参数错误"})
+		return
+	}
+
+	if err := h.cfg.UserMgr.SetAllowRegister(req.Allow); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":        true,
+		"allow_register": req.Allow,
+	})
+}
+
 func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		OldPassword string `json:"old_password"`
@@ -828,6 +1164,26 @@ func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求体 JSON 解析失败"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	if user != nil && h.cfg.UserMgr != nil {
+		// 用户中心修改个人密码
+		if err := h.cfg.UserMgr.ChangePassword(user.Username, req.OldPassword, req.NewPassword, false); err != nil {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error()})
+			return
+		}
+		// 如果是 admin，同步更新 web_password
+		if user.Role == usermgr.RoleAdmin || user.Username == "admin" {
+			newPw := strings.TrimSpace(req.NewPassword)
+			h.SetWebPassword(newPw)
+			h.savePersistentSetting("web_password", newPw)
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":      true,
+			"has_password": true,
+		})
 		return
 	}
 
