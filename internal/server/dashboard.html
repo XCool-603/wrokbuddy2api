@@ -106,7 +106,7 @@
               CN + GLOBAL PRO
             </span>
             <button id="versionBadgeBtn" onclick="checkAppUpdate(true)" title="点击检查更新" class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-slate-800 text-slate-400 border border-slate-700 hover:border-indigo-500 transition flex items-center gap-1">
-              <span id="appVersionText">v1.0.6</span>
+              <span id="appVersionText">v1.1.1</span>
               <span id="updateAvailableDot" class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping hidden"></span>
             </button>
           </div>
@@ -165,387 +165,204 @@
   </header>
 
   <!-- Main Container -->
-  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
     
-    <!-- Metrics Dashboard -->
-    <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">总账号资产</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statTotal" class="text-2xl font-bold font-mono text-white">0</span>
-          <span class="text-[10px] text-slate-500">ACCOUNTS</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-indigo-400">
-          <span>双域智能负载</span>
-        </div>
+    <!-- Modern Top Nav Tabs (New API / SaaS Dashboard Style) -->
+    <div class="flex items-center justify-between border-b border-slate-800 pb-3">
+      <div class="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800">
+        <button id="mainTabBtn-accounts" onclick="switchMainTab('accounts')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
+          <span>账号池矩阵</span>
+        </button>
+        <button id="mainTabBtn-access" onclick="switchMainTab('access')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+          <span>客户端接入 & Key</span>
+        </button>
+        <button id="mainTabBtn-analytics" onclick="switchMainTab('analytics')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
+          <span>用量分析看板</span>
+        </button>
+        <button id="mainTabBtn-playground" onclick="switchMainTab('playground')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+          <span>在线调试 & 流水</span>
+        </button>
+        <button id="mainTabBtn-users" onclick="switchMainTab('users')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition hidden">
+          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+          <span>用户权限管理</span>
+        </button>
       </div>
 
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">健康可调度</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statHealthy" class="text-2xl font-bold font-mono text-emerald-400">0</span>
-          <span class="text-[10px] text-emerald-500/70">READY</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-emerald-400/80">
-          <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5"></span>
-          <span>正常就绪</span>
-        </div>
+      <!-- Quick Action Right in Tab Bar -->
+      <div class="hidden sm:flex items-center gap-2">
+        <button onclick="refreshData()" title="手动刷新" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition flex items-center gap-1.5">
+          <svg id="refreshIcon2" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>刷新</span>
+        </button>
       </div>
+    </div>
 
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">限流冷却中</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statCooling" class="text-2xl font-bold font-mono text-amber-400">0</span>
-          <span class="text-[10px] text-amber-500/70">COOLING</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-amber-400/80">
-          <span>自动退避中</span>
-        </div>
-      </div>
-
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">异常/停用</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statDisabled" class="text-2xl font-bold font-mono text-rose-400">0</span>
-          <span class="text-[10px] text-rose-500/70">OFFLINE</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-rose-400/80">
-          <span>手动或熔断</span>
-        </div>
-      </div>
-
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">会话粘性绑定</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statSticky" class="text-2xl font-bold font-mono text-cyan-400">0</span>
-          <span class="text-[10px] text-cyan-500/70">SESSIONS</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-cyan-400/80">
-          <span>上下文稳定路由</span>
-        </div>
-      </div>
-
-      <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-        <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
-        <p class="text-xs font-medium text-slate-400">在途并发满载</p>
-        <div class="flex items-baseline gap-2 mt-1">
-          <span id="statInFlight" class="text-2xl font-bold font-mono text-purple-400">0</span>
-          <span class="text-[10px] text-purple-500/70">BUSY</span>
-        </div>
-        <div class="mt-2 flex items-center text-[11px] text-purple-400/80">
-          <span>最大并发保护</span>
-        </div>
-      </div>
-    </section>
-
-    <!-- Token Analytics (Persistent Memory) -->
-    <section class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-5">
-      <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-4">
-        <div>
-          <h2 class="text-base font-bold text-white flex items-center gap-2">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>Token 调用统计看板</span>
-            <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">每日按天统计 · 永久记忆</span>
-          </h2>
-          <p class="text-xs text-slate-400 mt-0.5">每日 Token 消耗自动按天隔离、按模型归集且本地永久自动落盘</p>
-        </div>
-        <div class="flex flex-wrap items-center gap-2">
-          <!-- 日期选择器 -->
-          <div class="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
-            <span class="text-xs text-slate-400 font-medium">查看日期:</span>
-            <select id="metricsDateSelector" onchange="onMetricsDateChange(this.value)" class="bg-slate-800 text-xs font-mono text-emerald-400 rounded-lg px-2 py-0.5 border border-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
-              <option value="today">今日消耗 (Today)</option>
-              <option value="all">历史全量累计</option>
-            </select>
+    <!-- TAB 1: 账号池矩阵 & 负载监控 -->
+    <div id="tabContent-accounts" class="space-y-6">
+      <!-- Metrics Dashboard -->
+      <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">总账号资产</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statTotal" class="text-2xl font-bold font-mono text-white">0</span>
+            <span class="text-[10px] text-slate-500">ACCOUNTS</span>
           </div>
-          <span id="tokenUptimeText" class="text-[11px] font-mono text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
-            统计中...
-          </span>
-        </div>
-      </div>
-
-      <!-- Current Scope 4 metrics -->
-      <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-          <div class="flex items-center justify-between">
-            <span id="labelTotalTokens" class="text-[11px] font-medium text-slate-400">今日消耗 Token</span>
-            <span id="badgeDateScope" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">今日</span>
-          </div>
-          <div id="statTotalTokens" class="text-2xl font-bold font-mono text-emerald-400 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-1">Prompt + Completion</div>
-        </div>
-        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-          <div class="text-[11px] font-medium text-slate-400">生成 Tokens (输出)</div>
-          <div id="statCompTokens" class="text-2xl font-bold font-mono text-cyan-400 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-1">大模型实际回答输出</div>
-        </div>
-        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-          <div class="text-[11px] font-medium text-slate-400">提示 Tokens (输入)</div>
-          <div id="statPromptTokens" class="text-2xl font-bold font-mono text-indigo-400 mt-1">0</div>
-          <div class="text-[10px] text-slate-500 mt-1">客户端发送上下文提示</div>
-        </div>
-        <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
-          <div class="text-[11px] font-medium text-slate-400">请求调用数</div>
-          <div id="statTotalReqs" class="text-2xl font-bold font-mono text-amber-400 mt-1">0</div>
-          <div id="statSuccessRate" class="text-[10px] text-slate-500 mt-1">成功率: 100%</div>
-        </div>
-      </div>
-
-      <!-- Models Breakdown Table -->
-      <div class="space-y-2">
-        <div class="flex items-center justify-between">
-          <h3 id="currentScopeTitle" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-            <span>模型消耗明细</span>
-          </h3>
-          <span class="text-[11px] text-slate-500">按请求调用量降序</span>
-        </div>
-        <div class="overflow-x-auto custom-scroll">
-          <table class="w-full text-left text-xs font-mono">
-            <thead>
-              <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
-                <th class="py-2.5 px-3 font-medium">模型名称</th>
-                <th class="py-2.5 px-3 font-medium">请求量</th>
-                <th class="py-2.5 px-3 font-medium">总 Tokens</th>
-                <th class="py-2.5 px-3 font-medium">输入 (Prompt)</th>
-                <th class="py-2.5 px-3 font-medium">输出 (Completion)</th>
-                <th class="py-2.5 px-3 font-medium">平均速率</th>
-                <th class="py-2.5 px-3 font-medium">缓存命中率</th>
-                <th class="py-2.5 px-3 font-medium text-right">平均延迟</th>
-              </tr>
-            </thead>
-            <tbody id="tokenModelsTable" class="divide-y divide-slate-800/40 text-slate-300">
-              <tr>
-                <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      <!-- Daily History Breakdown Table -->
-      <div class="pt-4 border-t border-slate-800/60 space-y-3">
-        <div class="flex items-center justify-between">
-          <h3 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
-            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-            <span>每日统计历史 (Daily Breakdown)</span>
-          </h3>
-          <span class="text-[11px] text-slate-500">记录每一天的请求总量与 Token 消耗流水</span>
-        </div>
-        <div class="overflow-x-auto custom-scroll">
-          <table class="w-full text-left text-xs font-mono">
-            <thead>
-              <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
-                <th class="py-2.5 px-3 font-medium">日期</th>
-                <th class="py-2.5 px-3 font-medium">总请求数</th>
-                <th class="py-2.5 px-3 font-medium">成功率</th>
-                <th class="py-2.5 px-3 font-medium">总消耗 Tokens</th>
-                <th class="py-2.5 px-3 font-medium">提示 Tokens (输入)</th>
-                <th class="py-2.5 px-3 font-medium">生成 Tokens (输出)</th>
-                <th class="py-2.5 px-3 font-medium">缓存命中率</th>
-                <th class="py-2.5 px-3 font-medium text-right">快捷操作</th>
-              </tr>
-            </thead>
-            <tbody id="dailyHistoryTable" class="divide-y divide-slate-800/40 text-slate-300">
-              <tr>
-                <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无历史天数统计数据</td>
-              </tr>
-            </tbody>
-          </table>
-        </div>
-      </div>
-    </section>
-
-    <!-- Layout Grid -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
-      
-      <!-- Left Column: Accounts & Automation (7 cols) -->
-      <section class="lg:col-span-8 space-y-8">
-        
-        <!-- Account Pool Card -->
-        <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-glass">
-          <div class="px-6 py-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/30">
-            <div>
-              <h2 class="text-base font-bold text-white flex items-center gap-2.5">
-                <span class="flex h-2 w-2 rounded-full bg-indigo-500"></span>
-                <span>账号池矩阵 (CN & Global Pool)</span>
-                <span id="accountCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
-              </h2>
-              <p class="text-xs text-slate-400 mt-0.5">支持跨域自动轮询、故障自愈、积分跟踪与生命周期监控</p>
-            </div>
-
-            <div class="flex items-center gap-2">
-              <a href="/ui/action/backup" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="将 auths 目录下所有凭证打包为 ZIP 下载备份">
-                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-                <span>备份导出</span>
-              </a>
-              <button onclick="runBatchSignin()" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                <span>一键日常签到</span>
-              </button>
-              <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2"/></svg>
-                <span>领取国际试用包</span>
-              </button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto">
-            <table class="w-full text-left text-xs text-slate-300">
-              <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/60 border-b border-slate-800">
-                <tr>
-                  <th class="px-6 py-3.5 font-semibold">域/环境</th>
-                  <th class="px-6 py-3.5 font-semibold">UID / 账号昵称</th>
-                  <th class="px-6 py-3.5 font-semibold">运行状态</th>
-                  <th class="px-6 py-3.5 font-semibold">积分余量</th>
-                  <th class="px-6 py-3.5 font-semibold text-right">调度操作</th>
-                </tr>
-              </thead>
-              <tbody id="accountsTable" class="divide-y divide-slate-800/60 font-mono">
-                <tr>
-                  <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
-                    <div class="flex flex-col items-center justify-center space-y-3">
-                      <div class="w-12 h-12 rounded-2xl bg-slate-800/50 flex items-center justify-center text-slate-600">
-                        <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                      </div>
-                      <p class="text-sm text-slate-400 font-medium">账号池当前为空</p>
-                      <p class="text-xs text-slate-500 max-w-sm">请点击上方按钮快速授权国内版或国际版账号，或导入已有凭证</p>
-                    </div>
-                  </td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="mt-2 flex items-center text-[11px] text-indigo-400">
+            <span>双域智能负载</span>
           </div>
         </div>
 
-        <!-- Chat Playground -->
-        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
-            <div>
-              <h2 class="text-base font-bold text-white flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
-                <span>智能网关全链路调试</span>
-              </h2>
-              <p class="text-xs text-slate-400 mt-0.5">免客户端即可实时验证模型路由、负载均衡与响应流</p>
-            </div>
-            <div id="chatTiming" class="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20 hidden">
-              耗时: 0.00s
-            </div>
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">健康可调度</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statHealthy" class="text-2xl font-bold font-mono text-emerald-400">0</span>
+            <span class="text-[10px] text-emerald-500/70">READY</span>
           </div>
-
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label class="block text-xs font-semibold text-slate-300 mb-1.5">请求路由与模型选择</label>
-              <div class="relative">
-                <select id="chatModel" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 appearance-none font-mono">
-                  <option value="">正在检测并加载可服务模型...</option>
-                </select>
-                <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
-                  <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
-                </div>
-              </div>
-            </div>
-
-            <div>
-              <label class="block text-xs font-semibold text-slate-300 mb-1.5">接入 API Key</label>
-              <input id="chatApiKey" type="text" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono" value="test_key" />
-            </div>
-          </div>
-
-          <div>
-            <label class="block text-xs font-semibold text-slate-300 mb-1.5">Prompt 测试指令</label>
-            <textarea id="chatPrompt" rows="2" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="例如：你好！请用一句话告诉我你的模型名称和当前时间。"></textarea>
-          </div>
-
-          <div class="flex items-center justify-between pt-1">
-            <div class="text-[11px] text-slate-500">
-              采用 OpenAI 协议标准格式 (/v1/chat/completions)
-            </div>
-            <button onclick="sendChatMessage()" id="btnSendChat" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/25 transition duration-200 flex items-center gap-2">
-              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
-              <span>发送测试</span>
-            </button>
-          </div>
-
-          <div id="chatResponseBox" class="mt-4 p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-200 hidden whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto custom-scroll"></div>
-        </div>
-
-        <!-- Live Request Logs Card -->
-        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
-          <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
-            <div>
-              <h2 class="text-base font-bold text-white flex items-center gap-2">
-                <span class="w-2 h-2 rounded-full bg-amber-400"></span>
-                <span>实时网关请求流水</span>
-              </h2>
-              <p class="text-xs text-slate-400 mt-0.5">监控全量下游客户端调用、响应耗时及自动选号调度记录</p>
-            </div>
-            <div class="flex items-center gap-2">
-              <span id="logCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0 条</span>
-              <button onclick="refreshData()" class="text-xs text-slate-400 hover:text-indigo-400 transition" title="刷新流水">
-                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-              </button>
-            </div>
-          </div>
-
-          <div class="overflow-x-auto custom-scroll">
-            <table class="w-full text-left text-xs font-mono">
-              <thead>
-                <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
-                  <th class="py-2 px-2 font-medium">序号</th>
-                  <th class="py-2 px-2 font-medium">时间</th>
-                  <th class="py-2 px-2 font-medium">模型</th>
-                  <th class="py-2 px-2 font-medium">路由账号</th>
-                  <th class="py-2 px-2 font-medium">状态</th>
-                  <th class="py-2 px-2 font-medium">TTFB</th>
-                  <th class="py-2 px-2 font-medium">生成Token</th>
-                  <th class="py-2 px-2 font-medium">速率</th>
-                  <th class="py-2 px-2 font-medium text-right">总耗时</th>
-                </tr>
-              </thead>
-              <tbody id="requestLogsTable" class="divide-y divide-slate-800/40 text-slate-300">
-                <tr>
-                  <td colspan="9" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
-                </tr>
-              </tbody>
-            </table>
+          <div class="mt-2 flex items-center text-[11px] text-emerald-400/80">
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5"></span>
+            <span>正常就绪</span>
           </div>
         </div>
 
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">限流冷却中</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statCooling" class="text-2xl font-bold font-mono text-amber-400">0</span>
+            <span class="text-[10px] text-amber-500/70">COOLING</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-amber-400/80">
+            <span>自动退避中</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">异常/停用</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statDisabled" class="text-2xl font-bold font-mono text-rose-400">0</span>
+            <span class="text-[10px] text-rose-500/70">OFFLINE</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-rose-400/80">
+            <span>手动或熔断</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">会话粘性绑定</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statSticky" class="text-2xl font-bold font-mono text-cyan-400">0</span>
+            <span class="text-[10px] text-cyan-500/70">SESSIONS</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-cyan-400/80">
+            <span>上下文稳定路由</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">在途并发满载</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="statInFlight" class="text-2xl font-bold font-mono text-purple-400">0</span>
+            <span class="text-[10px] text-purple-500/70">BUSY</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-purple-400/80">
+            <span>最大并发保护</span>
+          </div>
+        </div>
       </section>
 
-      <!-- Right Column: Downstream Config & Models (4 cols) -->
-      <section class="lg:col-span-4 space-y-8">
-        
-        <!-- Connection Config Card -->
-        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+      <!-- Account Pool Card -->
+      <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-glass">
+        <div class="px-6 py-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/30">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2.5">
+              <span class="flex h-2 w-2 rounded-full bg-indigo-500"></span>
+              <span>账号池矩阵 (CN & Global Pool)</span>
+              <span id="accountCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">支持跨域自动轮询、故障自愈、积分跟踪与生命周期监控</p>
+          </div>
+
+          <div class="flex items-center gap-2">
+            <a href="/ui/action/backup" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="将 auths 目录下所有凭证打包为 ZIP 下载备份">
+              <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
+              <span>备份导出</span>
+            </a>
+            <button onclick="runBatchSignin()" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>一键日常签到</span>
+            </button>
+            <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2"/></svg>
+              <span>领取国际试用包</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/60 border-b border-slate-800">
+              <tr>
+                <th class="px-6 py-3.5 font-semibold">域/环境</th>
+                <th class="px-6 py-3.5 font-semibold">UID / 账号昵称</th>
+                <th class="px-6 py-3.5 font-semibold">运行状态</th>
+                <th class="px-6 py-3.5 font-semibold">积分余量</th>
+                <th class="px-6 py-3.5 font-semibold text-right">调度操作</th>
+              </tr>
+            </thead>
+            <tbody id="accountsTable" class="divide-y divide-slate-800/60 font-mono">
+              <tr>
+                <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
+                  <div class="flex flex-col items-center justify-center space-y-3">
+                    <div class="w-12 h-12 rounded-2xl bg-slate-800/50 flex items-center justify-center text-slate-600">
+                      <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
+                    </div>
+                    <p class="text-sm text-slate-400 font-medium">账号池当前为空</p>
+                    <p class="text-xs text-slate-500 max-w-sm">请点击上方按钮快速授权国内版或国际版账号，或导入已有凭证</p>
+                  </div>
+                </td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+
+    <!-- TAB 2: 客户端接入 & Key & 聚合模型 -->
+    <div id="tabContent-access" class="space-y-6 hidden">
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Downstream Connection Config (7 cols) -->
+        <div class="lg:col-span-7 glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-5">
           <div class="border-b border-slate-800/80 pb-4">
             <h2 class="text-base font-bold text-white flex items-center gap-2">
               <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>下游客户端接入</span>
+              <span>下游客户端接入配置</span>
             </h2>
-            <p class="text-xs text-slate-400 mt-0.5">提供标准 OpenAI 兼容协议接入</p>
+            <p class="text-xs text-slate-400 mt-0.5">提供标准 OpenAI 兼容协议接入，支持主流客户端即插即用</p>
           </div>
 
           <div class="space-y-4">
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
                 <span class="font-medium">API Base URL</span>
-                <button onclick="copyText('displayBaseUrl')" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
+                <button onclick="copyText('displayBaseUrl')" class="text-indigo-400 hover:text-indigo-300 text-[11px] font-medium">复制端点</button>
               </div>
-              <div id="displayBaseUrl" class="bg-slate-900 border border-slate-800/80 p-3 rounded-xl font-mono text-xs text-indigo-300 break-all select-all flex items-center justify-between">
+              <div id="displayBaseUrl" class="bg-slate-900 border border-slate-800/80 p-3.5 rounded-xl font-mono text-xs text-indigo-300 break-all select-all flex items-center justify-between">
                 <span>http://127.0.0.1:7863/v1</span>
               </div>
             </div>
 
             <div>
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
-                <span class="font-medium">专属 API Key</span>
+                <span class="font-medium">您的专属 API Key</span>
                 <div class="space-x-2">
                   <button onclick="copyApiKey()" class="text-indigo-400 hover:text-indigo-300 text-[11px]">复制</button>
                   <button onclick="resetMyAPIKey()" class="text-amber-400 hover:text-amber-300 text-[11px] font-medium" title="生成全新的 API Key 并让旧 Key 立即失效">重置Key</button>
@@ -553,13 +370,13 @@
                 </div>
               </div>
               <div class="relative flex items-center">
-                <input id="inputApiKey" type="text" placeholder="留空则不鉴权（如 sk-workbuddy2api）" class="w-full bg-slate-900 border border-slate-800/80 rounded-xl px-3 py-2.5 font-mono text-xs text-emerald-400 focus:outline-none focus:border-indigo-500 transition pr-20" />
+                <input id="inputApiKey" type="text" placeholder="留空则不鉴权（如 sk-workbuddy2api）" class="w-full bg-slate-900 border border-slate-800/80 rounded-xl px-3.5 py-2.5 font-mono text-xs text-emerald-400 focus:outline-none focus:border-indigo-500 transition pr-20" />
                 <span id="saveKeyFeedback" class="absolute right-3 text-[11px] text-emerald-400 hidden">已保存</span>
               </div>
-              <p class="text-[10px] text-slate-500 mt-1">每个用户账号拥有独立隔离的 API Key，调用时自动锁定路由至属于您自己的账号池。</p>
+              <p class="text-[11px] text-slate-500 mt-1.5">每个用户账号拥有独立隔离的 API Key，调用时自动锁定路由至属于您自己的专属账号池。</p>
             </div>
 
-            <div class="pt-2 border-t border-slate-800/60">
+            <div class="pt-3 border-t border-slate-800/60">
               <div class="flex items-center justify-between text-xs text-slate-400 mb-1.5">
                 <span class="font-medium flex items-center gap-1.5">
                   <span>控制台管理密码</span>
@@ -567,23 +384,23 @@
                 </span>
                 <button onclick="openChangePasswordModal()" class="text-indigo-400 hover:text-indigo-300 text-[11px] font-medium">设置/修改密码</button>
               </div>
-              <p class="text-[10px] text-slate-500">开启密码后，访问控制台、导入凭证、查看Token流水均需登录，防止被他人盗用。</p>
+              <p class="text-[11px] text-slate-500">开启密码后，访问控制台、导入凭证、查看Token流水均需登录，防止被他人盗用。</p>
             </div>
 
-            <div class="p-3.5 bg-slate-900/50 border border-slate-800 rounded-xl space-y-2">
-              <div class="text-[11px] font-semibold text-slate-300 flex items-center gap-1.5">
-                <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-                <span>无缝适配软件</span>
+            <div class="p-4 bg-slate-900/60 border border-slate-800 rounded-xl space-y-2">
+              <div class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+                <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                <span>无缝适配各大 AI 客户端</span>
               </div>
-              <p class="text-[11px] text-slate-400 leading-relaxed">
-                可直连 <b class="text-slate-300">NextChat</b>、<b class="text-slate-300">LobeChat</b>、<b class="text-slate-300">Cherry Studio</b>、<b class="text-slate-300">Chatbox</b>、<b class="text-slate-300">Cursor</b>、<b class="text-slate-300">Cline</b> 等各种支持自定义端点的 AI 客户端。
+              <p class="text-xs text-slate-400 leading-relaxed">
+                可直连 <b class="text-slate-200">NextChat</b>、<b class="text-slate-200">LobeChat</b>、<b class="text-slate-200">Cherry Studio</b>、<b class="text-slate-200">Chatbox</b>、<b class="text-slate-200">Cursor</b>、<b class="text-slate-200">Cline</b>、<b class="text-slate-200">Roo Code</b> 等各种支持自定义 OpenAI 接口地址的软件。
               </p>
             </div>
           </div>
         </div>
 
-        <!-- Models Catalog Card -->
-        <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+        <!-- Models Catalog (5 cols) -->
+        <div class="lg:col-span-5 glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
           <div class="border-b border-slate-800/80 pb-4 flex items-center justify-between">
             <div>
               <h2 class="text-base font-bold text-white flex items-center gap-2">
@@ -592,15 +409,232 @@
               </h2>
               <p class="text-xs text-slate-400 mt-0.5">当前由账号池动态派生的可路由模型</p>
             </div>
-            <span id="modelCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
+            <span id="modelCountBadge" class="text-xs px-2.5 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
           </div>
 
-          <div id="modelsList" class="space-y-2 max-h-[350px] overflow-y-auto pr-1 custom-scroll text-xs">
+          <div id="modelsList" class="space-y-2 max-h-[460px] overflow-y-auto pr-1 custom-scroll text-xs">
             <div class="text-slate-500 text-center py-8">正在加载模型列表...</div>
           </div>
         </div>
+      </div>
+    </div>
 
+    <!-- TAB 3: 用量分析看板 -->
+    <div id="tabContent-analytics" class="space-y-6 hidden">
+      <!-- Token Analytics (Persistent Memory) -->
+      <section class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-5">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 border-b border-slate-800/80 pb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>Token 调用统计看板</span>
+              <span class="text-[10px] font-mono px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-400 border border-emerald-500/30">每日按天统计 · 永久记忆</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">每日 Token 消耗自动按天隔离、按模型归集且本地永久自动落盘</p>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- 日期选择器 -->
+            <div class="flex items-center gap-1.5 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+              <span class="text-xs text-slate-400 font-medium">查看日期:</span>
+              <select id="metricsDateSelector" onchange="onMetricsDateChange(this.value)" class="bg-slate-800 text-xs font-mono text-emerald-400 rounded-lg px-2 py-0.5 border border-slate-700 focus:outline-none focus:border-indigo-500 cursor-pointer">
+                <option value="today">今日消耗 (Today)</option>
+                <option value="all">历史全量累计</option>
+              </select>
+            </div>
+            <span id="tokenUptimeText" class="text-[11px] font-mono text-slate-400 bg-slate-900 px-3 py-1.5 rounded-xl border border-slate-800">
+              统计中...
+            </span>
+          </div>
+        </div>
+
+        <!-- Current Scope 4 metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+            <div class="flex items-center justify-between">
+              <span id="labelTotalTokens" class="text-[11px] font-medium text-slate-400">今日消耗 Token</span>
+              <span id="badgeDateScope" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-slate-800 text-emerald-400">今日</span>
+            </div>
+            <div id="statTotalTokens" class="text-2xl font-bold font-mono text-emerald-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">Prompt + Completion</div>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+            <div class="text-[11px] font-medium text-slate-400">生成 Tokens (输出)</div>
+            <div id="statCompTokens" class="text-2xl font-bold font-mono text-cyan-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">大模型实际回答输出</div>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+            <div class="text-[11px] font-medium text-slate-400">提示 Tokens (输入)</div>
+            <div id="statPromptTokens" class="text-2xl font-bold font-mono text-indigo-400 mt-1">0</div>
+            <div class="text-[10px] text-slate-500 mt-1">客户端发送上下文提示</div>
+          </div>
+          <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
+            <div class="text-[11px] font-medium text-slate-400">请求调用数</div>
+            <div id="statTotalReqs" class="text-2xl font-bold font-mono text-amber-400 mt-1">0</div>
+            <div id="statSuccessRate" class="text-[10px] text-slate-500 mt-1">成功率: 100%</div>
+          </div>
+        </div>
+
+        <!-- Models Breakdown Table -->
+        <div class="space-y-2">
+          <div class="flex items-center justify-between">
+            <h3 id="currentScopeTitle" class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
+              <span>模型消耗明细</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">按请求调用量降序</span>
+          </div>
+          <div class="overflow-x-auto custom-scroll">
+            <table class="w-full text-left text-xs font-mono">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
+                  <th class="py-2.5 px-3 font-medium">模型名称</th>
+                  <th class="py-2.5 px-3 font-medium">请求量</th>
+                  <th class="py-2.5 px-3 font-medium">总 Tokens</th>
+                  <th class="py-2.5 px-3 font-medium">输入 (Prompt)</th>
+                  <th class="py-2.5 px-3 font-medium">输出 (Completion)</th>
+                  <th class="py-2.5 px-3 font-medium">平均速率</th>
+                  <th class="py-2.5 px-3 font-medium">缓存命中率</th>
+                  <th class="py-2.5 px-3 font-medium text-right">平均延迟</th>
+                </tr>
+              </thead>
+              <tbody id="tokenModelsTable" class="divide-y divide-slate-800/40 text-slate-300">
+                <tr>
+                  <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <!-- Daily History Breakdown Table -->
+        <div class="pt-4 border-t border-slate-800/60 space-y-3">
+          <div class="flex items-center justify-between">
+            <h3 class="text-xs font-semibold text-slate-300 flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+              <span>每日统计历史 (Daily Breakdown)</span>
+            </h3>
+            <span class="text-[11px] text-slate-500">记录每一天的请求总量与 Token 消耗流水</span>
+          </div>
+          <div class="overflow-x-auto custom-scroll">
+            <table class="w-full text-left text-xs font-mono">
+              <thead>
+                <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
+                  <th class="py-2.5 px-3 font-medium">日期</th>
+                  <th class="py-2.5 px-3 font-medium">总请求数</th>
+                  <th class="py-2.5 px-3 font-medium">成功率</th>
+                  <th class="py-2.5 px-3 font-medium">总消耗 Tokens</th>
+                  <th class="py-2.5 px-3 font-medium">提示 Tokens (输入)</th>
+                  <th class="py-2.5 px-3 font-medium">生成 Tokens (输出)</th>
+                  <th class="py-2.5 px-3 font-medium">缓存命中率</th>
+                  <th class="py-2.5 px-3 font-medium text-right">快捷操作</th>
+                </tr>
+              </thead>
+              <tbody id="dailyHistoryTable" class="divide-y divide-slate-800/40 text-slate-300">
+                <tr>
+                  <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无历史天数统计数据</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
       </section>
+    </div>
+
+    <!-- TAB 4: 在线调试 & 实时流水 -->
+    <div id="tabContent-playground" class="space-y-6 hidden">
+      <!-- Chat Playground -->
+      <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span>智能网关全链路调试</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">免客户端即可实时验证模型路由、负载均衡与响应流</p>
+          </div>
+          <div id="chatTiming" class="text-xs font-mono text-cyan-400 bg-cyan-500/10 px-2.5 py-1 rounded-full border border-cyan-500/20 hidden">
+            耗时: 0.00s
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">请求路由与模型选择</label>
+            <div class="relative">
+              <select id="chatModel" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 appearance-none font-mono">
+                <option value="">正在检测并加载可服务模型...</option>
+              </select>
+              <div class="pointer-events-none absolute inset-y-0 right-0 flex items-center px-3 text-slate-400">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </div>
+            </div>
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold text-slate-300 mb-1.5">接入 API Key</label>
+            <input id="chatApiKey" type="text" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-500 font-mono" value="test_key" />
+          </div>
+        </div>
+
+        <div>
+          <label class="block text-xs font-semibold text-slate-300 mb-1.5">Prompt 测试指令</label>
+          <textarea id="chatPrompt" rows="2" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="例如：你好！请用一句话告诉我你的模型名称和当前时间。"></textarea>
+        </div>
+
+        <div class="flex items-center justify-between pt-1">
+          <div class="text-[11px] text-slate-500">
+            采用 OpenAI 协议标准格式 (/v1/chat/completions)
+          </div>
+          <button onclick="sendChatMessage()" id="btnSendChat" class="px-5 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-semibold shadow-lg shadow-indigo-600/25 transition duration-200 flex items-center gap-2">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+            <span>发送测试</span>
+          </button>
+        </div>
+
+        <div id="chatResponseBox" class="mt-4 p-4 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-200 hidden whitespace-pre-wrap font-mono leading-relaxed max-h-60 overflow-y-auto custom-scroll"></div>
+      </div>
+
+      <!-- Live Request Logs Card -->
+      <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+          <div>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-amber-400"></span>
+              <span>实时网关请求流水</span>
+            </h2>
+            <p class="text-xs text-slate-400 mt-0.5">监控全量下游客户端调用、响应耗时及自动选号调度记录</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="logCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0 条</span>
+            <button onclick="refreshData()" class="text-xs text-slate-400 hover:text-indigo-400 transition" title="刷新流水">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div class="overflow-x-auto custom-scroll">
+          <table class="w-full text-left text-xs font-mono">
+            <thead>
+              <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
+                <th class="py-2 px-2 font-medium">序号</th>
+                <th class="py-2 px-2 font-medium">时间</th>
+                <th class="py-2 px-2 font-medium">模型</th>
+                <th class="py-2 px-2 font-medium">路由账号</th>
+                <th class="py-2 px-2 font-medium">状态</th>
+                <th class="py-2 px-2 font-medium">TTFB</th>
+                <th class="py-2 px-2 font-medium">生成Token</th>
+                <th class="py-2 px-2 font-medium">速率</th>
+                <th class="py-2 px-2 font-medium text-right">总耗时</th>
+              </tr>
+            </thead>
+            <tbody id="requestLogsTable" class="divide-y divide-slate-800/40 text-slate-300">
+              <tr>
+                <td colspan="9" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
   </main>
 
@@ -892,11 +926,50 @@
           <span id="allowRegisterStatusText" class="text-emerald-400 font-semibold">已开放</span>
         </div>
         <div class="flex items-center gap-2">
-          <button id="btnToggleAllowRegister" onclick="toggleAllowRegister()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs transition">
+          <button onclick="toggleCreateUserForm()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-lg text-xs transition flex items-center gap-1 shadow-sm">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span>添加新用户</span>
+          </button>
+          <button id="btnToggleAllowRegister" onclick="toggleAllowRegister()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs transition">
             切换注册状态
           </button>
-          <button onclick="loadAdminUsers()" class="px-3 py-1 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs transition">
+          <button onclick="loadAdminUsers()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs transition">
             刷新用户列表
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin Create User Form (Collapsible) -->
+      <div id="adminCreateUserForm" class="p-4 bg-slate-900/90 rounded-xl border border-indigo-500/30 space-y-3 hidden">
+        <div class="flex items-center justify-between">
+          <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span>添加新用户账号</span>
+          </div>
+          <button onclick="toggleCreateUserForm()" class="text-slate-400 hover:text-white text-xs">取消</button>
+        </div>
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div>
+            <label class="block text-[11px] text-slate-300 font-medium mb-1">用户名</label>
+            <input id="newAdminUname" type="text" placeholder="3-32位字符" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-300 font-medium mb-1">登录初始密码</label>
+            <input id="newAdminPass" type="password" placeholder="至少6位密码" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-300 font-medium mb-1">角色权限</label>
+            <select id="newAdminRole" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
+              <option value="user" selected>普通用户 (普通用户隔离池与专属 Key)</option>
+              <option value="admin">系统管理员 (全权限)</option>
+            </select>
+          </div>
+        </div>
+        <div id="createUserErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
+        <div class="flex justify-end gap-2 pt-1">
+          <button onclick="toggleCreateUserForm()" class="px-3 py-1 text-xs text-slate-400 hover:text-white transition">取消</button>
+          <button id="btnSubmitCreateUser" onclick="submitAdminCreateUser()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition">
+            确认创建用户
           </button>
         </div>
       </div>
@@ -938,6 +1011,31 @@
     let pollRemainingSec = 60;
 
     let hasWebPassword = false;
+    let currentActiveTab = 'accounts';
+
+    function switchMainTab(tab) {
+      if (tab === 'users') {
+        openAdminUsersModal();
+        return;
+      }
+      currentActiveTab = tab;
+      const tabs = ['accounts', 'access', 'analytics', 'playground'];
+      for (const t of tabs) {
+        const btn = document.getElementById('mainTabBtn-' + t);
+        const panel = document.getElementById('tabContent-' + t);
+        if (t === tab) {
+          if (btn) {
+            btn.className = 'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition';
+          }
+          if (panel) panel.classList.remove('hidden');
+        } else {
+          if (btn) {
+            btn.className = 'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition';
+          }
+          if (panel) panel.classList.add('hidden');
+        }
+      }
+    }
 
     async function refreshData() {
       const icon = document.getElementById('refreshIcon');
@@ -984,6 +1082,7 @@
         const navUsernameText = document.getElementById('navUsernameText');
         const navUserRoleTag = document.getElementById('navUserRoleTag');
         const navAdminUsersBtn = document.getElementById('navAdminUsersBtn');
+        const mainTabBtnUsers = document.getElementById('mainTabBtn-users');
         const navLogoutBtn = document.getElementById('navLogoutBtn');
 
         if (currentUser) {
@@ -1000,17 +1099,18 @@
               }
             }
           }
-          if (navAdminUsersBtn) {
-            if (currentUser.role === 'admin') {
-              navAdminUsersBtn.classList.remove('hidden');
-            } else {
-              navAdminUsersBtn.classList.add('hidden');
-            }
+          if (currentUser.role === 'admin') {
+            if (navAdminUsersBtn) navAdminUsersBtn.classList.remove('hidden');
+            if (mainTabBtnUsers) mainTabBtnUsers.classList.remove('hidden');
+          } else {
+            if (navAdminUsersBtn) navAdminUsersBtn.classList.add('hidden');
+            if (mainTabBtnUsers) mainTabBtnUsers.classList.add('hidden');
           }
           if (navLogoutBtn) navLogoutBtn.classList.remove('hidden');
         } else {
           if (navUserBadge) navUserBadge.classList.add('hidden');
           if (navAdminUsersBtn) navAdminUsersBtn.classList.add('hidden');
+          if (mainTabBtnUsers) mainTabBtnUsers.classList.add('hidden');
         }
 
         if (data.apiKey !== undefined) {
@@ -2078,6 +2178,77 @@
         }
       } catch (e) {
         alert('网络异常: ' + e);
+      }
+    }
+
+    function toggleCreateUserForm() {
+      const form = document.getElementById('adminCreateUserForm');
+      if (!form) return;
+      const isHidden = form.classList.contains('hidden');
+      if (isHidden) {
+        form.classList.remove('hidden');
+        document.getElementById('newAdminUname').value = '';
+        document.getElementById('newAdminPass').value = '';
+        document.getElementById('newAdminRole').value = 'user';
+        const errEl = document.getElementById('createUserErrorMsg');
+        if (errEl) errEl.classList.add('hidden');
+        setTimeout(() => document.getElementById('newAdminUname').focus(), 50);
+      } else {
+        form.classList.add('hidden');
+      }
+    }
+
+    async function submitAdminCreateUser() {
+      const uname = document.getElementById('newAdminUname').value.trim();
+      const pass = document.getElementById('newAdminPass').value;
+      const role = document.getElementById('newAdminRole').value;
+      const errEl = document.getElementById('createUserErrorMsg');
+      const btn = document.getElementById('btnSubmitCreateUser');
+
+      if (!uname || !pass) {
+        if (errEl) {
+          errEl.innerText = '请填写完整的用户名和初始密码';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+      if (pass.length < 6) {
+        if (errEl) {
+          errEl.innerText = '密码长度至少 6 位';
+          errEl.classList.remove('hidden');
+        }
+        return;
+      }
+
+      btn.disabled = true;
+      btn.innerText = '正在创建...';
+      if (errEl) errEl.classList.add('hidden');
+
+      try {
+        const res = await fetch('/ui/admin/user/create', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username: uname, password: pass, role: role })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(`✅ 用户 "${uname}" 创建成功！\n角色: ${data.user.role}\n专属 API Key: ${data.user.api_key}`);
+          toggleCreateUserForm();
+          loadAdminUsers();
+        } else {
+          if (errEl) {
+            errEl.innerText = data.error || '创建失败';
+            errEl.classList.remove('hidden');
+          }
+        }
+      } catch (err) {
+        if (errEl) {
+          errEl.innerText = '网络请求异常: ' + err;
+          errEl.classList.remove('hidden');
+        }
+      } finally {
+        btn.disabled = false;
+        btn.innerText = '确认创建用户';
       }
     }
 

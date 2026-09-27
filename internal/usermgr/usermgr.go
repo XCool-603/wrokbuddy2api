@@ -215,6 +215,51 @@ func (m *Manager) Register(username, password string) (*User, error) {
 	return &copied, nil
 }
 
+// CreateUser 由管理员直接创建新用户（不受 allowRegister 限制，可指定角色）。
+func (m *Manager) CreateUser(username, password, role string) (*User, error) {
+	username = strings.ToLower(strings.TrimSpace(username))
+	if len(username) < 3 || len(username) > 32 {
+		return nil, errors.New("用户名长度须在 3-32 个字符之间")
+	}
+	if len(password) < 6 {
+		return nil, errors.New("密码长度至少 6 位")
+	}
+	if role != RoleAdmin && role != RoleUser {
+		role = RoleUser
+	}
+
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	if _, exists := m.users[username]; exists {
+		return nil, errors.New("该用户名已存在")
+	}
+
+	salt := generateRandomHex(16)
+	user := &User{
+		ID:           "u_" + generateRandomHex(8),
+		Username:     username,
+		PasswordHash: hashPassword(password, salt),
+		Salt:         salt,
+		Role:         role,
+		APIKey:       GenerateAPIKey(),
+		Disabled:     false,
+		CreatedAt:    time.Now(),
+	}
+
+	m.users[username] = user
+	m.byAPIKey[user.APIKey] = user
+
+	if err := m.saveLocked(); err != nil {
+		delete(m.users, username)
+		delete(m.byAPIKey, user.APIKey)
+		return nil, fmt.Errorf("保存新用户失败: %w", err)
+	}
+
+	copied := *user
+	return &copied, nil
+}
+
 // ResetUserAPIKey 重置指定用户的 API Key。
 func (m *Manager) ResetUserAPIKey(username string) (string, error) {
 	m.mu.Lock()

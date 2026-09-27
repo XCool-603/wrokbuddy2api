@@ -56,6 +56,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/admin/user/toggle", h.withWebAuth(h.handleAdminToggleUser))
 	h.mux.HandleFunc("POST /ui/admin/user/role", h.withWebAuth(h.handleAdminSetUserRole))
 	h.mux.HandleFunc("POST /ui/admin/user/delete", h.withWebAuth(h.handleAdminDeleteUser))
+	h.mux.HandleFunc("POST /ui/admin/user/create", h.withWebAuth(h.handleAdminCreateUser))
 	h.mux.HandleFunc("POST /ui/admin/system/allow_register", h.withWebAuth(h.handleAdminSetAllowRegister))
 }
 
@@ -1129,6 +1130,52 @@ func (h *Handler) handleAdminDeleteUser(w http.ResponseWriter, r *http.Request) 
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+func (h *Handler) handleAdminCreateUser(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可创建用户"})
+		return
+	}
+	if h.cfg.UserMgr == nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": "用户管理模块未初始化"})
+		return
+	}
+
+	var req struct {
+		Username string `json:"username"`
+		Password string `json:"password"`
+		Role     string `json:"role"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "请求参数解析错误"})
+		return
+	}
+
+	req.Username = strings.TrimSpace(req.Username)
+	req.Password = strings.TrimSpace(req.Password)
+	if req.Username == "" || req.Password == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "用户名和密码不能为空"})
+		return
+	}
+
+	created, err := h.cfg.UserMgr.CreateUser(req.Username, req.Password, req.Role)
+	if err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"user": map[string]any{
+			"id":         created.ID,
+			"username":   created.Username,
+			"role":       created.Role,
+			"api_key":    created.APIKey,
+			"created_at": created.CreatedAt,
+		},
+	})
 }
 
 func (h *Handler) handleAdminSetAllowRegister(w http.ResponseWriter, r *http.Request) {
