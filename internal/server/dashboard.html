@@ -493,6 +493,7 @@
               <thead>
                 <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
                   <th class="py-2.5 px-3 font-medium">模型名称</th>
+                  <th class="py-2.5 px-3 font-medium">倍率</th>
                   <th class="py-2.5 px-3 font-medium">请求量</th>
                   <th class="py-2.5 px-3 font-medium">总 Tokens</th>
                   <th class="py-2.5 px-3 font-medium">输入 (Prompt)</th>
@@ -504,7 +505,7 @@
               </thead>
               <tbody id="tokenModelsTable" class="divide-y divide-slate-800/40 text-slate-300">
                 <tr>
-                  <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
+                  <td colspan="9" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
                 </tr>
               </tbody>
             </table>
@@ -1285,12 +1286,16 @@
             const hitRate = (m.cache_hit_rate ? (m.cache_hit_rate * 100).toFixed(1) : '0.0') + '%';
             const tps = m.tokens_per_sec ? m.tokens_per_sec.toFixed(1) + ' tok/s' : '-';
             const lat = m.avg_latency_ms ? (m.avg_latency_ms / 1000).toFixed(2) + 's' : '-';
+            const mult = m.credits 
+              ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">${escapeHtml(m.credits)}</span>` 
+              : '<span class="text-slate-500">-</span>';
 
             html += `
               <tr class="hover:bg-slate-800/40 transition">
                 <td class="py-2.5 px-3 font-semibold text-slate-200">
                   <span class="text-indigo-300">${escapeHtml(m.model)}</span>
                 </td>
+                <td class="py-2.5 px-3 font-mono">${mult}</td>
                 <td class="py-2.5 px-3 text-slate-300 font-mono">${(m.requests || 0).toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-emerald-400 font-mono font-bold">${tTok.toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-indigo-300 font-mono">${pTok.toLocaleString()}</td>
@@ -1491,12 +1496,18 @@
           ? '<span class="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded">Global</span>'
           : '<span class="text-[10px] font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.2 rounded">CN</span>';
 
+        let creditsBadge = '';
+        if (m.credits) {
+          creditsBadge = `<span class="text-[10px] font-mono bg-amber-500/15 text-amber-400 border border-amber-500/30 px-1.5 py-0.2 rounded font-semibold" title="积分扣费倍率">${escapeHtml(m.credits)}</span>`;
+        }
+
         listHtml += `
           <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80 hover:border-slate-700 transition flex items-center justify-between group">
             <div class="space-y-0.5 max-w-[210px]">
-              <div class="font-mono font-medium text-slate-200 flex items-center gap-1.5 truncate">
-                <span>${m.id}</span>
+              <div class="font-mono font-medium text-slate-200 flex items-center gap-1.5 flex-wrap">
+                <span class="truncate max-w-[130px]">${m.id}</span>
                 ${badge}
+                ${creditsBadge}
               </div>
               <div class="text-[11px] text-slate-400 truncate">${m.description || '官方模型'}</div>
             </div>
@@ -1510,11 +1521,12 @@
             </div>
           </div>
         `;
+        const optionLabel = m.credits ? `${m.id} (${m.credits})` : m.id;
         if (m.id === previouslySelected) {
           hasPrevious = true;
-          selectHtml += `<option value="${m.id}" selected>${m.id}</option>`;
+          selectHtml += `<option value="${m.id}" selected>${optionLabel}</option>`;
         } else {
-          selectHtml += `<option value="${m.id}">${m.id}</option>`;
+          selectHtml += `<option value="${m.id}">${optionLabel}</option>`;
         }
       }
       list.innerHTML = listHtml;
