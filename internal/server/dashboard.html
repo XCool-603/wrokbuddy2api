@@ -85,8 +85,10 @@
 <body class="text-slate-100 min-h-screen font-sans antialiased selection:bg-indigo-500 selection:text-white">
   
   <!-- Top Navigation / Header -->
-  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/70 backdrop-blur-xl">
+  <!-- Top Navigation / Header -->
+  <header class="sticky top-0 z-40 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl">
     <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <!-- Left: Logo & Subtitle -->
       <div class="flex items-center gap-3.5">
         <div class="relative flex items-center justify-center">
           <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-500 via-purple-500 to-pink-500 flex items-center justify-center shadow-lg shadow-indigo-500/25">
@@ -102,64 +104,62 @@
         <div>
           <div class="flex items-center gap-2">
             <h1 class="text-lg font-bold tracking-tight text-white">WorkBuddy<span class="text-indigo-400">2API</span></h1>
-            <span class="px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 rounded-full tracking-wide">
-              CN + GLOBAL PRO
+            <span class="hidden sm:inline-block px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 rounded-full tracking-wide">
+              PRO
             </span>
             <button id="versionBadgeBtn" onclick="checkAppUpdate(true)" title="点击检查更新" class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-slate-800 text-slate-400 border border-slate-700 hover:border-indigo-500 transition flex items-center gap-1">
-              <span id="appVersionText">v1.1.1</span>
+              <span id="appVersionText">v1.1.2</span>
               <span id="updateAvailableDot" class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping hidden"></span>
             </button>
           </div>
-          <p class="text-[11px] text-slate-400 font-mono">国内企微 / 国际多模型统一调度中枢</p>
+          <p class="text-[11px] text-slate-400 font-mono hidden sm:block">统一智能负载调度与多模型聚合中枢</p>
         </div>
       </div>
 
-      <div class="flex items-center gap-2.5">
-        <button onclick="refreshData()" title="手动刷新" class="p-2.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 rounded-xl transition duration-200">
+      <!-- Right: Compact Clean Action Bar -->
+      <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Quick OAuth Dropdown / Group -->
+        <div class="relative">
+          <button id="btnHeaderAuthMenu" onclick="toggleHeaderAuthMenu()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+            <span>添加账号</span>
+            <svg class="w-3 h-3 text-indigo-200" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+          </button>
+          <!-- Dropdown popup -->
+          <div id="headerAuthDropdown" class="absolute right-0 mt-2 w-48 bg-slate-900 border border-slate-800 rounded-2xl shadow-2xl p-1.5 hidden z-50">
+            <button onclick="openOAuthModal('cn'); toggleHeaderAuthMenu();" class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-slate-200 hover:bg-slate-800/80 hover:text-white flex items-center gap-2.5 transition">
+              <span class="w-2 h-2 rounded-full bg-blue-400"></span>
+              <span>授权国内企微 (CN)</span>
+            </button>
+            <button onclick="openOAuthModal('global'); toggleHeaderAuthMenu();" class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-slate-200 hover:bg-slate-800/80 hover:text-white flex items-center gap-2.5 transition">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>授权国际版 (Global)</span>
+            </button>
+            <div class="h-px bg-slate-800 my-1"></div>
+            <button onclick="openImportModal(); toggleHeaderAuthMenu();" class="w-full text-left px-3 py-2 rounded-xl text-xs font-medium text-slate-300 hover:bg-slate-800/80 hover:text-white flex items-center gap-2.5 transition">
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+              <span>导入 JSON 凭证</span>
+            </button>
+          </div>
+        </div>
+
+        <button onclick="refreshData()" title="刷新数据" class="p-2 text-slate-400 hover:text-white bg-slate-900/80 hover:bg-slate-800 border border-slate-800 rounded-xl transition duration-200">
           <svg id="refreshIcon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
           </svg>
         </button>
 
-        <button onclick="openImportModal()" class="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 hover:text-white border border-slate-700 text-xs font-semibold rounded-xl transition duration-200 flex items-center gap-1.5 shadow-sm">
-          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
-          <span>导入凭证</span>
-        </button>
+        <div class="h-5 w-px bg-slate-800"></div>
 
-        <div class="h-6 w-px bg-slate-800 mx-1"></div>
-
-        <button onclick="openOAuthModal('cn')" class="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-500 hover:to-indigo-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-blue-600/20 transition duration-200 flex items-center gap-2 group">
-          <span class="w-2 h-2 rounded-full bg-blue-300 group-hover:scale-125 transition"></span>
-          <span>授权国内版 (CN)</span>
-        </button>
-
-        <button onclick="openOAuthModal('global')" class="px-3.5 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition duration-200 flex items-center gap-2 group">
-          <span class="w-2 h-2 rounded-full bg-emerald-300 group-hover:scale-125 transition"></span>
-          <span>授权国际版 (Global)</span>
-        </button>
-
-        <div class="h-6 w-px bg-slate-800 mx-1"></div>
-
-        <a href="/ui/action/backup" target="_blank" title="一键备份下载所有凭证" class="p-2.5 text-slate-400 hover:text-white bg-slate-800/60 hover:bg-slate-700/60 border border-slate-700/60 rounded-xl transition duration-200">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-        </a>
-
-        <!-- Admin User Management Modal Trigger -->
-        <button id="navAdminUsersBtn" onclick="openAdminUsersModal()" title="用户与角色权限管理" class="px-3 py-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 hover:text-purple-200 border border-purple-500/30 text-xs font-semibold rounded-xl transition duration-200 flex items-center gap-1.5 hidden">
-          <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-          <span>用户权限管理</span>
-        </button>
-
-        <!-- Current User Badge -->
-        <div id="navUserBadge" class="flex items-center gap-1.5 px-3 py-1.5 bg-slate-900 border border-slate-700/80 rounded-xl text-xs font-mono text-slate-300 hidden">
+        <!-- Current User Profile Pill -->
+        <div id="navUserBadge" class="flex items-center gap-2 px-3 py-1.5 bg-slate-900/90 border border-slate-800 rounded-xl text-xs font-mono text-slate-300 hidden">
           <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-          <span id="navUsernameText">admin</span>
+          <span id="navUsernameText" class="font-medium text-white max-w-[100px] truncate">admin</span>
           <span id="navUserRoleTag" class="text-[10px] px-1.5 py-0.2 rounded bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">管理员</span>
+          <button id="navLogoutBtn" onclick="doLogout()" title="退出登录" class="ml-1 text-slate-500 hover:text-rose-400 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
+          </button>
         </div>
-
-        <button id="navLogoutBtn" onclick="doLogout()" title="退出控制台登录" class="p-2.5 text-rose-400 hover:text-rose-300 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/30 rounded-xl transition duration-200 hidden">
-          <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1"/></svg>
-        </button>
       </div>
     </div>
   </header>
@@ -169,34 +169,26 @@
     
     <!-- Modern Top Nav Tabs (New API / SaaS Dashboard Style) -->
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
-      <div class="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800">
-        <button id="mainTabBtn-accounts" onclick="switchMainTab('accounts')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition">
+      <div class="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800 overflow-x-auto custom-scroll max-w-full">
+        <button id="mainTabBtn-accounts" onclick="switchMainTab('accounts')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition whitespace-nowrap">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"/></svg>
           <span>账号池矩阵</span>
         </button>
-        <button id="mainTabBtn-access" onclick="switchMainTab('access')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+        <button id="mainTabBtn-access" onclick="switchMainTab('access')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition whitespace-nowrap">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
           <span>客户端接入 & Key</span>
         </button>
-        <button id="mainTabBtn-analytics" onclick="switchMainTab('analytics')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+        <button id="mainTabBtn-analytics" onclick="switchMainTab('analytics')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition whitespace-nowrap">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"/></svg>
           <span>用量分析看板</span>
         </button>
-        <button id="mainTabBtn-playground" onclick="switchMainTab('playground')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition">
+        <button id="mainTabBtn-playground" onclick="switchMainTab('playground')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition whitespace-nowrap">
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           <span>在线调试 & 流水</span>
         </button>
-        <button id="mainTabBtn-users" onclick="switchMainTab('users')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition hidden">
+        <button id="mainTabBtn-users" onclick="switchMainTab('users')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition hidden whitespace-nowrap">
           <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
           <span>用户权限管理</span>
-        </button>
-      </div>
-
-      <!-- Quick Action Right in Tab Bar -->
-      <div class="hidden sm:flex items-center gap-2">
-        <button onclick="refreshData()" title="手动刷新" class="px-3 py-1.5 text-xs text-slate-400 hover:text-white bg-slate-900 border border-slate-800 rounded-xl transition flex items-center gap-1.5">
-          <svg id="refreshIcon2" class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
-          <span>刷新</span>
         </button>
       </div>
     </div>
@@ -291,18 +283,31 @@
             <p class="text-xs text-slate-400 mt-0.5">支持跨域自动轮询、故障自愈、积分跟踪与生命周期监控</p>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex flex-wrap items-center gap-2">
+            <!-- Account Pool Specific Actions -->
+            <button onclick="openOAuthModal('cn')" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
+              <span>授权国内版</span>
+            </button>
+            <button onclick="openOAuthModal('global')" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
+              <span>授权国际版</span>
+            </button>
+            <button onclick="openImportModal()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10"/></svg>
+              <span>导入凭证</span>
+            </button>
             <a href="/ui/action/backup" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="将 auths 目录下所有凭证打包为 ZIP 下载备份">
               <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
               <span>备份导出</span>
             </a>
-            <button onclick="runBatchSignin()" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+            <button onclick="runBatchSignin()" class="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              <span>一键日常签到</span>
+              <span>日常签到</span>
             </button>
-            <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+            <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 hover:text-teal-300 border border-teal-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
               <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2"/></svg>
-              <span>领取国际试用包</span>
+              <span>领取试用包</span>
             </button>
           </div>
         </div>
@@ -1012,6 +1017,21 @@
 
     let hasWebPassword = false;
     let currentActiveTab = 'accounts';
+
+    function toggleHeaderAuthMenu() {
+      const menu = document.getElementById('headerAuthDropdown');
+      if (menu) menu.classList.toggle('hidden');
+    }
+
+    document.addEventListener('click', function(e) {
+      const menu = document.getElementById('headerAuthDropdown');
+      const btn = document.getElementById('btnHeaderAuthMenu');
+      if (menu && !menu.classList.contains('hidden')) {
+        if (!menu.contains(e.target) && !btn.contains(e.target)) {
+          menu.classList.add('hidden');
+        }
+      }
+    });
 
     function switchMainTab(tab) {
       if (tab === 'users') {
