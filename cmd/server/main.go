@@ -271,6 +271,9 @@ func main() {
 		log.Printf("夜猫子任务已启用：%v 点（task_runner.py ALL --yes --only black_cat）", cfg.Schedule.CatHours)
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
@@ -287,10 +290,9 @@ func main() {
 		AdminEnabled: cfg.Admin.Enabled,
 		ConfigPath:   *cfgPath,
 		WebPassword:  cfg.WebPassword,
+		StopFunc:     stop,
 	})
 
-	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	defer stop()
 	go sch.Run(ctx)
 
 	srv := &http.Server{

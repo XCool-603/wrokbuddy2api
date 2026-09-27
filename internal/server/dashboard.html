@@ -105,6 +105,10 @@
             <span class="px-2 py-0.5 text-[10px] font-semibold bg-gradient-to-r from-indigo-500/20 to-purple-500/20 text-indigo-300 border border-indigo-500/30 rounded-full tracking-wide">
               CN + GLOBAL PRO
             </span>
+            <button id="versionBadgeBtn" onclick="checkAppUpdate(true)" title="点击检查更新" class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-slate-800 text-slate-400 border border-slate-700 hover:border-indigo-500 transition flex items-center gap-1">
+              <span id="appVersionText">v1.0.6</span>
+              <span id="updateAvailableDot" class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping hidden"></span>
+            </button>
           </div>
           <p class="text-[11px] text-slate-400 font-mono">国内企微 / 国际多模型统一调度中枢</p>
         </div>
@@ -772,6 +776,56 @@
     </div>
   </div>
 
+  <!-- System Update Modal -->
+  <div id="updateModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden space-y-4">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <h3 class="text-base font-bold text-white flex items-center gap-2">
+          <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          <span>系统更新检查</span>
+        </h3>
+        <button onclick="closeUpdateModal()" class="text-slate-400 hover:text-white transition">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+
+      <!-- Checking State -->
+      <div id="updateStateChecking" class="text-center py-8 space-y-3">
+        <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent"></div>
+        <p class="text-xs text-slate-300 font-medium">正在连接 GitHub 检查最新发布版本...</p>
+      </div>
+
+      <!-- Result State -->
+      <div id="updateStateResult" class="space-y-4 hidden">
+        <div class="flex items-center justify-between p-3.5 bg-slate-900/60 rounded-xl border border-slate-800">
+          <div>
+            <div class="text-xs text-slate-400">当前版本: <span id="updateModalCurVer" class="font-mono text-slate-200">v1.0.6</span></div>
+            <div class="text-sm font-bold text-white mt-0.5">最新版本: <span id="updateModalLatestVer" class="font-mono text-indigo-400">v1.0.6</span></div>
+          </div>
+          <div id="updateStatusBadge" class="text-xs font-semibold px-3 py-1 rounded-full"></div>
+        </div>
+
+        <div id="updateNotesBox" class="p-3.5 bg-slate-950/80 rounded-xl border border-slate-800 text-xs text-slate-300 max-h-48 overflow-y-auto custom-scroll whitespace-pre-wrap font-mono leading-relaxed hidden"></div>
+
+        <div id="updateDockerTip" class="p-3 bg-amber-500/10 border border-amber-500/20 rounded-xl text-amber-300 text-xs leading-relaxed hidden">
+          🐳 <b>检测到当前为 Docker 容器部署：</b><br>
+          在宿主机执行以下命令即可平滑更新，数据自动保留：<br>
+          <code class="block mt-1 p-2 bg-slate-900 rounded font-mono text-[11px] text-amber-200 select-all">git pull origin main && docker compose up -d --build</code>
+        </div>
+
+        <div id="updateErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
+        <div id="updateSuccessMsg" class="text-xs text-emerald-400 font-mono hidden"></div>
+      </div>
+
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
+        <button onclick="closeUpdateModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white transition">关闭</button>
+        <button id="btnDoUpdate" onclick="triggerAppUpdate()" class="px-5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-indigo-600/25 transition hidden">
+          一键自动升级并重启
+        </button>
+      </div>
+    </div>
+  </div>
+
   <script>
     let currentRealm = 'cn';
     let currentOAuthUrl = '';
@@ -805,6 +859,11 @@
 
         hasWebPassword = !!data.hasPassword;
         updatePasswordBadge(hasWebPassword);
+
+        if (data.currentVersion) {
+          const verEl = document.getElementById('appVersionText');
+          if (verEl) verEl.innerText = data.currentVersion;
+        }
 
         document.getElementById('statTotal').innerText = data.status.total || 0;
         document.getElementById('statHealthy').innerText = data.status.healthy || 0;
@@ -1705,9 +1764,132 @@
       }
     }
 
+    function closeUpdateModal() {
+      document.getElementById('updateModal').classList.add('hidden');
+    }
+
+    async function checkAppUpdate(isManual) {
+      if (isManual) {
+        document.getElementById('updateModal').classList.remove('hidden');
+        document.getElementById('updateStateChecking').classList.remove('hidden');
+        document.getElementById('updateStateResult').classList.add('hidden');
+        document.getElementById('updateErrorMsg').classList.add('hidden');
+        document.getElementById('updateSuccessMsg').classList.add('hidden');
+      }
+
+      try {
+        const res = await fetch('/ui/system/update/check');
+        const data = await res.json();
+        
+        const dot = document.getElementById('updateAvailableDot');
+        if (data.has_update) {
+          if (dot) dot.classList.remove('hidden');
+        } else {
+          if (dot) dot.classList.add('hidden');
+        }
+
+        if (isManual) {
+          document.getElementById('updateStateChecking').classList.add('hidden');
+          document.getElementById('updateStateResult').classList.remove('hidden');
+
+          document.getElementById('updateModalCurVer').innerText = data.current_version || 'v1.0.6';
+          document.getElementById('updateModalLatestVer').innerText = data.latest_version || data.current_version;
+
+          const badge = document.getElementById('updateStatusBadge');
+          const notesBox = document.getElementById('updateNotesBox');
+          const dockerTip = document.getElementById('updateDockerTip');
+          const btnDo = document.getElementById('btnDoUpdate');
+
+          if (data.has_update) {
+            badge.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-indigo-500/20 text-indigo-400 border border-indigo-500/30';
+            badge.innerText = '发现新版本！';
+
+            if (data.release_notes) {
+              notesBox.innerText = '更新说明：\n' + data.release_notes;
+              notesBox.classList.remove('hidden');
+            } else {
+              notesBox.classList.add('hidden');
+            }
+
+            if (data.is_docker) {
+              dockerTip.classList.remove('hidden');
+              btnDo.classList.add('hidden');
+            } else {
+              dockerTip.classList.add('hidden');
+              btnDo.classList.remove('hidden');
+            }
+          } else {
+            badge.className = 'text-xs font-semibold px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30';
+            badge.innerText = '当前已是最新版';
+            notesBox.classList.add('hidden');
+            dockerTip.classList.add('hidden');
+            btnDo.classList.add('hidden');
+          }
+
+          if (data.error) {
+            const errEl = document.getElementById('updateErrorMsg');
+            errEl.innerText = data.error;
+            errEl.classList.remove('hidden');
+          }
+        }
+      } catch (err) {
+        if (isManual) {
+          document.getElementById('updateStateChecking').classList.add('hidden');
+          document.getElementById('updateStateResult').classList.remove('hidden');
+          const errEl = document.getElementById('updateErrorMsg');
+          errEl.innerText = '检查更新失败: ' + err;
+          errEl.classList.remove('hidden');
+        }
+      }
+    }
+
+    async function triggerAppUpdate() {
+      if (!confirm('确定立即升级到最新版本吗？升级后程序将自动重启生效。')) return;
+
+      const btn = document.getElementById('btnDoUpdate');
+      const errEl = document.getElementById('updateErrorMsg');
+      const succEl = document.getElementById('updateSuccessMsg');
+
+      errEl.classList.add('hidden');
+      succEl.classList.add('hidden');
+
+      btn.disabled = true;
+      btn.innerText = '正在下载更新包并替换...';
+
+      try {
+        const res = await fetch('/ui/system/update/do', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          succEl.innerText = data.message || '更新包就绪，即将重启！';
+          succEl.classList.remove('hidden');
+          btn.innerText = '正在重启中...';
+          // 3秒后尝试重载页面
+          setTimeout(() => {
+            setInterval(() => {
+              fetch('/healthz').then(r => {
+                if (r.ok) location.reload();
+              }).catch(() => {});
+            }, 1000);
+          }, 3000);
+        } else {
+          errEl.innerText = data.error || '更新失败';
+          errEl.classList.remove('hidden');
+          btn.disabled = false;
+          btn.innerText = '一键自动升级并重启';
+        }
+      } catch (err) {
+        errEl.innerText = '网络连接或升级异常: ' + err;
+        errEl.classList.remove('hidden');
+        btn.disabled = false;
+        btn.innerText = '一键自动升级并重启';
+      }
+    }
+
     // Init
     refreshData();
     setInterval(refreshData, 8000);
+    // 首次加载后静默检查是否有更新
+    setTimeout(() => checkAppUpdate(false), 2000);
   </script>
 </body>
 </html>

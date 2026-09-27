@@ -57,6 +57,9 @@ type Config struct {
 
 	// WebPassword 控制台访问密码（非空时启用 WebUI 登录鉴权，空则单机免密）
 	WebPassword string
+
+	// StopFunc 终止服务上下文（用于升级完成后触发优雅重启或退出）
+	StopFunc func()
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -77,6 +80,9 @@ const wafCooldownBase = 60 * time.Second
 // 宿主（如 workbuddy-switch 托管网关子进程）探测同端口的旧服务/其他服务时，对方即使
 // 返回 2xx 也不带本标识，宿主据此可识别"假成功"。
 const ServiceName = "workbuddy2api"
+
+// CurrentVersion 当前发布版本
+const CurrentVersion = "v1.0.6"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
