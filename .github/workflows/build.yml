@@ -11,6 +11,7 @@ on:
     - cron: '23 4 * * *'
   workflow_dispatch:
   push:
+    branches: ['main']
     tags: ['v*'] # 打 tag 也触发发布
 
 permissions:

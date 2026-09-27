@@ -2,6 +2,8 @@ name: Release Desktop Binary
 
 on:
   push:
+    branches:
+      - 'main'
     tags:
       - 'v*'
   workflow_dispatch:

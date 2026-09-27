@@ -76,6 +76,15 @@ cp config.example.json config.json
 docker compose up -d --build
 ```
 
+**更新到最新版本（无缝平滑升级，保留已有账号与数据）**：
+```bash
+# 1. 拉取最新代码
+git pull origin main
+
+# 2. 重新编译镜像并重启容器
+docker compose up -d --build
+```
+
 **Docker 常用管理命令**：
 ```bash
 # 查看容器日志
