@@ -89,7 +89,7 @@ func verifyNode(nodePath string) bool {
 	return strings.HasPrefix(ver, "v")
 }
 
-// verifyNpx 检查 npx 或 npx-cli.js 是否存在并具备基本可运行性
+// verifyNpx 检查 npx 或 npx-cli.js 是否存在并具备真实可运行性
 func verifyNpx(nodePath, npxPath string) bool {
 	if npxPath == "" {
 		return false
@@ -98,20 +98,26 @@ func verifyNpx(nodePath, npxPath string) bool {
 	if err != nil || fi.IsDir() {
 		return false
 	}
-	// 如果提供了有效的 nodePath，通过 node 运行 npx 来严格校验（避免 symlink 断裂或无执行权限假阳性）
+	// 1. 若提供了有效 nodePath，尝试通过 node 运行 npx / npx-cli.js 严格验证
 	if nodePath != "" && verifyNode(nodePath) {
 		cmd := exec.Command(nodePath, npxPath, "--version")
 		if err := cmd.Run(); err == nil {
 			return true
 		}
 	}
-	// 备选：如果直接是可执行文件且单独执行正常
+	// 2. 尝试作为独立二进制 / 脚本直接运行验证
 	cmd := exec.Command(npxPath, "--version")
 	if err := cmd.Run(); err == nil {
 		return true
 	}
-	// Windows 脚本或普通文件基本存在性保底
-	return true
+	// 3. 在 Windows 平台上，对 .cmd / .bat 脚本若包含内容允许通过（避免 cmd 找不到 node 时的临时判断）
+	if runtime.GOOS == "windows" {
+		ext := strings.ToLower(filepath.Ext(npxPath))
+		if (ext == ".cmd" || ext == ".bat" || ext == ".ps1") && fi.Size() > 0 {
+			return true
+		}
+	}
+	return false
 }
 
 // isMuslLinux 检测当前环境是否为 Linux musl (如 Alpine 容器)
@@ -257,14 +263,15 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 			}
 		}
 
-		// 如果 candNpx 找不到或者验证失败，尝试在本地运行时中查找 npm 的 npx-cli.js
+		// 在本地绿色运行时中，npx-cli.js 是通过 node 直接执行的最稳妥方式（不受 symlink 断裂或 shebang 影响）
 		if candNode != "" && verifyNode(candNode) {
+			// 1. 优先尝试本地自带的 npm/bin/npx-cli.js
+			if npxCli := findNpxCliJs(localDir); npxCli != "" && verifyNpx(candNode, npxCli) {
+				return candNode, npxCli, true
+			}
+			// 2. 尝试常规 npx 可执行文件
 			if candNpx != "" && verifyNpx(candNode, candNpx) {
 				return candNode, candNpx, true
-			}
-			npxCli := findNpxCliJs(localDir)
-			if npxCli != "" && verifyNpx(candNode, npxCli) {
-				return candNode, npxCli, true
 			}
 		}
 	}
@@ -428,6 +435,37 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	m.appendLog(fmt.Sprintf("启动 DeepSeek Harness (端口: %d)...", m.port))
 
 	if err := cmd.Start(); err != nil {
+		// 若因 shebang / symlink 断裂报错 no such file or directory，尝试使用 node 寻找 npx-cli.js 保底启动
+		if !strings.HasSuffix(strings.ToLower(npxExe), ".js") {
+			m.appendLog(fmt.Sprintf("直接启动 %s 异常: %v，尝试通过 node 脚本引擎启动...", filepath.Base(npxExe), err))
+			var fallbackCli string
+			localDir := m.localBinDir()
+			if fc := findNpxCliJs(localDir); fc != "" {
+				fallbackCli = fc
+			} else {
+				sysBase := filepath.Dir(filepath.Dir(nodeExe))
+				fallbackCli = findNpxCliJs(sysBase)
+			}
+			if fallbackCli != "" {
+				fullArgs := append([]string{fallbackCli}, dshArgs...)
+				fallbackCmd := exec.CommandContext(ctx, nodeExe, fullArgs...)
+				fallbackCmd.Dir = m.workDir
+				fallbackCmd.Env = env
+				if startErr := fallbackCmd.Start(); startErr == nil {
+					m.cmd = fallbackCmd
+					m.appendLog("已通过 Node.js 引擎成功启动 DeepSeek Harness")
+					go func() {
+						_ = fallbackCmd.Wait()
+						m.mu.Lock()
+						defer m.mu.Unlock()
+						m.running = false
+						m.appendLog("DeepSeek Harness 进程已退出")
+					}()
+					return nil
+				}
+			}
+		}
+
 		m.running = false
 		m.cancel = nil
 		m.cmd = nil
