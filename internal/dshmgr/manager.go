@@ -75,11 +75,69 @@ func (m *Manager) appendLog(msg string) {
 	}
 }
 
-// findExecutableInDir 在指定根目录及子目录中查找指定名称的可执行文件
+// verifyNode 实际调用 node -v 验证是否能在当前系统环境中正常执行
+func verifyNode(nodePath string) bool {
+	if nodePath == "" {
+		return false
+	}
+	cmd := exec.Command(nodePath, "-v")
+	out, err := cmd.CombinedOutput()
+	if err != nil {
+		return false
+	}
+	ver := strings.TrimSpace(string(out))
+	return strings.HasPrefix(ver, "v")
+}
+
+// verifyNpx 检查 npx 是否存在并具备基本可执行性
+func verifyNpx(npxPath string) bool {
+	if npxPath == "" {
+		return false
+	}
+	fi, err := os.Stat(npxPath)
+	if err != nil || fi.IsDir() {
+		return false
+	}
+	return true
+}
+
+// isMuslLinux 检测当前环境是否为 Linux musl (如 Alpine 容器)
+func isMuslLinux() bool {
+	if runtime.GOOS != "linux" {
+		return false
+	}
+	if _, err := os.Stat("/etc/alpine-release"); err == nil {
+		return true
+	}
+	// 检查常见的 musl 动态链接器
+	muslPatterns := []string{
+		"/lib/ld-musl-x86_64.so.1",
+		"/lib/ld-musl-aarch64.so.1",
+		"/lib/ld-musl-armhf.so.1",
+	}
+	for _, p := range muslPatterns {
+		if _, err := os.Stat(p); err == nil {
+			return true
+		}
+	}
+	return false
+}
+
+// findExecutableInDir 在指定根目录及子目录中查找指定名称的可执行文件，跳过 node_modules 和无关 shims 目录
 func findExecutableInDir(rootDir string, targetNames ...string) string {
 	var foundPath string
 	_ = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
 		if err != nil || foundPath != "" {
+			return nil
+		}
+		cleanPath := filepath.ToSlash(path)
+		// 忽略 node_modules、corepack shims、nodewin 等内部脚本目录
+		if strings.Contains(cleanPath, "/node_modules/") ||
+			strings.Contains(cleanPath, "/nodewin/") ||
+			strings.Contains(cleanPath, "/shims/") {
+			if info.IsDir() {
+				return filepath.SkipDir
+			}
 			return nil
 		}
 		if !info.IsDir() {
@@ -97,13 +155,13 @@ func findExecutableInDir(rootDir string, targetNames ...string) string {
 }
 
 // resolveNodeNpx 查找可用 node 与 npx 的绝对路径或可执行文件名。
-// 优先查找本地绿色运行时目录，若无则查找系统全局 PATH。
+// 优先查找并验证本地绿色运行时目录，若本地运行时不存在或执行失败（如 musl/glibc 不兼容），则自动平滑回退到系统全局 PATH。
 func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 	localDir := m.localBinDir()
 
 	if _, err := os.Stat(localDir); err == nil {
+		var candNode, candNpx string
 		if runtime.GOOS == "windows" {
-			// Windows 下首先直接检查常见层级
 			candidatesNode := []string{
 				filepath.Join(localDir, "node.exe"),
 				filepath.Join(localDir, "bin", "node.exe"),
@@ -115,25 +173,23 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 			}
 			for _, c := range candidatesNode {
 				if _, err := os.Stat(c); err == nil {
-					nodePath = c
+					candNode = c
 					break
 				}
 			}
 			for _, c := range candidatesNpx {
 				if _, err := os.Stat(c); err == nil {
-					npxPath = c
+					candNpx = c
 					break
 				}
 			}
-			// 如果没在标准位置找到，进行目录递归查找
-			if nodePath == "" {
-				nodePath = findExecutableInDir(localDir, "node.exe")
+			if candNode == "" {
+				candNode = findExecutableInDir(localDir, "node.exe")
 			}
-			if npxPath == "" {
-				npxPath = findExecutableInDir(localDir, "npx.cmd", "npx")
+			if candNpx == "" {
+				candNpx = findExecutableInDir(localDir, "npx.cmd", "npx")
 			}
 		} else {
-			// Linux / macOS
 			candidatesNode := []string{
 				filepath.Join(localDir, "bin", "node"),
 				filepath.Join(localDir, "node"),
@@ -144,30 +200,31 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 			}
 			for _, c := range candidatesNode {
 				if _, err := os.Stat(c); err == nil {
-					nodePath = c
+					candNode = c
 					break
 				}
 			}
 			for _, c := range candidatesNpx {
 				if _, err := os.Stat(c); err == nil {
-					npxPath = c
+					candNpx = c
 					break
 				}
 			}
-			if nodePath == "" {
-				nodePath = findExecutableInDir(localDir, "node")
+			if candNode == "" {
+				candNode = findExecutableInDir(localDir, "node")
 			}
-			if npxPath == "" {
-				npxPath = findExecutableInDir(localDir, "npx")
+			if candNpx == "" {
+				candNpx = findExecutableInDir(localDir, "npx")
 			}
 		}
 
-		if nodePath != "" && npxPath != "" {
-			return nodePath, npxPath, true
+		// 关键：验证本地 node 是否能在本机真正执行（排除动态链接库缺失、glibc 不兼容等假阳性）
+		if candNode != "" && candNpx != "" && verifyNode(candNode) && verifyNpx(candNpx) {
+			return candNode, candNpx, true
 		}
 	}
 
-	// 查找系统全局 PATH
+	// 查找系统全局 PATH 并验证
 	sysNode, errNode := exec.LookPath("node")
 	if errNode == nil {
 		npxName := "npx"
@@ -178,7 +235,7 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 		if errNpx != nil && runtime.GOOS == "windows" {
 			sysNpx, errNpx = exec.LookPath("npx")
 		}
-		if errNpx == nil {
+		if errNpx == nil && verifyNode(sysNode) && verifyNpx(sysNpx) {
 			return sysNode, sysNpx, true
 		}
 	}
@@ -408,7 +465,13 @@ func (m *Manager) doInstall() error {
 		if goarch == "arm64" {
 			arch = "arm64"
 		}
-		archiveName = fmt.Sprintf("node-%s-linux-%s.tar.gz", nodeVersion, arch)
+		// 检测是否为 musl / Alpine Linux 环境
+		isMusl := isMuslLinux()
+		if isMusl {
+			archiveName = fmt.Sprintf("node-%s-linux-%s-musl.tar.gz", nodeVersion, arch)
+		} else {
+			archiveName = fmt.Sprintf("node-%s-linux-%s.tar.gz", nodeVersion, arch)
+		}
 		isZip = false
 	case "darwin":
 		arch := "x64"
@@ -421,9 +484,17 @@ func (m *Manager) doInstall() error {
 		return fmt.Errorf("不支持的操作系统: %s", goos)
 	}
 
-	urls := []string{
-		fmt.Sprintf("https://npmmirror.com/mirrors/node/%s/%s", nodeVersion, archiveName),
-		fmt.Sprintf("https://nodejs.org/dist/%s/%s", nodeVersion, archiveName),
+	var urls []string
+	if strings.Contains(archiveName, "musl") {
+		urls = []string{
+			fmt.Sprintf("https://npmmirror.com/mirrors/node-unofficial-builds/%s/%s", nodeVersion, archiveName),
+			fmt.Sprintf("https://unofficial-builds.nodejs.org/download/release/%s/%s", nodeVersion, archiveName),
+		}
+	} else {
+		urls = []string{
+			fmt.Sprintf("https://npmmirror.com/mirrors/node/%s/%s", nodeVersion, archiveName),
+			fmt.Sprintf("https://nodejs.org/dist/%s/%s", nodeVersion, archiveName),
+		}
 	}
 
 	targetDir := m.localBinDir()
@@ -518,16 +589,26 @@ func (m *Manager) doInstall() error {
 	if !hasNode || !hasNpx {
 		nodePath, npxPath, _ := m.resolveNodeNpx()
 		var testErr error
-		if nodePath != "" {
-			cmd := exec.Command(nodePath, "-v")
+		candNode := nodePath
+		if candNode == "" {
+			if runtime.GOOS == "windows" {
+				candNode = filepath.Join(targetDir, "node.exe")
+			} else {
+				candNode = filepath.Join(targetDir, "bin", "node")
+			}
+		}
+		if _, statErr := os.Stat(candNode); statErr == nil {
+			cmd := exec.Command(candNode, "-v")
 			var out []byte
 			out, testErr = cmd.CombinedOutput()
 			if testErr == nil {
 				ver = strings.TrimSpace(string(out))
 			}
+		} else {
+			testErr = statErr
 		}
 		errMsg := fmt.Sprintf("解压完成但验证运行失败 (Node: %v, Npx: %v, NodePath: %s, NpxPath: %s, Err: %v)",
-			hasNode, hasNpx, nodePath, npxPath, testErr)
+			hasNode, hasNpx, candNode, npxPath, testErr)
 		m.mu.Lock()
 		m.appendLog(errMsg)
 		m.mu.Unlock()
@@ -645,6 +726,15 @@ func untargz(src, dest string) error {
 				return err
 			}
 			outFile.Close()
+		case tar.TypeSymlink:
+			_ = os.MkdirAll(filepath.Dir(fpath), 0755)
+			_ = os.Remove(fpath) // 移除已存在目标防止创建失败
+			// 验证软链目标相对路径安全
+			linkTarget := header.Linkname
+			if err := os.Symlink(linkTarget, fpath); err != nil {
+				// Windows 或特殊文件系统如果不支持软链接，忽略或降级
+				_ = err
+			}
 		}
 	}
 	return nil
@@ -660,6 +750,16 @@ func copyDir(src, dst string) error {
 			return err
 		}
 		target := filepath.Join(dst, rel)
+		// 如果是软链接，尝试复制软链接本身
+		if info.Mode()&os.ModeSymlink != 0 {
+			if linkTarget, lErr := os.Readlink(path); lErr == nil {
+				_ = os.MkdirAll(filepath.Dir(target), 0755)
+				_ = os.Remove(target)
+				if sErr := os.Symlink(linkTarget, target); sErr == nil {
+					return nil
+				}
+			}
+		}
 		if info.IsDir() {
 			return os.MkdirAll(target, info.Mode())
 		}
