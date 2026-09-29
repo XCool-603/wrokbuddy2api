@@ -1583,17 +1583,19 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
-		"supported":    true,
-		"installed":    st.Installed,
-		"node_version": st.NodeVersion,
-		"npx_found":    st.NpxFound,
-		"running":      st.Running,
-		"port":         st.Port,
-		"web_url":      st.WebURL,
-		"started_at":   st.StartedAt,
-		"logs":         st.Logs,
-		"gateway_url":  gatewayURL,
-		"api_key":      apiKey,
+		"supported":        true,
+		"installed":        st.Installed,
+		"node_version":     st.NodeVersion,
+		"npx_found":        st.NpxFound,
+		"running":          st.Running,
+		"external_running": st.ExternalRunning,
+		"is_docker":        isDockerEnvironment(),
+		"port":             st.Port,
+		"web_url":          st.WebURL,
+		"started_at":       st.StartedAt,
+		"logs":             st.Logs,
+		"gateway_url":      gatewayURL,
+		"api_key":          apiKey,
 	})
 }
 

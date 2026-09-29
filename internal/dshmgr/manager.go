@@ -41,14 +41,15 @@ func New(workDir string) *Manager {
 
 // Status 返回 DSH 当前运行状态及环境信息。
 type Status struct {
-	Installed   bool     `json:"installed"`
-	NodeVersion string   `json:"node_version,omitempty"`
-	NpxFound    bool     `json:"npx_found"`
-	Running     bool     `json:"running"`
-	Port        int      `json:"port"`
-	WebURL      string   `json:"web_url,omitempty"`
-	StartedAt   string   `json:"started_at,omitempty"`
-	Logs        []string `json:"logs,omitempty"`
+	Installed       bool     `json:"installed"`
+	NodeVersion     string   `json:"node_version,omitempty"`
+	NpxFound        bool     `json:"npx_found"`
+	Running         bool     `json:"running"`
+	ExternalRunning bool     `json:"external_running"`
+	Port            int      `json:"port"`
+	WebURL          string   `json:"web_url,omitempty"`
+	StartedAt       string   `json:"started_at,omitempty"`
+	Logs            []string `json:"logs,omitempty"`
 }
 
 // DetectEnv 探测宿主机 Node.js 与 npx 环境。
@@ -85,30 +86,43 @@ func (m *Manager) GetStatus() Status {
 
 	hasNode, nodeVer, hasNpx := m.DetectEnv()
 
-	// 探测端口是否通（不仅是进程在，且服务已成功监听）
-	isRunning := m.running
-	if isRunning {
-		conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", m.port), 300*time.Millisecond)
-		if err == nil {
-			_ = conn.Close()
+	// 探测端口 3080 是否通（支持本地进程或 Docker Compose / 宿主机外置独立进程）
+	portReachable := false
+	conn, err := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", m.port), 300*time.Millisecond)
+	if err == nil {
+		_ = conn.Close()
+		portReachable = true
+	}
+
+	// 尝试探测是否为容器内通过 Docker 网络互通的 dsh 服务（dsh:3080）
+	if !portReachable {
+		if dshConn, dshErr := net.DialTimeout("tcp", fmt.Sprintf("dsh:%d", m.port), 300*time.Millisecond); dshErr == nil {
+			_ = dshConn.Close()
+			portReachable = true
 		}
 	}
+
+	isRunning := m.running || portReachable
+	externalRunning := !m.running && portReachable
 
 	logsCopy := make([]string, len(m.recentLogs))
 	copy(logsCopy, m.recentLogs)
 
 	st := Status{
-		Installed:   hasNode && hasNpx,
-		NodeVersion: nodeVer,
-		NpxFound:    hasNpx,
-		Running:     m.running,
-		Port:        m.port,
-		Logs:        logsCopy,
+		Installed:       hasNode && hasNpx,
+		NodeVersion:     nodeVer,
+		NpxFound:        hasNpx,
+		Running:         isRunning,
+		ExternalRunning: externalRunning,
+		Port:            m.port,
+		Logs:            logsCopy,
 	}
-	if m.running {
+	if isRunning {
 		st.WebURL = fmt.Sprintf("http://127.0.0.1:%d", m.port)
 		if !m.startedAt.IsZero() {
 			st.StartedAt = m.startedAt.Format("2006-01-02 15:04:05")
+		} else if externalRunning {
+			st.StartedAt = "Docker / 外置服务托管中"
 		}
 	}
 	return st

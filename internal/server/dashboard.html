@@ -2830,10 +2830,13 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         if (badge) {
           if (dshIsRunning) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-            badge.innerText = '运行中 (Web 就绪)';
+            badge.innerText = data.external_running ? 'Docker / 外置运行中 (3080)' : '运行中 (Web 就绪)';
           } else if (data.installed) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
             badge.innerText = '已就绪 (未启动)';
+          } else if (data.is_docker) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
+            badge.innerText = 'Docker 容器环境 (支持 Compose 联动)';
           } else {
             badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
             badge.innerText = '未检测到 Node.js 环境';
@@ -2846,6 +2849,9 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           if (data.node_version) {
             envInfo.innerText = `${data.node_version} (npx 就绪)`;
             envInfo.className = 'font-bold text-emerald-400';
+          } else if (data.is_docker) {
+            envInfo.innerText = 'Docker 环境（使用 docker compose --profile agent 零依赖运行）';
+            envInfo.className = 'font-bold text-cyan-400';
           } else {
             envInfo.innerText = '未安装 Node.js';
             envInfo.className = 'font-bold text-amber-400';
@@ -2869,7 +2875,13 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
 
         if (dshIsRunning) {
           if (btnStart) btnStart.classList.add('hidden');
-          if (btnStop) btnStop.classList.remove('hidden');
+          if (btnStop) {
+            if (data.external_running) {
+              btnStop.classList.add('hidden'); // 外置容器或独立进程由外部管理
+            } else {
+              btnStop.classList.remove('hidden');
+            }
+          }
           if (btnExternal) btnExternal.classList.remove('hidden');
           if (iframeContainer) iframeContainer.classList.remove('hidden');
           if (guideContainer) guideContainer.classList.add('hidden');
@@ -2878,7 +2890,18 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
             iframe.src = dshCurrentUrl;
           }
         } else {
-          if (btnStart) btnStart.classList.remove('hidden');
+          if (btnStart) {
+            btnStart.classList.remove('hidden');
+            if (data.is_docker && !data.installed) {
+              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span>Docker 模式启动指引</span>`;
+              btnStart.onclick = function() {
+                alert('【Docker 部署提示】\n当前程序正运行于 Docker 容器中。\n为实现零依赖运行，请在服务器/宝塔项目目录下执行：\n\n  docker compose --profile agent up -d\n\n启动后本页面将自动无缝嵌入 dsh 界面！');
+              };
+            } else {
+              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>一键启动 dsh</span>`;
+              btnStart.onclick = startDsh;
+            }
+          }
           if (btnStop) btnStop.classList.add('hidden');
           if (btnExternal) btnExternal.classList.add('hidden');
           if (iframeContainer) iframeContainer.classList.add('hidden');
