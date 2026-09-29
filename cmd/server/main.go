@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"workbuddy2api/internal/auth"
+	"workbuddy2api/internal/dshmgr"
 	"workbuddy2api/internal/pool"
 	"workbuddy2api/internal/redisstore"
 	"workbuddy2api/internal/scheduler"
@@ -285,6 +286,13 @@ func main() {
 		log.Printf("WARN: [usermgr] 初始化用户数据失败: %v", err)
 	}
 
+	// 初始化 DeepSeek Harness (dsh) 进程管理器
+	dshDir := filepath.Join("./data", "dsh")
+	if cfg.StateFile != "" {
+		dshDir = filepath.Join(filepath.Dir(cfg.StateFile), "dsh")
+	}
+	dshManager := dshmgr.New(dshDir)
+
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
@@ -303,6 +311,7 @@ func main() {
 		StateFile:    cfg.StateFile,
 		WebPassword:  cfg.WebPassword,
 		UserMgr:      userMgr,
+		DshMgr:       dshManager,
 		StopFunc:     stop,
 	})
 
@@ -331,6 +340,7 @@ func main() {
 		if cErr := store.Close(); cErr != nil {
 			log.Printf("WARN: [server] redisstore close: %v", cErr)
 		}
+		dshManager.Stop()
 		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
 		_ = srv.Shutdown(shutdownCtx)

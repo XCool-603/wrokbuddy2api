@@ -186,6 +186,13 @@
           <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
           <span>在线调试 & 流水</span>
         </button>
+        <button id="mainTabBtn-dsh" onclick="switchMainTab('dsh')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition whitespace-nowrap">
+          <svg class="w-4 h-4 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+          <span class="flex items-center gap-1.5">
+            <span>Agent (dsh)</span>
+            <span id="dshNavStatusDot" class="w-1.5 h-1.5 rounded-full bg-slate-500"></span>
+          </span>
+        </button>
         <button id="mainTabBtn-users" onclick="switchMainTab('users')" class="px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-purple-400 hover:text-purple-300 hover:bg-purple-500/10 transition hidden whitespace-nowrap">
           <svg class="w-4 h-4 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
           <span>用户权限管理</span>
@@ -674,6 +681,159 @@
         </div>
       </div>
     </div>
+
+    <!-- TAB 5: DeepSeek Harness (dsh) AI Agent 运行器 -->
+    <div id="tabContent-dsh" class="space-y-6 hidden">
+      <!-- Agent Status & Controls Header -->
+      <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass relative overflow-hidden">
+        <div class="absolute -right-8 -top-8 w-40 h-40 bg-cyan-500/10 rounded-full blur-3xl pointer-events-none"></div>
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+          <div class="space-y-1">
+            <div class="flex items-center gap-2.5">
+              <h2 class="text-lg font-bold text-white flex items-center gap-2">
+                <svg class="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+                <span>DeepSeek Harness (dsh) Agent 智能体</span>
+              </h2>
+              <span id="dshStatusBadge" class="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-slate-800 text-slate-400 border border-slate-700">检测中...</span>
+            </div>
+            <p class="text-xs text-slate-400 max-w-2xl">
+              深度整合 DeepSeek 官方出品的自主编程与智能体框架 <span class="font-mono text-cyan-300">@deepseek-ai/dsh</span>。无需手动配置模型与反代，可在页面内一键操控或嵌入式直连使用，随用随启、不占多余内存。
+            </p>
+          </div>
+
+          <!-- Actions -->
+          <div class="flex flex-wrap items-center gap-2">
+            <button id="btnDshStart" onclick="startDsh()" class="px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-cyan-600/20 transition flex items-center gap-1.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span>一键启动 dsh</span>
+            </button>
+            <button id="btnDshStop" onclick="stopDsh()" class="px-4 py-2 bg-rose-600/20 hover:bg-rose-600 text-rose-300 hover:text-white border border-rose-500/30 text-xs font-semibold rounded-xl transition flex items-center gap-1.5 hidden">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 10a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"/></svg>
+              <span>停止服务</span>
+            </button>
+            <button id="btnDshOpenWindow" onclick="openDshExternal()" class="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl border border-slate-700 transition flex items-center gap-1.5 hidden">
+              <span>独立新窗口打开</span>
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
+            </button>
+            <button onclick="fetchDshStatus(true)" title="刷新状态" class="p-2 text-slate-400 hover:text-white bg-slate-800 border border-slate-700 rounded-xl transition">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Environment & Config Summary Bar -->
+        <div class="mt-4 pt-4 border-t border-slate-800/80 grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs font-mono">
+          <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800 flex items-center justify-between">
+            <span class="text-slate-400">Node / npx 环境:</span>
+            <span id="dshEnvInfo" class="font-bold text-slate-200">检测中</span>
+          </div>
+          <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800 flex items-center justify-between">
+            <span class="text-slate-400">上游网关 BaseURL:</span>
+            <span id="dshGatewayURL" class="text-indigo-400 truncate max-w-[160px]">http://127.0.0.1:7863/v1</span>
+          </div>
+          <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800 flex items-center justify-between">
+            <span class="text-slate-400">监听服务端口:</span>
+            <span id="dshPortText" class="text-emerald-400 font-bold">3080</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Iframe View Area (When Running) -->
+      <div id="dshIframeContainer" class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-2xl hidden" style="height: 720px;">
+        <div class="p-2.5 bg-slate-900 border-b border-slate-800 flex items-center justify-between text-xs font-mono">
+          <div class="flex items-center gap-2">
+            <span class="w-3 h-3 rounded-full bg-rose-500/80 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-amber-500/80 inline-block"></span>
+            <span class="w-3 h-3 rounded-full bg-emerald-500/80 inline-block"></span>
+            <span class="text-slate-400 ml-2">DeepSeek Harness UI (<span id="dshIframeUrlText">http://127.0.0.1:3080</span>)</span>
+          </div>
+          <button onclick="reloadDshIframe()" class="text-slate-400 hover:text-white flex items-center gap-1">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span>刷新页面</span>
+          </button>
+        </div>
+        <iframe id="dshIframe" src="" class="w-full h-[calc(100%-41px)] border-0 bg-white dark:bg-slate-950"></iframe>
+      </div>
+
+      <!-- Not Running / Guide Area -->
+      <div id="dshGuideContainer" class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        <!-- Card 1: Fast Start Guide -->
+        <div class="glass-panel rounded-2xl border border-slate-800 p-6 space-y-4">
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+            <span>什么是 DeepSeek Harness (dsh)？</span>
+          </h3>
+          <p class="text-xs text-slate-300 leading-relaxed">
+            <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" class="text-cyan-400 hover:underline">DeepSeek Harness</a> 是 DeepSeek 官方研发的终端与网页多功能 Agent 评测与自动化智能体框架。
+          </p>
+          <div class="space-y-2 text-xs text-slate-400">
+            <div class="flex items-start gap-2">
+              <span class="text-emerald-400 font-bold">✔</span>
+              <span><b>自动配置与无缝中继：</b> WorkBuddy2API 会自动注入当前高权重账号池与统一 BaseURL，无需手动寻找密钥或修改代码。</span>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="text-emerald-400 font-bold">✔</span>
+              <span><b>纯净零残留：</b> 本项目二进制仅 10MB，无需在宿主机额外打包数百兆前端或庞大依赖。随点随启、按需加载。</span>
+            </div>
+            <div class="flex items-start gap-2">
+              <span class="text-emerald-400 font-bold">✔</span>
+              <span><b>随时停止：</b> 点击"停止服务"立即回收进程与端口，轻量安心。</span>
+            </div>
+          </div>
+
+          <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800 text-xs space-y-2 font-mono">
+            <div class="text-slate-400 font-medium">若您不想在当前电脑运行 Node.js：</div>
+            <p class="text-slate-500 font-sans">
+              您完全可以<b>不安装任何东西</b>！通过 Docker 容器或在远程机器上单行命令接入此 WorkBuddy2API 即可。
+            </p>
+          </div>
+        </div>
+
+        <!-- Card 2: Manual / Standalone Launch Guide -->
+        <div class="glass-panel rounded-2xl border border-slate-800 p-6 space-y-4">
+          <div class="flex items-center justify-between">
+            <h3 class="text-base font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+              <span>外置 / 跨机器 / Docker 快捷接入</span>
+            </h3>
+            <button onclick="exportDshEnv()" class="text-xs text-cyan-400 hover:text-cyan-300 hover:underline font-mono">生成 .env 配置文件</button>
+          </div>
+          <p class="text-xs text-slate-400 leading-relaxed">
+            如需在其他终端、独立服务器或 Docker 容器中使用 dsh，复制下方环境变量即可直连本网关：
+          </p>
+
+          <div class="relative group">
+            <pre id="dshEnvCode" class="p-3 bg-slate-950 rounded-xl border border-slate-800 text-[11px] font-mono text-cyan-300 overflow-x-auto custom-scroll">
+# 快捷终端执行（跨平台单行命令）
+OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" npx @deepseek-ai/dsh web --port 3080</pre>
+            <button onclick="copyDshCmd()" class="absolute top-2 right-2 px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] rounded-lg transition font-mono">
+              复制命令
+            </button>
+          </div>
+
+          <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-xs space-y-1.5">
+            <div class="font-semibold text-white">Docker 一键组合启动</div>
+            <p class="text-slate-400 text-[11px] font-mono leading-relaxed">
+              docker compose --profile agent up -d
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live Logs Card -->
+      <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-3">
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-3">
+          <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
+            <span>dsh 运行过程与日志输出</span>
+          </h3>
+          <span id="dshLogCount" class="text-xs text-slate-400 font-mono">0 条</span>
+        </div>
+        <div id="dshLogBox" class="p-3.5 bg-slate-950/90 rounded-xl border border-slate-800/80 font-mono text-[11px] text-slate-300 max-h-48 overflow-y-auto custom-scroll leading-relaxed space-y-1">
+          <div class="text-slate-500 font-sans">暂无 dsh 运行日志</div>
+        </div>
+      </div>
+    </div>
   </main>
 
   <!-- OAuth Modal -->
@@ -1072,7 +1232,7 @@
         return;
       }
       currentActiveTab = tab;
-      const tabs = ['accounts', 'access', 'analytics', 'playground'];
+      const tabs = ['accounts', 'access', 'analytics', 'playground', 'dsh'];
       for (const t of tabs) {
         const btn = document.getElementById('mainTabBtn-' + t);
         const panel = document.getElementById('tabContent-' + t);
@@ -1087,6 +1247,9 @@
           }
           if (panel) panel.classList.add('hidden');
         }
+      }
+      if (tab === 'dsh') {
+        fetchDshStatus(false);
       }
     }
 
@@ -2641,9 +2804,202 @@
       }
     }
 
+    // --- DeepSeek Harness (dsh) Agent Functions ---
+    let dshCurrentUrl = '';
+    let dshIsRunning = false;
+
+    async function fetchDshStatus(manual) {
+      try {
+        const res = await fetch('/ui/dsh/status');
+        const data = await res.json();
+        if (!res.ok) return;
+
+        dshIsRunning = !!data.running;
+        dshCurrentUrl = data.web_url || 'http://127.0.0.1:' + (data.port || 3080);
+
+        // Update nav dot
+        const navDot = document.getElementById('dshNavStatusDot');
+        if (navDot) {
+          navDot.className = dshIsRunning 
+            ? 'w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse' 
+            : 'w-1.5 h-1.5 rounded-full bg-slate-500';
+        }
+
+        // Status Badge
+        const badge = document.getElementById('dshStatusBadge');
+        if (badge) {
+          if (dshIsRunning) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
+            badge.innerText = '运行中 (Web 就绪)';
+          } else if (data.installed) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
+            badge.innerText = '已就绪 (未启动)';
+          } else {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
+            badge.innerText = '未检测到 Node.js 环境';
+          }
+        }
+
+        // Env info
+        const envInfo = document.getElementById('dshEnvInfo');
+        if (envInfo) {
+          if (data.node_version) {
+            envInfo.innerText = `${data.node_version} (npx 就绪)`;
+            envInfo.className = 'font-bold text-emerald-400';
+          } else {
+            envInfo.innerText = '未安装 Node.js';
+            envInfo.className = 'font-bold text-amber-400';
+          }
+        }
+
+        // Gateway url & Port
+        const gwEl = document.getElementById('dshGatewayURL');
+        if (gwEl && data.gateway_url) gwEl.innerText = data.gateway_url;
+        const portEl = document.getElementById('dshPortText');
+        if (portEl && data.port) portEl.innerText = data.port;
+
+        // Button states
+        const btnStart = document.getElementById('btnDshStart');
+        const btnStop = document.getElementById('btnDshStop');
+        const btnExternal = document.getElementById('btnDshOpenWindow');
+        const iframeContainer = document.getElementById('dshIframeContainer');
+        const guideContainer = document.getElementById('dshGuideContainer');
+        const iframe = document.getElementById('dshIframe');
+        const iframeUrlText = document.getElementById('dshIframeUrlText');
+
+        if (dshIsRunning) {
+          if (btnStart) btnStart.classList.add('hidden');
+          if (btnStop) btnStop.classList.remove('hidden');
+          if (btnExternal) btnExternal.classList.remove('hidden');
+          if (iframeContainer) iframeContainer.classList.remove('hidden');
+          if (guideContainer) guideContainer.classList.add('hidden');
+          if (iframeUrlText) iframeUrlText.innerText = dshCurrentUrl;
+          if (iframe && (!iframe.src || iframe.src === 'about:blank')) {
+            iframe.src = dshCurrentUrl;
+          }
+        } else {
+          if (btnStart) btnStart.classList.remove('hidden');
+          if (btnStop) btnStop.classList.add('hidden');
+          if (btnExternal) btnExternal.classList.add('hidden');
+          if (iframeContainer) iframeContainer.classList.add('hidden');
+          if (guideContainer) guideContainer.classList.remove('hidden');
+        }
+
+        // Render dsh logs
+        const logBox = document.getElementById('dshLogBox');
+        const logCount = document.getElementById('dshLogCount');
+        const logs = data.logs || [];
+        if (logCount) logCount.innerText = logs.length + ' 条';
+        if (logBox) {
+          if (logs.length > 0) {
+            logBox.innerHTML = logs.map(l => `<div class="hover:text-cyan-300 transition">${escapeHtml(l)}</div>`).join('');
+            logBox.scrollTop = logBox.scrollHeight;
+          } else {
+            logBox.innerHTML = '<div class="text-slate-500 font-sans">暂无 dsh 运行日志</div>';
+          }
+        }
+
+        // Update env code snippet
+        const gw = data.gateway_url || 'http://127.0.0.1:7863/v1';
+        const key = data.api_key || 'wb2a-admin-secret';
+        const codeEl = document.getElementById('dshEnvCode');
+        if (codeEl) {
+          codeEl.innerText = `# 快捷终端执行（跨平台单行命令）\nOPENAI_BASE_URL="${gw}" OPENAI_API_KEY="${key}" npx @deepseek-ai/dsh web --port ${data.port || 3080}`;
+        }
+
+        if (manual) {
+          // If manual trigger and was starting, give feedback
+          console.log('dsh status refreshed');
+        }
+      } catch (err) {
+        console.error('获取 dsh 状态失败:', err);
+      }
+    }
+
+    async function startDsh() {
+      const btn = document.getElementById('btnDshStart');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg><span>正在启动...</span>`;
+      }
+      try {
+        const res = await fetch('/ui/dsh/start', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          setTimeout(() => fetchDshStatus(true), 1500);
+          setTimeout(() => fetchDshStatus(true), 3500);
+          setTimeout(() => fetchDshStatus(true), 6000);
+        } else {
+          alert('启动 dsh 失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('网络请求失败: ' + err);
+      } finally {
+        if (btn) {
+          btn.disabled = false;
+          btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>一键启动 dsh</span>`;
+        }
+      }
+    }
+
+    async function stopDsh() {
+      if (!confirm('确定停止当前的 DeepSeek Harness 智能体服务吗？')) return;
+      try {
+        const res = await fetch('/ui/dsh/stop', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          fetchDshStatus(true);
+        } else {
+          alert('停止失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('请求失败: ' + err);
+      }
+    }
+
+    function openDshExternal() {
+      if (dshCurrentUrl) {
+        window.open(dshCurrentUrl, '_blank');
+      }
+    }
+
+    function reloadDshIframe() {
+      const iframe = document.getElementById('dshIframe');
+      if (iframe && dshCurrentUrl) {
+        iframe.src = dshCurrentUrl;
+      }
+    }
+
+    function copyDshCmd() {
+      const el = document.getElementById('dshEnvCode');
+      if (!el) return;
+      navigator.clipboard.writeText(el.innerText);
+      alert('已复制 dsh 启动命令！');
+    }
+
+    async function exportDshEnv() {
+      try {
+        const res = await fetch('/ui/dsh/export', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(`✅ 已在 "${data.config_path}" 自动创建 .env 配置文件！\n内容包含本网关 BaseURL 及当前专属 API Key。\n您可以直接在该目录运行 npx @deepseek-ai/dsh web 启动。`);
+        } else {
+          alert('导出失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('请求失败: ' + err);
+      }
+    }
+
     // Init
     refreshData();
     setInterval(refreshData, 8000);
+    // 定期检查 dsh 状态（如果在 dsh tab）
+    setInterval(() => {
+      if (currentActiveTab === 'dsh') {
+        fetchDshStatus(false);
+      }
+    }, 5000);
     // 首次加载后静默检查是否有更新
     setTimeout(() => checkAppUpdate(false), 2000);
   </script>

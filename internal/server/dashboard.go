@@ -58,6 +58,12 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/admin/user/delete", h.withWebAuth(h.handleAdminDeleteUser))
 	h.mux.HandleFunc("POST /ui/admin/user/create", h.withWebAuth(h.handleAdminCreateUser))
 	h.mux.HandleFunc("POST /ui/admin/system/allow_register", h.withWebAuth(h.handleAdminSetAllowRegister))
+
+	// DeepSeek Harness (dsh) 进程管理端点
+	h.mux.HandleFunc("GET /ui/dsh/status", h.withWebAuth(h.handleDshStatus))
+	h.mux.HandleFunc("POST /ui/dsh/start", h.withWebAuth(h.handleDshStart))
+	h.mux.HandleFunc("POST /ui/dsh/stop", h.withWebAuth(h.handleDshStop))
+	h.mux.HandleFunc("POST /ui/dsh/export", h.withWebAuth(h.handleDshExport))
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
@@ -1549,5 +1555,129 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		}
 	}()
 }
+
+// DeepSeek Harness (dsh) 管理处理器
+
+func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"supported": false,
+			"error":     "DSH 管理器未初始化",
+		})
+		return
+	}
+	st := h.cfg.DshMgr.GetStatus()
+	user := h.getWebSessionUser(r)
+	apiKey := h.GetAPIKey()
+	if user != nil && user.APIKey != "" {
+		apiKey = user.APIKey
+	}
+
+	gatewayURL := fmt.Sprintf("http://127.0.0.1:7863/v1")
+	if r.Host != "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		gatewayURL = fmt.Sprintf("%s://%s/v1", scheme, r.Host)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"supported":    true,
+		"installed":    st.Installed,
+		"node_version": st.NodeVersion,
+		"npx_found":    st.NpxFound,
+		"running":      st.Running,
+		"port":         st.Port,
+		"web_url":      st.WebURL,
+		"started_at":   st.StartedAt,
+		"logs":         st.Logs,
+		"gateway_url":  gatewayURL,
+		"api_key":      apiKey,
+	})
+}
+
+func (h *Handler) handleDshStart(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	apiKey := h.GetAPIKey()
+	if user != nil && user.APIKey != "" {
+		apiKey = user.APIKey
+	}
+
+	gatewayURL := "http://127.0.0.1:7863/v1"
+	if r.Host != "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		gatewayURL = fmt.Sprintf("%s://%s/v1", scheme, r.Host)
+	}
+
+	if err := h.cfg.DshMgr.Start(gatewayURL, apiKey); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "DeepSeek Harness (dsh) 启动指令已发出，正在启动 Web UI...",
+	})
+}
+
+func (h *Handler) handleDshStop(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	if err := h.cfg.DshMgr.Stop(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "DeepSeek Harness (dsh) 进程已停止",
+	})
+}
+
+func (h *Handler) handleDshExport(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	apiKey := h.GetAPIKey()
+	if user != nil && user.APIKey != "" {
+		apiKey = user.APIKey
+	}
+
+	gatewayURL := "http://127.0.0.1:7863/v1"
+	if r.Host != "" {
+		scheme := "http"
+		if r.TLS != nil {
+			scheme = "https"
+		}
+		gatewayURL = fmt.Sprintf("%s://%s/v1", scheme, r.Host)
+	}
+
+	cfgPath := h.cfg.DshMgr.WriteStandaloneConfig("./data/dsh", gatewayURL, apiKey)
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":     true,
+		"config_path": cfgPath,
+		"gateway_url": gatewayURL,
+		"api_key":     apiKey,
+		"port":        3080,
+		"env_content": fmt.Sprintf("OPENAI_BASE_URL=%s\nOPENAI_API_KEY=%s\nPORT=3080\n", gatewayURL, apiKey),
+		"launch_cmd":  fmt.Sprintf("npx @deepseek-ai/dsh web --port 3080"),
+	})
+}
+
 
 

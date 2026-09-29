@@ -15,6 +15,7 @@ import (
 	"time"
 
 	"workbuddy2api/internal/auth"
+	"workbuddy2api/internal/dshmgr"
 	"workbuddy2api/internal/logfmt"
 	"workbuddy2api/internal/pool"
 	"workbuddy2api/internal/prompt"
@@ -70,6 +71,9 @@ type Config struct {
 	// UserMgr 用户与角色权限管理器
 	UserMgr *usermgr.Manager
 
+	// DshMgr DeepSeek Harness 进程管理器
+	DshMgr *dshmgr.Manager
+
 	// StopFunc 终止服务上下文（用于升级完成后触发优雅重启或退出）
 	StopFunc func()
 }
@@ -94,7 +98,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.1.5"
+const CurrentVersion = "v1.1.6"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：

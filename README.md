@@ -61,7 +61,13 @@
    - **故障自愈与熔断机制**：429 限流软冷却避让、模型级独立限流（6004）、连续失败自动熔断保护。
    - **会话粘性路由**：基于会话上下文的稳定号绑定，保证多轮长对话不换号、Prompt Cache 命中最大化。
 
-8. **全自动持续集成（CI/CD）与安全隐私保护**
+8. **无缝嵌入 DeepSeek Harness (dsh) 官方 AI Agent 智能体**
+   - **一键内嵌与按需运行**：控制台专设「Agent (dsh)」标签页，支持直接在控制台一键启动/停止官方 `@deepseek-ai/dsh` 智能体。
+   - **轻量纯净、零环境强依赖**：主程序依然保持 ~10MB 极简 Go 单文件，用户若不需要可完全不安装 Node.js/npx。
+   - **自动化参数注入**：自动生成反代环境变量（`OPENAI_BASE_URL`、`DEEPSEEK_BASE_URL`、专属 API Key、监听端口 `3080`），实现一键内嵌 iframe 交互，随用随启。
+   - **多端与 Docker 组合支持**：支持导出独立 `.env` 配置文件与跨机器运行指令；支持 `docker compose --profile agent up -d` 零宿主依赖一键组合拉起。
+
+9. **全自动持续集成（CI/CD）与安全隐私保护**
    - **隐私绝对安全**：账号凭证（`auths/`）与数据库状态（`data/`）被严格隔离并在 `.gitignore` / `.dockerignore` 中屏蔽，绝不泄露任何私有数据。
    - **GitHub Actions 自动化打包**：每次打 tag 或手动点击即可自动编译 Windows 单文件桌面版与发布 Docker 镜像。
 
@@ -117,11 +123,14 @@ curl http://127.0.0.1:7863/healthz
 
 # 停止容器
 docker compose down
+
+# 可选：一键联动启动 DeepSeek Harness (dsh) AI Agent 智能体容器（无需宿主机 Node.js）
+docker compose --profile agent up -d
 ```
 
 > **挂载说明**：
 > - `./auths:/app/auths`：账号授权文件目录（持久化保存在宿主机）
-> - `./data:/app/data`：状态快照与模型缓存
+> - `./data:/app/data`：状态快照与模型缓存（包含 `./data/dsh` 智能体工作空间）
 > - `./config.json:/app/config.json:ro`：配置文件
 
 ---

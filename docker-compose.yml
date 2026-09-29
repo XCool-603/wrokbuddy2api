@@ -22,3 +22,28 @@ services:
       #   chown -R 10001:10001 ./data
       - ./data:/app/data
       - ./config.json:/app/config.json:ro
+
+  # 可选：DeepSeek Harness (dsh) AI Agent 运行环境
+  # 宿主机无需安装 Node.js/npx，只需使用 --profile agent 即可一键启动：
+  #   docker compose --profile agent up -d
+  dsh:
+    image: node:20-alpine
+    container_name: workbuddy2api-dsh
+    restart: unless-stopped
+    profiles:
+      - agent
+    working_dir: /workspace
+    command: sh -c "npx -y @deepseek-ai/dsh web --port 3080"
+    environment:
+      - OPENAI_BASE_URL=http://wb2api:7863/v1
+      - OPENAI_API_BASE=http://wb2api:7863/v1
+      - DEEPSEEK_BASE_URL=http://wb2api:7863/v1
+      - OPENAI_API_KEY=wb2a-admin-secret
+      - PORT=3080
+    ports:
+      - "3080:3080"
+    volumes:
+      - ./data/dsh:/workspace
+    depends_on:
+      - wb2api
+
