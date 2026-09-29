@@ -89,8 +89,8 @@ func verifyNode(nodePath string) bool {
 	return strings.HasPrefix(ver, "v")
 }
 
-// verifyNpx 检查 npx 是否存在并具备基本可执行性
-func verifyNpx(npxPath string) bool {
+// verifyNpx 检查 npx 或 npx-cli.js 是否存在并具备基本可运行性
+func verifyNpx(nodePath, npxPath string) bool {
 	if npxPath == "" {
 		return false
 	}
@@ -98,6 +98,19 @@ func verifyNpx(npxPath string) bool {
 	if err != nil || fi.IsDir() {
 		return false
 	}
+	// 如果提供了有效的 nodePath，通过 node 运行 npx 来严格校验（避免 symlink 断裂或无执行权限假阳性）
+	if nodePath != "" && verifyNode(nodePath) {
+		cmd := exec.Command(nodePath, npxPath, "--version")
+		if err := cmd.Run(); err == nil {
+			return true
+		}
+	}
+	// 备选：如果直接是可执行文件且单独执行正常
+	cmd := exec.Command(npxPath, "--version")
+	if err := cmd.Run(); err == nil {
+		return true
+	}
+	// Windows 脚本或普通文件基本存在性保底
 	return true
 }
 
@@ -152,6 +165,32 @@ func findExecutableInDir(rootDir string, targetNames ...string) string {
 		return nil
 	})
 	return foundPath
+}
+
+// findNpxCliJs 查找 npm 自带的 npx-cli.js 文件路径（作为最稳妥的跨平台 node 执行入口）
+func findNpxCliJs(baseDir string) string {
+	candidates := []string{
+		filepath.Join(baseDir, "lib", "node_modules", "npm", "bin", "npx-cli.js"),
+		filepath.Join(baseDir, "node_modules", "npm", "bin", "npx-cli.js"),
+	}
+	for _, c := range candidates {
+		if fi, err := os.Stat(c); err == nil && !fi.IsDir() {
+			return c
+		}
+	}
+	// Walk 查找 npx-cli.js
+	var found string
+	_ = filepath.Walk(baseDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || found != "" {
+			return nil
+		}
+		if !info.IsDir() && strings.EqualFold(info.Name(), "npx-cli.js") {
+			found = path
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
 }
 
 // resolveNodeNpx 查找可用 node 与 npx 的绝对路径或可执行文件名。
@@ -218,9 +257,15 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 			}
 		}
 
-		// 关键：验证本地 node 是否能在本机真正执行（排除动态链接库缺失、glibc 不兼容等假阳性）
-		if candNode != "" && candNpx != "" && verifyNode(candNode) && verifyNpx(candNpx) {
-			return candNode, candNpx, true
+		// 如果 candNpx 找不到或者验证失败，尝试在本地运行时中查找 npm 的 npx-cli.js
+		if candNode != "" && verifyNode(candNode) {
+			if candNpx != "" && verifyNpx(candNode, candNpx) {
+				return candNode, candNpx, true
+			}
+			npxCli := findNpxCliJs(localDir)
+			if npxCli != "" && verifyNpx(candNode, npxCli) {
+				return candNode, npxCli, true
+			}
 		}
 	}
 
@@ -235,8 +280,13 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 		if errNpx != nil && runtime.GOOS == "windows" {
 			sysNpx, errNpx = exec.LookPath("npx")
 		}
-		if errNpx == nil && verifyNode(sysNode) && verifyNpx(sysNpx) {
+		if errNpx == nil && verifyNode(sysNode) && verifyNpx(sysNode, sysNpx) {
 			return sysNode, sysNpx, true
+		}
+		// 备用：检查系统全局 node 附近是否存在 npx-cli.js
+		sysBase := filepath.Dir(filepath.Dir(sysNode))
+		if npxCli := findNpxCliJs(sysBase); npxCli != "" && verifyNode(sysNode) && verifyNpx(sysNode, npxCli) {
+			return sysNode, npxCli, true
 		}
 	}
 
@@ -360,7 +410,15 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		fmt.Sprintf("PORT=%d", m.port),
 	)
 
-	cmd := exec.CommandContext(ctx, npxExe, "-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", m.port))
+	var cmd *exec.Cmd
+	dshArgs := []string{"-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", m.port)}
+	if strings.HasSuffix(strings.ToLower(npxExe), ".js") {
+		// 如果是 js 脚本入口（如 npx-cli.js），直接使用 node 二进制执行，跨平台稳定且不依赖系统 shebang / symlink
+		fullArgs := append([]string{npxExe}, dshArgs...)
+		cmd = exec.CommandContext(ctx, nodeExe, fullArgs...)
+	} else {
+		cmd = exec.CommandContext(ctx, npxExe, dshArgs...)
+	}
 	cmd.Dir = m.workDir
 	cmd.Env = env
 
@@ -609,6 +667,7 @@ func (m *Manager) doInstall() error {
 		}
 		errMsg := fmt.Sprintf("解压完成但验证运行失败 (Node: %v, Npx: %v, NodePath: %s, NpxPath: %s, Err: %v)",
 			hasNode, hasNpx, candNode, npxPath, testErr)
+		_ = os.RemoveAll(targetDir) // 清理无法运行的损坏或不兼容运行时，避免干扰系统 PATH 回退
 		m.mu.Lock()
 		m.appendLog(errMsg)
 		m.mu.Unlock()
