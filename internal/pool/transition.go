@@ -90,3 +90,21 @@ func (p *Pool) setManualDisabledLocked(e *entry, disabled bool, reason string) {
 	}
 	p.dirty.Store(true)
 }
+
+// ClearCooling 运维手动解除冷却：清空账号级冷却截止、软限流退避、模型级独立冷却与连败降权。
+// 若账号没有被禁用，则立刻恢复健康在线并重新参与选号。
+func (p *Pool) ClearCooling(uid string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e, ok := p.byUID[uid]
+	if !ok {
+		return false
+	}
+	e.clearCoolingLocked()
+	e.degradeUntil = time.Time{}
+	e.consecutiveFails = 0
+	e.breakerUntil = time.Time{}
+	e.fails = 0
+	p.dirty.Store(true)
+	return true
+}

@@ -81,18 +81,22 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	authDir := "./auths"
 	files, _ := auth.LoadAuthFiles(authDir)
 	type AccountItem struct {
-		UID            string `json:"uid"`
-		Realm          string `json:"realm"`
-		Nickname       string `json:"nickname"`
-		Filename       string `json:"filename"`
-		Credits        int64  `json:"credits"`
-		Disabled       bool   `json:"disabled"`
-		DisabledReason string `json:"disabled_reason"`
-		ManualDisabled bool   `json:"manual_disabled"`
-		ManualReason   string `json:"manual_reason"`
-		Cooling        bool   `json:"cooling"`
-		Owner          string `json:"owner"`
-		IsMyAccount    bool   `json:"is_my_account"`
+		UID               string                  `json:"uid"`
+		Realm             string                  `json:"realm"`
+		Nickname          string                  `json:"nickname"`
+		Filename          string                  `json:"filename"`
+		Credits           int64                   `json:"credits"`
+		Disabled          bool                    `json:"disabled"`
+		DisabledReason    string                  `json:"disabled_reason"`
+		ManualDisabled    bool                    `json:"manual_disabled"`
+		ManualReason      string                  `json:"manual_reason"`
+		Cooling           bool                    `json:"cooling"`
+		CoolKind          string                  `json:"cool_kind,omitempty"`
+		CoolRemaining     int64                   `json:"cool_remaining_sec,omitempty"`
+		Reason            string                  `json:"reason,omitempty"`
+		RateLimitedModels []pool.RateLimitedModel `json:"rate_limited_models,omitempty"`
+		Owner             string                  `json:"owner"`
+		IsMyAccount       bool                    `json:"is_my_account"`
 	}
 
 	poolList := h.cfg.Pool.List()
@@ -143,6 +147,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			item.ManualDisabled = p.ManualDisabled
 			item.ManualReason = p.ManualReason
 			item.Cooling = p.Cooling
+			item.CoolKind = p.CoolKind
+			item.CoolRemaining = p.CoolRemaining
+			item.Reason = p.Reason
+			item.RateLimitedModels = p.RateLimitedModels
 		}
 		// 若池内积分为 0 或未初始化，尝试直接向上游查询真实积分并回填到账号池
 		if item.Credits == 0 && a.AccessTokenValue() != "" && h.cfg.Upstream != nil {
@@ -510,6 +518,9 @@ func (h *Handler) handleAccountAdmin(w http.ResponseWriter, r *http.Request) {
 		h.cfg.Pool.SetManualDisabled(req.UID, false, "")
 	case "revive":
 		h.cfg.Pool.ReviveDisabled(req.UID)
+		h.cfg.Pool.ClearCooling(req.UID)
+	case "clear_cooling":
+		h.cfg.Pool.ClearCooling(req.UID)
 	default:
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未知操作"})
 		return
