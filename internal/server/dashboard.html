@@ -715,6 +715,10 @@
               <span>独立新窗口打开</span>
               <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14"/></svg>
             </button>
+            <button onclick="resetDshEnv()" title="清除本地便携环境缓存并重置探测" class="px-3 py-2 bg-slate-800 hover:bg-rose-950/40 text-slate-300 hover:text-rose-300 border border-slate-700 hover:border-rose-500/40 text-xs font-medium rounded-xl transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+              <span>重置/清除环境</span>
+            </button>
             <button onclick="fetchDshStatus(true)" title="刷新状态" class="p-2 text-slate-400 hover:text-white bg-slate-800 border border-slate-700 rounded-xl transition">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
             </button>
@@ -3014,6 +3018,22 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           fetchDshStatus(true);
         } else {
           alert('停止失败: ' + (data.error || '未知错误'));
+        }
+      } catch (err) {
+        alert('请求失败: ' + err);
+      }
+    }
+
+    async function resetDshEnv() {
+      if (!confirm('确定要清理本地便携绿色 Node.js 运行时缓存并重新检测环境吗？\n如果系统自带 Node.js 或需要重新下载，该操作可清除损坏残留。')) return;
+      try {
+        const res = await fetch('/ui/dsh/reset', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok) {
+          alert(data.message || '已成功清除本地运行时缓存！');
+          fetchDshStatus(true);
+        } else {
+          alert('重置失败: ' + (data.error || '未知错误'));
         }
       } catch (err) {
         alert('请求失败: ' + err);

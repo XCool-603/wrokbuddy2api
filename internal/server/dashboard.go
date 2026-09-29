@@ -62,6 +62,7 @@ func (h *Handler) RegisterWebUI() {
 	// DeepSeek Harness (dsh) 进程管理端点
 	h.mux.HandleFunc("GET /ui/dsh/status", h.withWebAuth(h.handleDshStatus))
 	h.mux.HandleFunc("POST /ui/dsh/install", h.withWebAuth(h.handleDshInstall))
+	h.mux.HandleFunc("POST /ui/dsh/reset", h.withWebAuth(h.handleDshReset))
 	h.mux.HandleFunc("POST /ui/dsh/start", h.withWebAuth(h.handleDshStart))
 	h.mux.HandleFunc("POST /ui/dsh/stop", h.withWebAuth(h.handleDshStop))
 	h.mux.HandleFunc("POST /ui/dsh/export", h.withWebAuth(h.handleDshExport))
@@ -1616,6 +1617,23 @@ func (h *Handler) handleDshInstall(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
 		"message": "便携式 Node.js 绿色运行时自动安装已在后台启动...",
+	})
+}
+
+func (h *Handler) handleDshReset(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	if err := h.cfg.DshMgr.CleanRuntime(); err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "已清除本地绿色运行时缓存并重置环境检测",
 	})
 }
 
