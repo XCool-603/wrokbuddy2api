@@ -61,6 +61,7 @@ func (h *Handler) RegisterWebUI() {
 
 	// DeepSeek Harness (dsh) 进程管理端点
 	h.mux.HandleFunc("GET /ui/dsh/status", h.withWebAuth(h.handleDshStatus))
+	h.mux.HandleFunc("POST /ui/dsh/install", h.withWebAuth(h.handleDshInstall))
 	h.mux.HandleFunc("POST /ui/dsh/start", h.withWebAuth(h.handleDshStart))
 	h.mux.HandleFunc("POST /ui/dsh/stop", h.withWebAuth(h.handleDshStop))
 	h.mux.HandleFunc("POST /ui/dsh/export", h.withWebAuth(h.handleDshExport))
@@ -1587,6 +1588,8 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 		"installed":        st.Installed,
 		"node_version":     st.NodeVersion,
 		"npx_found":        st.NpxFound,
+		"installing":       st.Installing,
+		"install_error":    st.InstallError,
 		"running":          st.Running,
 		"external_running": st.ExternalRunning,
 		"is_docker":        isDockerEnvironment(),
@@ -1596,6 +1599,23 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 		"logs":             st.Logs,
 		"gateway_url":      gatewayURL,
 		"api_key":          apiKey,
+	})
+}
+
+func (h *Handler) handleDshInstall(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.DshMgr == nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	if err := h.cfg.DshMgr.AutoInstall(); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "便携式 Node.js 绿色运行时自动安装已在后台启动...",
 	})
 }
 

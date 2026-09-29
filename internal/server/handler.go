@@ -2,10 +2,12 @@
 package server
 
 import (
+	"bytes"
 	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -98,7 +100,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.1.7"
+const CurrentVersion = "v1.1.8"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -502,6 +504,27 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 		}
 	}
 
+	// 若 DeepSeek Harness (dsh) 正在运行或环境已安装就绪，直接向模型列表透出 dsh 智能体模型
+	if h.cfg.DshMgr != nil {
+		st := h.cfg.DshMgr.GetStatus()
+		if st.Installed || st.Running {
+			dshEntry := map[string]any{
+				"id":                 "dsh",
+				"name":               "DeepSeek Harness (dsh Agent)",
+				"description":        "DeepSeek 官方自主编程与智能体框架，支持本地环境操控、网页自动化与工程级代码调度",
+				"object":             "model",
+				"created":            1753600000,
+				"owned_by":           "deepseek-ai",
+				"context_length":     131072,
+				"max_output_tokens":  8192,
+				"supports_tool_call": true,
+				"supports_reasoning": true,
+				"vendor":             "DeepSeek",
+			}
+			out = append(out, dshEntry)
+		}
+	}
+
 	return out
 }
 
@@ -609,10 +632,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(body, &peek)
 
-	// realm 前缀解析（D6）：model 名可能带 "[realm:]" 前缀。剥出 realm + bareModel，
-	// bareModel 用于选号/粘性/账本/出站 body 重写（前缀是网关侧路由协议，上游只认裸名）。
-	// 裸名 → ("cn", 原串)，CN 现状零回归。
 	realm, bareModel := resolveModel(peek.Model)
+
+	// 若客户端请求的是 dsh 虚拟智能体模型，直接转发至本地或容器内的 dsh 服务端口
+	if strings.EqualFold(bareModel, "dsh") || strings.EqualFold(peek.Model, "dsh") || strings.EqualFold(bareModel, "deepseek-harness") {
+		h.proxyToDsh(w, r, body)
+		return
+	}
 
 	// 请求级统计：出口即打一行表格日志（任何路径都会走到）。
 	st := newChatStat(time.Now(), body, peek.Stream)
@@ -1365,4 +1391,59 @@ func (h *Handler) hintOf(kind upstream.ErrKind, body, bareModel string, hasImage
 		msg = uerr.Msg
 	}
 	return upstream.GatewayHint(kind, msg, h.hintContext(bareModel, hasImage))
+}
+
+// proxyToDsh 将发往 dsh 模型的 chat/completions 请求反向代理至正在运行的 DeepSeek Harness 实例。
+func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte) {
+	if h.cfg.DshMgr == nil {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "dsh_disabled", "DeepSeek Harness (dsh) 未在当前服务中启用")
+		return
+	}
+	st := h.cfg.DshMgr.GetStatus()
+	if !st.Running {
+		writeOpenAIError(w, http.StatusServiceUnavailable, "dsh_not_running", "DeepSeek Harness 尚未启动。请在 Web 控制台的 Agent 标签页点击启动，或通过 Docker Compose 启动")
+		return
+	}
+
+	targetURL := fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", st.Port)
+	// 尝试向 127.0.0.1 代理，若连接失败且在 Docker 环境则尝试 dsh:3080
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURL, bytes.NewReader(body))
+	if err != nil {
+		writeOpenAIError(w, http.StatusInternalServerError, "proxy_error", "create proxy req: "+err.Error())
+		return
+	}
+	for k, vv := range r.Header {
+		for _, v := range vv {
+			req.Header.Add(k, v)
+		}
+	}
+
+	client := &http.Client{Timeout: 10 * time.Minute}
+	resp, err := client.Do(req)
+	if err != nil && st.ExternalRunning {
+		// 备用：Docker 网络模式尝试直连 dsh 容器
+		targetURLDocker := fmt.Sprintf("http://dsh:%d/v1/chat/completions", st.Port)
+		if reqDocker, errD := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURLDocker, bytes.NewReader(body)); errD == nil {
+			for k, vv := range r.Header {
+				for _, v := range vv {
+					reqDocker.Header.Add(k, v)
+				}
+			}
+			resp, err = client.Do(reqDocker)
+		}
+	}
+
+	if err != nil {
+		writeOpenAIError(w, http.StatusBadGateway, "dsh_unreachable", "无法连接到本地 dsh 智能体服务: "+err.Error())
+		return
+	}
+	defer resp.Body.Close()
+
+	for k, vv := range resp.Header {
+		for _, v := range vv {
+			w.Header().Add(k, v)
+		}
+	}
+	w.WriteHeader(resp.StatusCode)
+	_, _ = io.Copy(w, resp.Body)
 }

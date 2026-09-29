@@ -761,7 +761,7 @@
         <div class="glass-panel rounded-2xl border border-slate-800 p-6 space-y-4">
           <h3 class="text-base font-bold text-white flex items-center gap-2">
             <span class="w-2 h-2 rounded-full bg-indigo-400"></span>
-            <span>什么是 DeepSeek Harness (dsh)？</span>
+            <span>关于 DeepSeek Harness (dsh) 嵌入集成</span>
           </h3>
           <p class="text-xs text-slate-300 leading-relaxed">
             <a href="https://github.com/deepseek-ai/deepseek-harness" target="_blank" class="text-cyan-400 hover:underline">DeepSeek Harness</a> 是 DeepSeek 官方研发的终端与网页多功能 Agent 评测与自动化智能体框架。
@@ -769,23 +769,20 @@
           <div class="space-y-2 text-xs text-slate-400">
             <div class="flex items-start gap-2">
               <span class="text-emerald-400 font-bold">✔</span>
-              <span><b>自动配置与无缝中继：</b> WorkBuddy2API 会自动注入当前高权重账号池与统一 BaseURL，无需手动寻找密钥或修改代码。</span>
+              <span><b>全自动绿色安装：</b> Windows 或 Linux 均支持一键全自动下载绿色 Node 运行时，无需用户手动安装或配置环境变量。</span>
             </div>
             <div class="flex items-start gap-2">
               <span class="text-emerald-400 font-bold">✔</span>
-              <span><b>纯净零残留：</b> 本项目二进制仅 10MB，无需在宿主机额外打包数百兆前端或庞大依赖。随点随启、按需加载。</span>
+              <span><b>已安装即直接显示可调用：</b> 一旦就绪或运行，模型列表中直接暴露 <code class="text-cyan-300 bg-slate-900 px-1 py-0.5 rounded">dsh</code> 模型，在演练场或任意第三方客户端均可直接选择调用！</span>
             </div>
             <div class="flex items-start gap-2">
               <span class="text-emerald-400 font-bold">✔</span>
-              <span><b>随时停止：</b> 点击"停止服务"立即回收进程与端口，轻量安心。</span>
+              <span><b>自动配置与无缝中继：</b> WorkBuddy2API 自动注入当前高权重账号池与统一 BaseURL，无需繁琐设置。</span>
             </div>
-          </div>
-
-          <div class="p-4 bg-slate-900/80 rounded-xl border border-slate-800 text-xs space-y-2 font-mono">
-            <div class="text-slate-400 font-medium">若您不想在当前电脑运行 Node.js：</div>
-            <p class="text-slate-500 font-sans">
-              您完全可以<b>不安装任何东西</b>！通过 Docker 容器或在远程机器上单行命令接入此 WorkBuddy2API 即可。
-            </p>
+            <div class="flex items-start gap-2">
+              <span class="text-emerald-400 font-bold">✔</span>
+              <span><b>随时停止：</b> 点击"停止服务"立即回收进程与端口，轻量安全。</span>
+            </div>
           </div>
         </div>
 
@@ -812,9 +809,9 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           </div>
 
           <div class="p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-xs space-y-1.5">
-            <div class="font-semibold text-white">Docker 一键组合启动</div>
+            <div class="font-semibold text-white">Docker Compose 零配置启动</div>
             <p class="text-slate-400 text-[11px] font-mono leading-relaxed">
-              docker compose --profile agent up -d
+              docker compose up -d
             </p>
           </div>
         </div>
@@ -2830,16 +2827,16 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         if (badge) {
           if (dshIsRunning) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20';
-            badge.innerText = data.external_running ? 'Docker / 外置运行中 (3080)' : '运行中 (Web 就绪)';
+            badge.innerText = data.external_running ? 'Docker / 外置运行中 (3080)' : '运行中 (Web 就绪 / 模型直调开启)';
+          } else if (data.installing) {
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20 animate-pulse';
+            badge.innerText = '正在自动下载安装便携 Node 环境...';
           } else if (data.installed) {
             badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-indigo-500/10 text-indigo-400 border border-indigo-500/20';
-            badge.innerText = '已就绪 (未启动)';
-          } else if (data.is_docker) {
-            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-cyan-500/10 text-cyan-400 border border-cyan-500/20';
-            badge.innerText = 'Docker 容器环境 (支持 Compose 联动)';
+            badge.innerText = '已安装就绪 (支持直接调用与 Web 启动)';
           } else {
-            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-400 border border-amber-500/20';
-            badge.innerText = '未检测到 Node.js 环境';
+            badge.className = 'px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-rose-500/10 text-rose-400 border border-rose-500/20';
+            badge.innerText = '未就绪 (支持一键全自动安装)';
           }
         }
 
@@ -2849,12 +2846,12 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           if (data.node_version) {
             envInfo.innerText = `${data.node_version} (npx 就绪)`;
             envInfo.className = 'font-bold text-emerald-400';
-          } else if (data.is_docker) {
-            envInfo.innerText = 'Docker 环境（使用 docker compose --profile agent 零依赖运行）';
-            envInfo.className = 'font-bold text-cyan-400';
+          } else if (data.installing) {
+            envInfo.innerText = '便携版自动安装中...';
+            envInfo.className = 'font-bold text-amber-400 animate-pulse';
           } else {
-            envInfo.innerText = '未安装 Node.js';
-            envInfo.className = 'font-bold text-amber-400';
+            envInfo.innerText = '未就绪 (点击自动安装)';
+            envInfo.className = 'font-bold text-rose-400';
           }
         }
 
@@ -2892,13 +2889,19 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         } else {
           if (btnStart) {
             btnStart.classList.remove('hidden');
-            if (data.is_docker && !data.installed) {
-              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg><span>Docker 模式启动指引</span>`;
-              btnStart.onclick = function() {
-                alert('【Docker 部署提示】\n当前程序正运行于 Docker 容器中。\n为实现零依赖运行，请在服务器/宝塔项目目录下执行：\n\n  docker compose --profile agent up -d\n\n启动后本页面将自动无缝嵌入 dsh 界面！');
-              };
+            if (data.installing) {
+              btnStart.disabled = true;
+              btnStart.className = 'px-4 py-2 bg-amber-600/30 text-amber-300 border border-amber-500/30 text-xs font-semibold rounded-xl flex items-center gap-1.5 cursor-not-allowed';
+              btnStart.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg><span>正在自动下载安装便携 Node 环境...</span>`;
+            } else if (!data.installed) {
+              btnStart.disabled = false;
+              btnStart.className = 'px-4 py-2 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-emerald-600/20 transition flex items-center gap-1.5';
+              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg><span>一键全自动安装环境 (免配置)</span>`;
+              btnStart.onclick = installDshEnv;
             } else {
-              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>一键启动 dsh</span>`;
+              btnStart.disabled = false;
+              btnStart.className = 'px-4 py-2 bg-gradient-to-r from-cyan-600 to-blue-600 hover:from-cyan-500 hover:to-blue-500 text-white text-xs font-semibold rounded-xl shadow-lg shadow-cyan-600/20 transition flex items-center gap-1.5';
+              btnStart.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14.752 11.168l-3.197-2.132A1 1 0 0010 9.87v4.263a1 1 0 001.555.832l3.197-2.132a1 1 0 000-1.664z"/><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg><span>一键启动 dsh 网页界面</span>`;
               btnStart.onclick = startDsh;
             }
           }
@@ -2936,6 +2939,43 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         }
       } catch (err) {
         console.error('获取 dsh 状态失败:', err);
+      }
+    }
+
+    async function installDshEnv() {
+      const btn = document.getElementById('btnDshStart');
+      if (btn) {
+        btn.disabled = true;
+        btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg><span>正在触发全自动安装...</span>`;
+      }
+      try {
+        const res = await fetch('/ui/dsh/install', { method: 'POST' });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          fetchDshStatus(true);
+          // 开启定时轮询直至安装完成
+          const timer = setInterval(async () => {
+            const r = await fetch('/ui/dsh/status');
+            const d = await r.json();
+            if (d) {
+              fetchDshStatus(false);
+              if (!d.installing) {
+                clearInterval(timer);
+                if (d.installed) {
+                  alert('🎉 Node.js 绿色便携环境自动安装成功！已直接就绪，可随时一键启动或在接口调用 dsh。');
+                } else if (d.install_error) {
+                  alert('自动安装遇到异常: ' + d.install_error);
+                }
+              }
+            }
+          }, 2000);
+        } else {
+          alert('发起自动安装失败: ' + (data.error || '未知错误'));
+          fetchDshStatus(true);
+        }
+      } catch (err) {
+        alert('网络请求失败: ' + err);
+        fetchDshStatus(true);
       }
     }
 
