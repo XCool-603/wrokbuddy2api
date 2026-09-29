@@ -75,35 +75,95 @@ func (m *Manager) appendLog(msg string) {
 	}
 }
 
+// findExecutableInDir 在指定根目录及子目录中查找指定名称的可执行文件
+func findExecutableInDir(rootDir string, targetNames ...string) string {
+	var foundPath string
+	_ = filepath.Walk(rootDir, func(path string, info os.FileInfo, err error) error {
+		if err != nil || foundPath != "" {
+			return nil
+		}
+		if !info.IsDir() {
+			name := strings.ToLower(info.Name())
+			for _, target := range targetNames {
+				if strings.EqualFold(name, target) {
+					foundPath = path
+					return filepath.SkipAll
+				}
+			}
+		}
+		return nil
+	})
+	return foundPath
+}
+
 // resolveNodeNpx 查找可用 node 与 npx 的绝对路径或可执行文件名。
 // 优先查找本地绿色运行时目录，若无则查找系统全局 PATH。
 func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 	localDir := m.localBinDir()
-	if runtime.GOOS == "windows" {
-		localNode := filepath.Join(localDir, "node.exe")
-		localNpx := filepath.Join(localDir, "npx.cmd")
-		if _, err := os.Stat(localNode); err == nil {
-			if _, err2 := os.Stat(localNpx); err2 == nil {
-				return localNode, localNpx, true
+
+	if _, err := os.Stat(localDir); err == nil {
+		if runtime.GOOS == "windows" {
+			// Windows 下首先直接检查常见层级
+			candidatesNode := []string{
+				filepath.Join(localDir, "node.exe"),
+				filepath.Join(localDir, "bin", "node.exe"),
 			}
-		}
-	} else {
-		// Linux / macOS 官方二进制包解压后通常在 bin 目录下，或直接在 localDir 下
-		possibleNode := []string{
-			filepath.Join(localDir, "bin", "node"),
-			filepath.Join(localDir, "node"),
-		}
-		possibleNpx := []string{
-			filepath.Join(localDir, "bin", "npx"),
-			filepath.Join(localDir, "npx"),
-		}
-		for i, nPath := range possibleNode {
-			if _, err := os.Stat(nPath); err == nil {
-				xPath := possibleNpx[i]
-				if _, err2 := os.Stat(xPath); err2 == nil {
-					return nPath, xPath, true
+			candidatesNpx := []string{
+				filepath.Join(localDir, "npx.cmd"),
+				filepath.Join(localDir, "bin", "npx.cmd"),
+				filepath.Join(localDir, "npx"),
+			}
+			for _, c := range candidatesNode {
+				if _, err := os.Stat(c); err == nil {
+					nodePath = c
+					break
 				}
 			}
+			for _, c := range candidatesNpx {
+				if _, err := os.Stat(c); err == nil {
+					npxPath = c
+					break
+				}
+			}
+			// 如果没在标准位置找到，进行目录递归查找
+			if nodePath == "" {
+				nodePath = findExecutableInDir(localDir, "node.exe")
+			}
+			if npxPath == "" {
+				npxPath = findExecutableInDir(localDir, "npx.cmd", "npx")
+			}
+		} else {
+			// Linux / macOS
+			candidatesNode := []string{
+				filepath.Join(localDir, "bin", "node"),
+				filepath.Join(localDir, "node"),
+			}
+			candidatesNpx := []string{
+				filepath.Join(localDir, "bin", "npx"),
+				filepath.Join(localDir, "npx"),
+			}
+			for _, c := range candidatesNode {
+				if _, err := os.Stat(c); err == nil {
+					nodePath = c
+					break
+				}
+			}
+			for _, c := range candidatesNpx {
+				if _, err := os.Stat(c); err == nil {
+					npxPath = c
+					break
+				}
+			}
+			if nodePath == "" {
+				nodePath = findExecutableInDir(localDir, "node")
+			}
+			if npxPath == "" {
+				npxPath = findExecutableInDir(localDir, "npx")
+			}
+		}
+
+		if nodePath != "" && npxPath != "" {
+			return nodePath, npxPath, true
 		}
 	}
 
@@ -134,7 +194,8 @@ func (m *Manager) DetectEnv() (hasNode bool, nodeVer string, hasNpx bool) {
 	}
 
 	cmd := exec.Command(nodePath, "-v")
-	if out, err := cmd.Output(); err == nil {
+	out, err := cmd.CombinedOutput()
+	if err == nil {
 		hasNode = true
 		nodeVer = strings.TrimSpace(string(out))
 		if strings.Contains(nodePath, filepath.Join(m.workDir, "runtime")) {
@@ -412,26 +473,32 @@ func (m *Manager) doInstall() error {
 		}
 	}
 
-	// 查找解压后的顶层子目录并重命名移动至 targetDir
-	entries, err := os.ReadDir(extractDir)
-	if err != nil || len(entries) == 0 {
-		return fmt.Errorf("解压目录为空")
+	// 查找解压后的可执行文件位置（自适应定位根目录，支持展平嵌套）
+	var nodeExeName string
+	if runtime.GOOS == "windows" {
+		nodeExeName = "node.exe"
+	} else {
+		nodeExeName = "node"
 	}
 
-	var rootSubDir string
-	for _, entry := range entries {
-		if entry.IsDir() {
-			rootSubDir = filepath.Join(extractDir, entry.Name())
-			break
-		}
-	}
-	if rootSubDir == "" {
-		rootSubDir = extractDir
+	foundNode := findExecutableInDir(extractDir, nodeExeName)
+	if foundNode == "" {
+		return fmt.Errorf("解压成功但未在压缩包中找到可执行文件 %s", nodeExeName)
 	}
 
-	if err := os.Rename(rootSubDir, targetDir); err != nil {
+	// 推导源目录：如果可执行文件在 bin/ 目录下，取 bin 的上一级为包根目录；否则直接取其所在目录
+	var sourceDir string
+	parentDir := filepath.Dir(foundNode)
+	if strings.EqualFold(filepath.Base(parentDir), "bin") {
+		sourceDir = filepath.Dir(parentDir)
+	} else {
+		sourceDir = parentDir
+	}
+
+	// 将包含运行时完整结构（bin、lib、node.exe 等）的 sourceDir 部署至 targetDir
+	if err := os.Rename(sourceDir, targetDir); err != nil {
 		// 跨卷或 rename 失败降级为拷贝
-		if cpErr := copyDir(rootSubDir, targetDir); cpErr != nil {
+		if cpErr := copyDir(sourceDir, targetDir); cpErr != nil {
 			return fmt.Errorf("部署解压目录失败: %w", cpErr)
 		}
 	}
@@ -449,7 +516,22 @@ func (m *Manager) doInstall() error {
 	// 最终环境验证
 	hasNode, ver, hasNpx := m.DetectEnv()
 	if !hasNode || !hasNpx {
-		return fmt.Errorf("解压完成但验证运行失败 (Node: %v, Npx: %v)", hasNode, hasNpx)
+		nodePath, npxPath, _ := m.resolveNodeNpx()
+		var testErr error
+		if nodePath != "" {
+			cmd := exec.Command(nodePath, "-v")
+			var out []byte
+			out, testErr = cmd.CombinedOutput()
+			if testErr == nil {
+				ver = strings.TrimSpace(string(out))
+			}
+		}
+		errMsg := fmt.Sprintf("解压完成但验证运行失败 (Node: %v, Npx: %v, NodePath: %s, NpxPath: %s, Err: %v)",
+			hasNode, hasNpx, nodePath, npxPath, testErr)
+		m.mu.Lock()
+		m.appendLog(errMsg)
+		m.mu.Unlock()
+		return fmt.Errorf("%s", errMsg)
 	}
 
 	m.mu.Lock()
@@ -488,10 +570,12 @@ func unzip(src, dest string) error {
 	}
 	defer r.Close()
 
+	cleanDest := filepath.Clean(dest)
 	for _, f := range r.File {
-		fpath := filepath.Join(dest, f.Name)
-		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
-			continue // 防 Zip Slip 漏洞
+		fpath := filepath.Join(cleanDest, f.Name)
+		rel, err := filepath.Rel(cleanDest, fpath)
+		if err != nil || strings.HasPrefix(rel, "..") || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "\\") {
+			continue // 防 Zip Slip 跨目录穿越
 		}
 		if f.FileInfo().IsDir() {
 			_ = os.MkdirAll(fpath, os.ModePerm)
@@ -532,6 +616,7 @@ func untargz(src, dest string) error {
 	}
 	defer gzr.Close()
 
+	cleanDest := filepath.Clean(dest)
 	tr := tar.NewReader(gzr)
 	for {
 		header, err := tr.Next()
@@ -541,8 +626,9 @@ func untargz(src, dest string) error {
 		if err != nil {
 			return err
 		}
-		fpath := filepath.Join(dest, header.Name)
-		if !strings.HasPrefix(fpath, filepath.Clean(dest)+string(os.PathSeparator)) {
+		fpath := filepath.Join(cleanDest, header.Name)
+		rel, err := filepath.Rel(cleanDest, fpath)
+		if err != nil || strings.HasPrefix(rel, "..") || strings.HasPrefix(rel, "/") || strings.HasPrefix(rel, "\\") {
 			continue
 		}
 		switch header.Typeflag {
