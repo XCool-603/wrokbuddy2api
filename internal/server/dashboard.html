@@ -586,29 +586,35 @@
           <div class="flex items-center justify-between mb-1.5">
             <label class="block text-xs font-semibold text-slate-300">Prompt 测试指令</label>
             <div class="flex items-center gap-2">
-              <label for="chatImageInput" class="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer bg-slate-900 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700/80 transition">
-                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
-                <span>添加图片 (多模态)</span>
+              <label for="chatFileInput" class="inline-flex items-center gap-1.5 text-xs text-indigo-400 hover:text-indigo-300 cursor-pointer bg-slate-900 hover:bg-slate-800 px-2.5 py-1 rounded-lg border border-slate-700/80 transition">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"/></svg>
+                <span>添加附件 (图片 / 文档 / 文件)</span>
               </label>
-              <input type="file" id="chatImageInput" accept="image/*" class="hidden" onchange="handleChatImageSelect(event)" />
+              <input type="file" id="chatFileInput" accept="image/*,.txt,.md,.pdf,.json,.csv,.py,.go,.js,.ts,.html,.css,.java,.c,.cpp,.rs,.sql,.xml,.yaml,.yml" class="hidden" onchange="handleChatFileSelect(event)" />
             </div>
           </div>
-          <textarea id="chatPrompt" rows="2" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="例如：分析这张图片里有什么？（支持点击右上角上传图片或直接在输入框粘贴截图）"></textarea>
+          <textarea id="chatPrompt" rows="2" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl px-3.5 py-2.5 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500" placeholder="例如：分析附件内容或代码逻辑（支持点击右上角上传图片/文档，或直接在输入框粘贴截图）"></textarea>
 
-          <!-- Image Preview Area -->
-          <div id="chatImagePreviewArea" class="mt-2.5 flex items-center gap-3 hidden">
+          <!-- File / Image Preview Area -->
+          <div id="chatFilePreviewArea" class="mt-2.5 flex items-center gap-3 hidden">
             <div class="relative group">
-              <img id="chatImagePreview" src="" class="h-16 w-16 object-cover rounded-xl border border-indigo-500/50 shadow-md" />
-              <button onclick="removeChatImage()" class="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-0.5 shadow transition" title="移除图片">
+              <div id="chatImagePreviewWrapper" class="hidden">
+                <img id="chatImagePreview" src="" class="h-16 w-16 object-cover rounded-xl border border-indigo-500/50 shadow-md" />
+              </div>
+              <div id="chatDocPreviewWrapper" class="h-16 w-16 rounded-xl border border-indigo-500/50 bg-slate-900/90 shadow-md flex flex-col items-center justify-center text-indigo-400 hidden">
+                <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
+                <span id="chatDocExt" class="text-[9px] font-mono mt-0.5 uppercase">DOC</span>
+              </div>
+              <button onclick="removeChatFile()" class="absolute -top-1.5 -right-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-full p-0.5 shadow transition" title="移除附件">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
             </div>
             <div class="text-[11px] text-slate-400 space-y-0.5">
               <div class="font-mono text-slate-300 flex items-center gap-1.5">
                 <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
-                <span id="chatImageName">image.png</span>
+                <span id="chatFileName">file.png</span>
               </div>
-              <div class="text-slate-500">已就绪多模态 (OpenAI image_url 格式)</div>
+              <div id="chatFileTypeDesc" class="text-slate-500">已就绪多模态 (OpenAI image_url 格式)</div>
             </div>
           </div>
         </div>
@@ -1540,7 +1546,7 @@
 
         let visionBadge = '';
         if (m.supports_images) {
-          visionBadge = `<span class="text-[10px] font-mono bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.2 rounded flex items-center gap-0.5" title="支持多模态 / 图片输入">👁️ 视觉</span>`;
+          visionBadge = `<span class="text-[10px] font-mono bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.2 rounded flex items-center gap-0.5" title="支持多模态 / 图片视觉 / 文档推理">✨ 多模态</span>`;
         }
 
         listHtml += `
@@ -1565,7 +1571,7 @@
           </div>
         `;
         let optionSuffix = '';
-        if (m.supports_images) optionSuffix += ' [👁️视觉]';
+        if (m.supports_images) optionSuffix += ' [✨多模态]';
         if (m.credits) optionSuffix += ` (${m.credits})`;
         const optionLabel = `${m.id}${optionSuffix}`;
         if (m.id === previouslySelected) {
@@ -1796,45 +1802,72 @@
       alert('已复制模型 ID: ' + modelId + '\n已自动填入左侧测试选择框！');
     }
 
-    let currentChatImageBase64 = null;
-    let currentChatImageName = '';
+    let currentChatFile = null; // { type: 'image'|'doc', name: '', data: '', text: '' }
 
-    function handleChatImageSelect(event) {
+    function handleChatFileSelect(event) {
       const file = event.target.files && event.target.files[0];
       if (!file) return;
-      processChatImageFile(file);
+      processChatAttachmentFile(file);
     }
 
-    function processChatImageFile(file) {
-      if (!file.type.startsWith('image/')) {
-        alert('请选择有效的图片文件 (PNG/JPEG/WEBP/GIF)');
+    function processChatAttachmentFile(file) {
+      if (file.size > 20 * 1024 * 1024) {
+        alert('文件过大，建议上传 20MB 以内');
         return;
       }
-      if (file.size > 10 * 1024 * 1024) {
-        alert('图片过大，建议上传 10MB 以内的图片');
-        return;
+
+      const isImage = file.type.startsWith('image/');
+      const fileName = file.name || 'attachment';
+      const ext = fileName.split('.').pop().toLowerCase();
+
+      if (isImage) {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          currentChatFile = {
+            type: 'image',
+            name: fileName,
+            data: e.target.result
+          };
+          document.getElementById('chatImagePreview').src = e.target.result;
+          document.getElementById('chatImagePreviewWrapper').classList.remove('hidden');
+          document.getElementById('chatDocPreviewWrapper').classList.add('hidden');
+          document.getElementById('chatFileName').innerText = fileName;
+          document.getElementById('chatFileTypeDesc').innerText = '已就绪视觉多模态 (OpenAI image_url 格式)';
+          document.getElementById('chatFilePreviewArea').classList.remove('hidden');
+        };
+        reader.readAsDataURL(file);
+      } else {
+        // 文本文档、代码、JSON、Markdown 等文件
+        const reader = new FileReader();
+        reader.onload = (e) => {
+          currentChatFile = {
+            type: 'doc',
+            name: fileName,
+            ext: ext,
+            text: e.target.result
+          };
+          document.getElementById('chatDocExt').innerText = ext.toUpperCase().slice(0, 4) || 'DOC';
+          document.getElementById('chatDocPreviewWrapper').classList.remove('hidden');
+          document.getElementById('chatImagePreviewWrapper').classList.add('hidden');
+          document.getElementById('chatFileName').innerText = fileName;
+          document.getElementById('chatFileTypeDesc').innerText = `已就绪文件附件 (${(file.size / 1024).toFixed(1)} KB)`;
+          document.getElementById('chatFilePreviewArea').classList.remove('hidden');
+        };
+        reader.readAsText(file);
       }
-      const reader = new FileReader();
-      reader.onload = (e) => {
-        currentChatImageBase64 = e.target.result;
-        currentChatImageName = file.name || 'image.png';
-        document.getElementById('chatImagePreview').src = currentChatImageBase64;
-        document.getElementById('chatImageName').innerText = currentChatImageName;
-        document.getElementById('chatImagePreviewArea').classList.remove('hidden');
-      };
-      reader.readAsDataURL(file);
     }
 
-    function removeChatImage() {
-      currentChatImageBase64 = null;
-      currentChatImageName = '';
-      const input = document.getElementById('chatImageInput');
+    function removeChatFile() {
+      currentChatFile = null;
+      const input = document.getElementById('chatFileInput');
       if (input) input.value = '';
       document.getElementById('chatImagePreview').src = '';
-      document.getElementById('chatImagePreviewArea').classList.add('hidden');
+      document.getElementById('chatFilePreviewArea').classList.add('hidden');
+      document.getElementById('chatImagePreviewWrapper').classList.add('hidden');
+      document.getElementById('chatDocPreviewWrapper').classList.add('hidden');
     }
 
-    // 支持在 Prompt 输入框中直接粘贴图片截图
+    // 支持在 Prompt 输入框中直接粘贴图片截图或文件
     document.addEventListener('DOMContentLoaded', () => {
       const promptEl = document.getElementById('chatPrompt');
       if (promptEl) {
@@ -1845,7 +1878,7 @@
               if (items[i].type.indexOf('image') !== -1) {
                 const file = items[i].getAsFile();
                 if (file) {
-                  processChatImageFile(file);
+                  processChatAttachmentFile(file);
                   break;
                 }
               }
@@ -1863,8 +1896,8 @@
       const timing = document.getElementById('chatTiming');
       const btn = document.getElementById('btnSendChat');
 
-      if (!prompt && !currentChatImageBase64) {
-        alert('请输入对话消息或添加图片');
+      if (!prompt && !currentChatFile) {
+        alert('请输入对话消息或添加附件');
         return;
       }
 
@@ -1876,19 +1909,25 @@
       timing.innerText = '耗时: 计时中...';
       const start = Date.now();
 
-      // 构建 OpenAI 标准多模态 content
+      // 构建 OpenAI 标准多模态与文档 content
       let userContent;
-      if (currentChatImageBase64) {
-        userContent = [];
-        if (prompt) {
-          userContent.push({ type: 'text', text: prompt });
-        } else {
-          userContent.push({ type: 'text', text: '请分析并描述这张图片。' });
+      if (currentChatFile) {
+        if (currentChatFile.type === 'image') {
+          userContent = [];
+          if (prompt) {
+            userContent.push({ type: 'text', text: prompt });
+          } else {
+            userContent.push({ type: 'text', text: '请分析并描述这张图片。' });
+          }
+          userContent.push({
+            type: 'image_url',
+            image_url: { url: currentChatFile.data }
+          });
+        } else if (currentChatFile.type === 'doc') {
+          // 文档或代码文件：组装为带上下文引导的文本
+          const docHeader = `\n\n【文件附件: ${currentChatFile.name}】\n\`\`\`${currentChatFile.ext || ''}\n${currentChatFile.text}\n\`\`\`\n`;
+          userContent = prompt ? `${prompt}${docHeader}` : `请阅读并分析以下文件内容：${docHeader}`;
         }
-        userContent.push({
-          type: 'image_url',
-          image_url: { url: currentChatImageBase64 }
-        });
       } else {
         userContent = prompt;
       }

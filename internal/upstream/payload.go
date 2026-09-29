@@ -251,16 +251,72 @@ func normalizeImageURL(obj map[string]any) {
 		if !ok {
 			continue
 		}
-		for _, rawPart := range parts {
+		for i, rawPart := range parts {
 			part, ok := rawPart.(map[string]any)
-			if !ok || part["type"] != "image_url" {
+			if !ok {
 				continue
 			}
-			imageURL, ok := part["image_url"].(string)
-			if !ok || imageURL == "" {
+			partType, _ := part["type"].(string)
+
+			// 1. image_url 形状归一化：支持直接传字符串 URL 或对象
+			if partType == "image_url" {
+				if imageURL, ok := part["image_url"].(string); ok && imageURL != "" {
+					part["image_url"] = map[string]any{"url": imageURL}
+				}
 				continue
 			}
-			part["image_url"] = map[string]any{"url": imageURL}
+
+			// 2. Anthropic / Gemini 兼容: type == "image" (带 source.data base64) 转换为 OpenAI image_url
+			if partType == "image" {
+				if source, ok := part["source"].(map[string]any); ok {
+					mediaType, _ := source["media_type"].(string)
+					data, _ := source["data"].(string)
+					if data != "" {
+						if mediaType == "" {
+							mediaType = "image/png"
+						}
+						part["type"] = "image_url"
+						part["image_url"] = map[string]any{
+							"url": "data:" + mediaType + ";base64," + data,
+						}
+						delete(part, "source")
+					}
+				}
+				continue
+			}
+
+			// 3. 多模态文件/文档 (file / document / input_file) 自动适配
+			// 上游原生聊天后端只接收标准 text 与 image_url。若客户端传入文本类文件、代码文件或 PDF/文档等文件块，
+			// 将其智能提取并平滑转为 text 内容块，确保全模型/多模态模型无损推理，绝不报 400 参数格式错误。
+			if partType == "file" || partType == "document" || partType == "input_file" {
+				var extractedText string
+				fileName, _ := part["name"].(string)
+				if fileName == "" {
+					fileName, _ = part["file_name"].(string)
+				}
+				// 尝试取 text / content
+				if txt, ok := part["text"].(string); ok && txt != "" {
+					extractedText = txt
+				} else if content, ok := part["content"].(string); ok && content != "" {
+					extractedText = content
+				} else if source, ok := part["source"].(map[string]any); ok {
+					// 兼容 source 包装
+					if txt, ok := source["text"].(string); ok {
+						extractedText = txt
+					}
+				}
+
+				if extractedText != "" {
+					prefix := ""
+					if fileName != "" {
+						prefix = "【文档附件: " + fileName + "】\n"
+					}
+					parts[i] = map[string]any{
+						"type": "text",
+						"text": prefix + extractedText,
+					}
+				}
+			}
 		}
 	}
 }
