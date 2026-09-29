@@ -23,23 +23,43 @@
    - 所有逻辑（OAuth 登录授权、批量日常签到、领取国际版试用额度、账号管理）全部**在进程内（In-Process）原生实现**。
    - 单文件体积仅 ~9.5MB，随下随用，无任何外部环境依赖。
 
-2. **现代化原生桌面 GUI 视窗（类似 Tauri 体验）**
+2. **现代化原生桌面 GUI 视窗 & Web 管理中枢**
    - Windows 下基于原生 Edge WebView2 驱动，采用 Windows GUI 模式编译（`-H windowsgui`）。
    - **双击运行即直接弹出 1280x820 桌面客户端窗口**，完全没有黑框命令行控制台干扰。
-   - 内嵌赛博朋克深色风格管理控制台，实时查看账号健康状态、模型路由、在途并发、积分余量，支持一键授权与签到。
+   - 内嵌重构升级的现代深色管理控制台：
+     - **实时可观测性**：账号健康度、在途并发、积分实时消耗、近 14 日历史请求分析与分模型耗时/命中率透视。
+     - **一键全功能运维**：一键授权登录、批量签到、国际版试用额度领取、手动导入/删除/停用。
+     - **智能冷却与一键解除**：倒计时透明展示（如 `限流冷却中 (45s)`、限流模型透视），支持**一键「解除冷却」**秒级重回选号池。
    - 关闭桌面窗口即自动优雅停机并持久化保存数据状态。
 
-3. **双域自动适配（国内版 CN & 国际版 Global）**
+3. **用户角色与 API Key 资源隔离权限系统 (Multi-Tenant & RBAC)**
+   - **多用户系统**：支持用户自主注册、管理员后台增删改查用户与密码重置。
+   - **双重角色权限（Admin / User）**：
+     - **管理员（Admin）**：全权调度全局所有账号池，查看全站流量流水与全部账号状态。
+     - **普通用户（User）**：拥有独立专属的 API Key 凭证与账号池隔离，仅可查看和调度属于自己的私有账号或系统公共账号，不同用户会话互不串扰。
+   - **全站 Web 密码保护**：支持一键设置管理密码保护控制台，保障公网部署绝对安全。
+
+4. **全面支持图片多模态与视觉推理 (Multimodal Vision)**
+   - **支持标准 OpenAI 视觉格式**：全兼容 `type: image_url`（含 Base64 Data URL 与网络图片 URL），自动做上游结构平滑兼容。
+   - **模型视觉能力显式标识**：模型列表与选择器中自动打上 **`[👁️ 视觉]`** 高亮徽章，一目了然区分视觉模型与纯文本模型。
+   - **内置控制台调试演练场（Playground）**：
+     - 支持**点击上传本地图片**或在 Prompt 输入框中**直接粘贴屏幕截图**（`Ctrl+V`）；
+     - 自动组装多模态消息进行流式调用与实时耗时测速。
+
+5. **模型积分倍率透明化展示**
+   - 模型目录、模型下拉选择器、API 请求列表及统计报表中，全链路透明展示各模型官方计费倍率（如 `x0.05`、`x0.29`、`x1.00`），助您精准把控账号积分开销。
+
+6. **双域自动适配（国内版 CN & 国际版 Global）**
    - 完美适配国内版（`copilot.tencent.com` / `www.codebuddy.cn`）与国际版（`www.workbuddy.ai`）。
    - 智能识别账号 Realm 域，自动按前缀路由或共享调度池，支持一键领取国际版试用加速包。
 
-4. **生产级流式中继与流量治理**
+7. **生产级流式中继与流量治理**
    - **全兼容 OpenAI 接口**：标准 `/v1/chat/completions` 与 `/v1/models`，支持流式 SSE 输出与思维链（DeepSeek Reasoning Content）自动注入。
    - **三因子加权随机选号**：积分余量、快过期积分优先、空闲补偿多维度调度。
    - **故障自愈与熔断机制**：429 限流软冷却避让、模型级独立限流（6004）、连续失败自动熔断保护。
    - **会话粘性路由**：基于会话上下文的稳定号绑定，保证多轮长对话不换号、Prompt Cache 命中最大化。
 
-5. **全自动持续集成（CI/CD）与安全隐私保护**
+8. **全自动持续集成（CI/CD）与安全隐私保护**
    - **隐私绝对安全**：账号凭证（`auths/`）与数据库状态（`data/`）被严格隔离并在 `.gitignore` / `.dockerignore` 中屏蔽，绝不泄露任何私有数据。
    - **GitHub Actions 自动化打包**：每次打 tag 或手动点击即可自动编译 Windows 单文件桌面版与发布 Docker 镜像。
 
@@ -190,6 +210,32 @@ response = client.chat.completions.create(
 for chunk in response:
     content = chunk.choices[0].delta.content or ""
     print(content, end="", flush=True)
+```
+
+### 多模态 / 图片视觉推理 (Image Vision)
+支持向带有 `[👁️ 视觉]` 标识的模型（如 `claude-3-5-sonnet`、`gpt-4o` 等）发送图片：
+```bash
+curl -N http://127.0.0.1:7863/v1/chat/completions \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "cn:claude-3-5-sonnet",
+    "messages": [
+      {
+        "role": "user",
+        "content": [
+          {"type": "text", "text": "请分析这张图里有什么"},
+          {
+            "type": "image_url",
+            "image_url": {
+              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
+            }
+          }
+        ]
+      }
+    ],
+    "stream": true
+  }'
 ```
 
 ---
