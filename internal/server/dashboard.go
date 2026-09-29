@@ -1387,11 +1387,25 @@ func (h *Handler) handleSystemUpdateCheck(w http.ResponseWriter, r *http.Request
 
 	var downloadURL string
 	var assetSize int64
+	goos := runtime.GOOS
+	goarch := runtime.GOARCH
+
 	for _, a := range rel.Assets {
-		if strings.HasSuffix(strings.ToLower(a.Name), ".exe") {
+		name := strings.ToLower(a.Name)
+		if goos == "windows" && strings.HasSuffix(name, ".exe") {
 			downloadURL = a.BrowserDownloadURL
 			assetSize = a.Size
 			break
+		} else if goos == "linux" {
+			if goarch == "arm64" && strings.Contains(name, "linux-arm64") {
+				downloadURL = a.BrowserDownloadURL
+				assetSize = a.Size
+				break
+			} else if goarch == "amd64" && strings.Contains(name, "linux-amd64") {
+				downloadURL = a.BrowserDownloadURL
+				assetSize = a.Size
+				break
+			}
 		}
 	}
 

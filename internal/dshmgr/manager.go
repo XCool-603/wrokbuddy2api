@@ -224,6 +224,39 @@ func (m *Manager) CleanRuntime() error {
 func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 	localDir := m.localBinDir()
 
+	// 1. 如果系统全局 PATH 中已存在有效且可正常运行的 node 和 npx（常见于 Docker 容器或已安装 Node 的宿主机），
+	// 优先直接使用系统全局环境，避免本地目录历史残留的错误二进制（如 Alpine musl 环境残留 glibc 二进制）引起异常。
+	sysNode, errNode := exec.LookPath("node")
+	if errNode == nil {
+		npxName := "npx"
+		if runtime.GOOS == "windows" {
+			npxName = "npx.cmd"
+		}
+		sysNpx, errNpx := exec.LookPath(npxName)
+		if errNpx != nil && runtime.GOOS == "windows" {
+			sysNpx, errNpx = exec.LookPath("npx")
+		}
+		if errNpx == nil && verifyNode(sysNode) && verifyNpx(sysNode, sysNpx) {
+			// 若系统全局可用，同时检查本地绿色目录是否异常。若本地目录损坏，顺带清理
+			if _, err := os.Stat(localDir); err == nil {
+				candNode := filepath.Join(localDir, "bin", "node")
+				if runtime.GOOS == "windows" {
+					candNode = filepath.Join(localDir, "node.exe")
+				}
+				if fi, statErr := os.Stat(candNode); statErr == nil && !fi.IsDir() && !verifyNode(candNode) {
+					_ = os.RemoveAll(localDir)
+				}
+			}
+			return sysNode, sysNpx, true
+		}
+		// 备用：检查系统全局 node 附近是否存在 npx-cli.js
+		sysBase := filepath.Dir(filepath.Dir(sysNode))
+		if npxCli := findNpxCliJs(sysBase); npxCli != "" && verifyNode(sysNode) && verifyNpx(sysNode, npxCli) {
+			return sysNode, npxCli, true
+		}
+	}
+
+	// 2. 检查本地绿色便携运行时
 	if _, err := os.Stat(localDir); err == nil {
 		var candNode, candNpx string
 		if runtime.GOOS == "windows" {
@@ -293,31 +326,10 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 			if candNpx != "" && verifyNpx(candNode, candNpx) {
 				return candNode, candNpx, true
 			}
-		} else if candNode != "" {
-			// 自愈机制：本地目录存在 node 二进制，但无法在当前内核或 libc 下执行（如 Alpine musl 遇 glibc 抛 no such file or directory）
-			// 立即清理残留，避免干扰并让系统全局 node 接管
+		} else {
+			// 自愈机制：本地目录存在 node 二进制或文件，但无法在当前内核或 libc 下执行（如 Alpine musl 遇 glibc 抛 no such file or directory）
+			// 立即清理残留，避免干扰
 			_ = os.RemoveAll(localDir)
-		}
-	}
-
-	// 查找系统全局 PATH 并验证
-	sysNode, errNode := exec.LookPath("node")
-	if errNode == nil {
-		npxName := "npx"
-		if runtime.GOOS == "windows" {
-			npxName = "npx.cmd"
-		}
-		sysNpx, errNpx := exec.LookPath(npxName)
-		if errNpx != nil && runtime.GOOS == "windows" {
-			sysNpx, errNpx = exec.LookPath("npx")
-		}
-		if errNpx == nil && verifyNode(sysNode) && verifyNpx(sysNode, sysNpx) {
-			return sysNode, sysNpx, true
-		}
-		// 备用：检查系统全局 node 附近是否存在 npx-cli.js
-		sysBase := filepath.Dir(filepath.Dir(sysNode))
-		if npxCli := findNpxCliJs(sysBase); npxCli != "" && verifyNode(sysNode) && verifyNpx(sysNode, npxCli) {
-			return sysNode, npxCli, true
 		}
 	}
 
