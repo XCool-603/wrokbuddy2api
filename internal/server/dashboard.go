@@ -126,16 +126,14 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 账号隔离逻辑：
-		// 如果当前登录的是普通用户（非 admin），只列出属于该用户自己的账号或明确为 public 的公共账号
-		// 严禁普通用户看到管理员账号或 legacy 空 owner 账号（属于管理员私有）
+		// 管理员或默认模式可见所有账号；仅当显式为普通用户 (RoleUser) 时，过滤其他人的非公共账号
 		isMine := false
 		if user != nil {
-			if a.Owner == user.ID || a.Owner == user.Username {
+			if a.Owner == user.ID || a.Owner == user.Username || (user.Role == usermgr.RoleAdmin && (a.Owner == "" || a.Owner == "admin")) {
 				isMine = true
 			}
-			if user.Role != usermgr.RoleAdmin {
+			if user.Role == usermgr.RoleUser {
 				if !isMine && a.Owner != "public" {
-					// 不属于当前普通用户且非显式 public，跳过隔离
 					continue
 				}
 			}
@@ -1033,15 +1031,18 @@ func (h *Handler) getWebSessionUser(r *http.Request) *usermgr.User {
 		}
 	}
 
-	// 纯单机免密模式（既无密码又无用户管理器）才返回 admin
-	if pw == "" && h.cfg.UserMgr == nil {
-		return &usermgr.User{
-			ID:       "admin",
-			Username: "admin",
-			Role:     usermgr.RoleAdmin,
+	// 如果没有登录会话（免密单机模式，或尚未强制登录），默认作为管理员 admin 身份，确保所有账号和功能均立即可用
+	if h.cfg.UserMgr != nil {
+		if admin, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {
+			return admin
 		}
 	}
-	return nil
+
+	return &usermgr.User{
+		ID:       "admin",
+		Username: "admin",
+		Role:     usermgr.RoleAdmin,
+	}
 }
 
 func (h *Handler) checkWebAuth(r *http.Request) bool {
@@ -1749,6 +1750,16 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 		gatewayURL = fmt.Sprintf("%s://%s/v1", scheme, r.Host)
 	}
 
+	dshWebURL := st.WebURL
+	if st.Running && r.Host != "" {
+		hostOnly := r.Host
+		if colon := strings.Index(hostOnly, ":"); colon != -1 {
+			hostOnly = hostOnly[:colon]
+		}
+		scheme := "http"
+		dshWebURL = fmt.Sprintf("%s://%s:%d", scheme, hostOnly, st.Port)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"supported":        true,
 		"installed":        st.Installed,
@@ -1760,7 +1771,7 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 		"external_running": st.ExternalRunning,
 		"is_docker":        isDockerEnvironment(),
 		"port":             st.Port,
-		"web_url":          st.WebURL,
+		"web_url":          dshWebURL,
 		"started_at":       st.StartedAt,
 		"logs":             st.Logs,
 		"gateway_url":      gatewayURL,
