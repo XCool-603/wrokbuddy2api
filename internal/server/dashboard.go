@@ -47,6 +47,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))
 	h.mux.HandleFunc("POST /ui/config/password", h.withWebAuth(h.handleConfigPassword))
 	h.mux.HandleFunc("GET /ui/action/backup", h.withWebAuth(h.handleActionBackup))
+	h.mux.HandleFunc("POST /ui/oauth/batch_import", h.withWebAuth(h.handleOAuthBatchImport))
 	h.mux.HandleFunc("GET /ui/system/update/check", h.withWebAuth(h.handleSystemUpdateCheck))
 	h.mux.HandleFunc("POST /ui/system/update/do", h.withWebAuth(h.handleSystemUpdateDo))
 
@@ -814,6 +815,8 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := h.getWebSessionUser(r)
+
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=workbuddy2api_auths_backup_%s.zip", time.Now().Format("20060102_150405")))
 
@@ -825,6 +828,14 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		// 如果是普通租户，只备份属于自己的账号
+		if user != nil && user.Role != usermgr.RoleAdmin {
+			if a, parseErr := auth.Parse(data); parseErr == nil {
+				if a.Owner != user.ID && a.Owner != user.Username {
+					continue
+				}
+			}
+		}
 		base := filepath.Base(f)
 		fw, err := zw.Create(base)
 		if err != nil {
@@ -832,6 +843,146 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = fw.Write(data)
 	}
+}
+
+func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request) {
+	// 支持两种导入方式：
+	// 1. multipart/form-data 上传 zip 压缩包或多 json 文件
+	// 2. application/json 批量传入 json array
+	contentType := r.Header.Get("Content-Type")
+	user := h.getWebSessionUser(r)
+	ownerID := ""
+	if user != nil {
+		ownerID = user.ID
+	}
+
+	type importItem struct {
+		name string
+		data []byte
+	}
+	var items []importItem
+
+	if strings.HasPrefix(contentType, "multipart/form-data") {
+		// 限制最大 50MB 上传
+		if err := r.ParseMultipartForm(50 << 20); err != nil {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "解析上传文件失败: " + err.Error()})
+			return
+		}
+		files := r.MultipartForm.File["file"]
+		if len(files) == 0 {
+			files = r.MultipartForm.File["files"]
+		}
+		for _, fileHeader := range files {
+			f, err := fileHeader.Open()
+			if err != nil {
+				continue
+			}
+			data, err := io.ReadAll(f)
+			_ = f.Close()
+			if err != nil {
+				continue
+			}
+			name := strings.ToLower(fileHeader.Filename)
+			if strings.HasSuffix(name, ".zip") {
+				// 解开 zip
+				zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
+				if err == nil {
+					for _, zf := range zr.File {
+						if zf.FileInfo().IsDir() {
+							continue
+						}
+						if strings.HasSuffix(strings.ToLower(zf.Name), ".json") {
+							rc, err := zf.Open()
+							if err == nil {
+								zData, _ := io.ReadAll(rc)
+								_ = rc.Close()
+								if len(zData) > 0 {
+									items = append(items, importItem{name: filepath.Base(zf.Name), data: zData})
+								}
+							}
+						}
+					}
+				}
+			} else if strings.HasSuffix(name, ".json") {
+				items = append(items, importItem{name: filepath.Base(fileHeader.Filename), data: data})
+			}
+		}
+	} else {
+		// 尝试解析为 JSON
+		var req struct {
+			Content string `json:"content"`
+		}
+		bodyBytes, err := io.ReadAll(r.Body)
+		if err == nil && len(bodyBytes) > 0 {
+			if jsonErr := json.Unmarshal(bodyBytes, &req); jsonErr == nil && req.Content != "" {
+				bodyBytes = []byte(strings.TrimSpace(req.Content))
+			}
+		}
+
+		bodyStr := strings.TrimSpace(string(bodyBytes))
+		if bodyStr != "" {
+			// 判断是否是 JSON 数组
+			if strings.HasPrefix(bodyStr, "[") {
+				var rawList []json.RawMessage
+				if err := json.Unmarshal([]byte(bodyStr), &rawList); err == nil {
+					for idx, raw := range rawList {
+						items = append(items, importItem{name: fmt.Sprintf("item_%d.json", idx+1), data: raw})
+					}
+				}
+			} else if strings.HasPrefix(bodyStr, "{") {
+				items = append(items, importItem{name: "single.json", data: []byte(bodyStr)})
+			}
+		}
+	}
+
+	if len(items) == 0 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未检测到有效的 JSON 凭证或 ZIP 压缩包"})
+		return
+	}
+
+	_ = os.MkdirAll("./auths", 0755)
+
+	successCount := 0
+	failedCount := 0
+	var successUIDs []string
+	var failReasons []string
+
+	for _, item := range items {
+		a, err := auth.Parse(item.data)
+		if err != nil {
+			failedCount++
+			failReasons = append(failReasons, fmt.Sprintf("%s: 解析失败 (%v)", item.name, err))
+			continue
+		}
+		uid := a.UID
+		if uid == "" {
+			uid = fmt.Sprintf("account_%d_%d", time.Now().UnixNano(), successCount)
+		}
+		if ownerID != "" {
+			a.Owner = ownerID
+		}
+		targetFile := filepath.Join("./auths", fmt.Sprintf("workbuddy-%s.json", uid))
+		a.FilePath = targetFile
+		if err := a.SaveAtomic(); err != nil {
+			failedCount++
+			failReasons = append(failReasons, fmt.Sprintf("%s: 落盘失败 (%v)", item.name, err))
+			continue
+		}
+		if h.cfg.Pool != nil {
+			h.cfg.Pool.Add(a)
+		}
+		successCount++
+		successUIDs = append(successUIDs, uid)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":       true,
+		"total":         len(items),
+		"success_count": successCount,
+		"failed_count":  failedCount,
+		"success_uids":  successUIDs,
+		"fail_reasons":  failReasons,
+	})
 }
 
 // webSessionCookieName Web 控制台会话 Cookie 名
