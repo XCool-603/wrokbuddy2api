@@ -87,7 +87,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 
 	user := h.getWebSessionUser(r)
 
-	authDir := "./auths"
+	authDir := h.getAuthDir()
 	files, _ := auth.LoadAuthFiles(authDir)
 	type AccountItem struct {
 		UID               string                  `json:"uid"`
@@ -114,7 +114,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		poolMap[p.UID] = p
 	}
 
-	accounts := make([]AccountItem, 0, len(files))
+	seenUID := make(map[string]bool)
+	accounts := make([]AccountItem, 0, len(files)+len(poolList))
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
 		if err != nil {
@@ -126,10 +127,13 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 账号隔离逻辑：
-		// 管理员或默认模式可见所有账号；仅当显式为普通用户 (RoleUser) 时，过滤其他人的非公共账号
+		// 未登录/单机免密或管理员角色，默认所有账号可管可删 (isMine = true)
+		// 仅当显式为普通用户 (RoleUser) 时，过滤其他人的非公共账号
 		isMine := false
-		if user != nil {
-			if a.Owner == user.ID || a.Owner == user.Username || (user.Role == usermgr.RoleAdmin && (a.Owner == "" || a.Owner == "admin")) {
+		if user == nil || user.Role == usermgr.RoleAdmin {
+			isMine = true
+		} else {
+			if a.Owner == user.ID || a.Owner == user.Username {
 				isMine = true
 			}
 			if user.Role == usermgr.RoleUser {
@@ -139,6 +143,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 
+		seenUID[a.UID] = true
 		item := AccountItem{
 			UID:         a.UID,
 			Realm:       a.Realm(),
@@ -164,6 +169,70 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			if remain, _, _, _, err := h.cfg.Upstream.ResourceSummary(a); err == nil {
 				item.Credits = remain
 				h.cfg.Pool.SetCredits(a.UID, remain)
+			}
+		}
+		accounts = append(accounts, item)
+	}
+
+	// 兜底与并集补齐：如果有任何在内存账号池（Pool）中已存在但在磁盘扫描中遗漏的账号，
+	// 无论文件路径差异或磁盘读取延时，均保证在账号池中 100% 完整展示给用户！
+	for _, p := range poolList {
+		if seenUID[p.UID] {
+			continue
+		}
+		authObj := h.cfg.Pool.AuthByUID(p.UID)
+		owner := ""
+		realm := p.Realm
+		nickname := p.Nickname
+		filename := fmt.Sprintf("workbuddy-%s.json", p.UID)
+		if authObj != nil {
+			owner = authObj.Owner
+			realm = authObj.Realm()
+			if authObj.Nickname != "" {
+				nickname = authObj.Nickname
+			}
+			if authObj.FilePath != "" {
+				filename = filepath.Base(authObj.FilePath)
+			}
+		}
+
+		isMine := false
+		if user == nil || user.Role == usermgr.RoleAdmin {
+			isMine = true
+		} else {
+			if owner == user.ID || owner == user.Username {
+				isMine = true
+			}
+			if user.Role == usermgr.RoleUser {
+				if !isMine && owner != "public" {
+					continue
+				}
+			}
+		}
+
+		seenUID[p.UID] = true
+		item := AccountItem{
+			UID:               p.UID,
+			Realm:             realm,
+			Nickname:          nickname,
+			Filename:          filename,
+			Credits:           p.Credits,
+			Disabled:          p.Disabled,
+			DisabledReason:    p.DisabledReason,
+			ManualDisabled:    p.ManualDisabled,
+			ManualReason:      p.ManualReason,
+			Cooling:           p.Cooling,
+			CoolKind:          p.CoolKind,
+			CoolRemaining:     p.CoolRemaining,
+			Reason:            p.Reason,
+			RateLimitedModels: p.RateLimitedModels,
+			Owner:             owner,
+			IsMyAccount:       isMine,
+		}
+		if item.Credits == 0 && authObj != nil && authObj.AccessTokenValue() != "" && h.cfg.Upstream != nil {
+			if remain, _, _, _, err := h.cfg.Upstream.ResourceSummary(authObj); err == nil {
+				item.Credits = remain
+				h.cfg.Pool.SetCredits(p.UID, remain)
 			}
 		}
 		accounts = append(accounts, item)
@@ -422,8 +491,9 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	}
 	docBytes, _ := json.MarshalIndent(doc, "", "  ")
 
-	_ = os.MkdirAll("./auths", 0755)
-	targetFile := filepath.Join("./auths", fmt.Sprintf("workbuddy-%s.json", uid))
+	authDir := h.getAuthDir()
+	_ = os.MkdirAll(authDir, 0755)
+	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
 	if err := os.WriteFile(targetFile, docBytes, 0644); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": fmt.Sprintf("保存授权文件失败: %v", err),
@@ -481,8 +551,9 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 		a.Owner = user.ID
 	}
 
-	_ = os.MkdirAll("./auths", 0755)
-	targetFile := filepath.Join("./auths", fmt.Sprintf("workbuddy-%s.json", uid))
+	authDir := h.getAuthDir()
+	_ = os.MkdirAll(authDir, 0755)
+	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
 	a.FilePath = targetFile
 	if err := a.SaveAtomic(); err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": fmt.Sprintf("保存失败: %v", err)})
@@ -560,11 +631,11 @@ func isAlreadyCheckinErr(err error) bool {
 }
 
 func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
-	authDir := "./auths"
+	authDir := h.getAuthDir()
 	files, err := auth.LoadAuthFiles(authDir)
 	if err != nil || len(files) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"output": "未找到任何账号凭证文件 (auths/ 目录为空)",
+			"output": "未找到任何账号凭证文件 (" + authDir + " 目录为空)",
 		})
 		return
 	}
@@ -641,11 +712,11 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleActionTrial(w http.ResponseWriter, r *http.Request) {
-	authDir := "./auths"
+	authDir := h.getAuthDir()
 	files, err := auth.LoadAuthFiles(authDir)
 	if err != nil || len(files) == 0 {
 		writeJSON(w, http.StatusOK, map[string]any{
-			"output": "未找到任何账号凭证文件 (auths/ 目录为空)",
+			"output": "未找到任何账号凭证文件 (" + authDir + " 目录为空)",
 		})
 		return
 	}
@@ -725,17 +796,35 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	target := filepath.Join("auths", req.Filename)
+	authDir := h.getAuthDir()
+	target := filepath.Join(authDir, req.Filename)
 	raw, err := os.ReadFile(target)
 	if err != nil {
+		// 如果磁盘文件不存在，尝试检查是否是纯内存池账号删除
+		deletedFromPool := false
+		if h.cfg.Pool != nil {
+			for _, st := range h.cfg.Pool.List() {
+				if fmt.Sprintf("workbuddy-%s.json", st.UID) == req.Filename || st.UID == req.Filename {
+					h.cfg.Pool.Remove(st.UID)
+					deletedFromPool = true
+					break
+				}
+			}
+		}
+		if deletedFromPool {
+			writeJSON(w, http.StatusOK, map[string]any{"success": true})
+			return
+		}
 		writeJSON(w, http.StatusNotFound, map[string]any{"error": "凭证文件不存在"})
 		return
 	}
 
 	user := h.getWebSessionUser(r)
-	if user != nil && user.Role != usermgr.RoleAdmin {
-		// 普通用户只能删除自己名下的账号
-		if a, err := auth.Parse(raw); err == nil {
+	var deletedUID string
+	if a, err := auth.Parse(raw); err == nil {
+		deletedUID = a.UID
+		if user != nil && user.Role != usermgr.RoleAdmin {
+			// 普通用户只能删除自己名下的账号
 			if a.Owner != user.ID && a.Owner != user.Username {
 				writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足：只能删除自己绑定的账号"})
 				return
@@ -744,6 +833,10 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = os.Remove(target)
+	if deletedUID != "" && h.cfg.Pool != nil {
+		h.cfg.Pool.Remove(deletedUID)
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})
 }
 
@@ -807,7 +900,8 @@ func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
-	files, err := auth.LoadAuthFiles("./auths")
+	authDir := h.getAuthDir()
+	files, err := auth.LoadAuthFiles(authDir)
 	if err != nil {
 		http.Error(w, "无法读取凭证目录: "+err.Error(), http.StatusInternalServerError)
 		return
@@ -938,7 +1032,8 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 		return
 	}
 
-	_ = os.MkdirAll("./auths", 0755)
+	authDir := h.getAuthDir()
+	_ = os.MkdirAll(authDir, 0755)
 
 	successCount := 0
 	failedCount := 0
@@ -959,7 +1054,7 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 		if ownerID != "" {
 			a.Owner = ownerID
 		}
-		targetFile := filepath.Join("./auths", fmt.Sprintf("workbuddy-%s.json", uid))
+		targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
 		a.FilePath = targetFile
 		if err := a.SaveAtomic(); err != nil {
 			failedCount++

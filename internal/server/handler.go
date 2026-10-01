@@ -73,6 +73,9 @@ type Config struct {
 	// UserMgr 用户与角色权限管理器
 	UserMgr *usermgr.Manager
 
+	// AuthDir 账号授权文件存放目录（对应 config.json 的 auth_dir，默认 ./auths）
+	AuthDir string
+
 	// DshMgr DeepSeek Harness 进程管理器
 	DshMgr *dshmgr.Manager
 
@@ -100,7 +103,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.6"
+const CurrentVersion = "v1.2.7"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -117,6 +120,13 @@ type Handler struct {
 	// wafIP WAF IP 级拦截状态机（fail-fast，wafip.go）：短窗多号 WAF 403 →
 	// 激活期轮转遇 WAF 403 直接终止（不放大请求量）。进程内状态、重启清零。
 	wafIP wafIPGate
+}
+
+func (h *Handler) getAuthDir() string {
+	if h.cfg.AuthDir != "" {
+		return h.cfg.AuthDir
+	}
+	return "./auths"
 }
 
 func (h *Handler) GetAPIKey() string {

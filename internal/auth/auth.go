@@ -380,13 +380,37 @@ func (a *Auth) SaveAtomic() error {
 const AuthFileGlob = "workbuddy*.json"
 
 // LoadAuthFiles 返回 dir 下按 AuthFileGlob 匹配的 auth 文件清单（已排序）。
-// 供 cmd 运维工具复用：只列文件、不解析不迁移（LoadDir 才做 backfill 等副作用），
-// 保持 signin/credit/trial 原有的「逐文件 Parse、损坏即跳过/报行错」流程不变。
+// 若存在其他非系统配置类的 *.json 文件，只要能解析为有效凭证也会被自动兼容发现。
 func LoadAuthFiles(dir string) ([]string, error) {
 	files, err := filepath.Glob(filepath.Join(dir, AuthFileGlob))
 	if err != nil {
 		return nil, err
 	}
+	seen := make(map[string]bool, len(files))
+	for _, f := range files {
+		seen[filepath.Clean(f)] = true
+	}
+
+	// 额外宽容匹配：扫描 dir/*.json，兼容用户手动放置的未带 workbuddy 前缀的授权凭证文件
+	allJSON, _ := filepath.Glob(filepath.Join(dir, "*.json"))
+	for _, f := range allJSON {
+		clean := filepath.Clean(f)
+		if seen[clean] {
+			continue
+		}
+		base := strings.ToLower(filepath.Base(clean))
+		// 忽略常见系统配置与状态文件，避免误判
+		if base == "state.json" || base == "users.json" || base == "settings.json" || base == "config.json" || base == "metrics.json" {
+			continue
+		}
+		if raw, err := os.ReadFile(clean); err == nil && len(raw) > 0 {
+			if a, parseErr := Parse(raw); parseErr == nil && a != nil && a.AccessToken != "" {
+				files = append(files, f)
+				seen[clean] = true
+			}
+		}
+	}
+
 	sort.Strings(files)
 	return files, nil
 }

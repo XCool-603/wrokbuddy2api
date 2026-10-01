@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -93,5 +94,26 @@ func TestUserAuthAndIsolation(t *testing.T) {
 	pickedAdmin := p.PickExcludingForRealmAndOwner(nil, "", "", "admin")
 	if pickedAdmin == nil {
 		t.Fatalf("Admin pick should succeed")
+	}
+
+	// 6. 测试 Web 控制台 handleDashboardData：登录管理员后，即使磁盘 auth 目录无文件，池中账号也必须并集展示
+	loginReq := httptest.NewRequest(http.MethodPost, "/ui/auth/login", strings.NewReader(`{"username":"admin","password":"admin123456"}`))
+	loginW := httptest.NewRecorder()
+	h.ServeHTTP(loginW, loginReq)
+	if loginW.Code != http.StatusOK {
+		t.Fatalf("Admin login failed with %d: %s", loginW.Code, loginW.Body.String())
+	}
+	cookie := loginW.Result().Cookies()[0]
+
+	wData := httptest.NewRecorder()
+	reqData := httptest.NewRequest(http.MethodGet, "/ui/data", nil)
+	reqData.AddCookie(cookie)
+	h.ServeHTTP(wData, reqData)
+	if wData.Code != http.StatusOK {
+		t.Fatalf("Dashboard data endpoint returned %d: %s", wData.Code, wData.Body.String())
+	}
+	body := wData.Body.String()
+	if !strings.Contains(body, "admin_legacy") || !strings.Contains(body, "bob1") {
+		t.Fatalf("Dashboard accounts must include pool accounts! body: %s", body)
 	}
 }

@@ -306,3 +306,21 @@ func TestLoadDirLoadsNonHyphenFile(t *testing.T) {
 		t.Fatalf("list=%+v want 1 account (uid=u1)", list)
 	}
 }
+
+// TestLoadDirLoadsArbitraryNamedAuthFile 兼容性测试：用户随意命名的 json 凭证文件也能被识别
+func TestLoadDirLoadsArbitraryNamedAuthFile(t *testing.T) {
+	dir := t.TempDir()
+	doc := `{"accessToken":"at_arbitrary","refreshToken":"rt_arb","expiresAt":1999999999,"uid":"u_arb"}`
+	os.WriteFile(filepath.Join(dir, "my_custom_account.json"), []byte(doc), 0o600)
+	// 混淆干扰文件
+	os.WriteFile(filepath.Join(dir, "config.json"), []byte(`{"listen":":8080"}`), 0o600)
+	os.WriteFile(filepath.Join(dir, "random.txt"), []byte(`hello`), 0o600)
+
+	list, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("load: %v", err)
+	}
+	if len(list) != 1 || list[0].UID != "u_arb" {
+		t.Fatalf("want 1 account with uid=u_arb, got %+v", list)
+	}
+}

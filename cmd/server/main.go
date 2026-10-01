@@ -309,6 +309,7 @@ func main() {
 		AdminEnabled: cfg.Admin.Enabled,
 		ConfigPath:   *cfgPath,
 		StateFile:    cfg.StateFile,
+		AuthDir:      cfg.AuthDir,
 		WebPassword:  cfg.WebPassword,
 		UserMgr:      userMgr,
 		DshMgr:       dshManager,
