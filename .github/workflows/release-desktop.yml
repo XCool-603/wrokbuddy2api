@@ -33,6 +33,7 @@ jobs:
       - name: Build Standalone Windows GUI Binary
         run: |
           go build -trimpath -ldflags "-H windowsgui -s -w" -o workbuddy2api.exe ./cmd/server
+          go build -trimpath -ldflags "-s -w" -o workbuddy2api-console.exe ./cmd/server
 
       - name: Build Standalone Linux amd64 Binary
         run: |
@@ -60,6 +61,7 @@ jobs:
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           files: |
             workbuddy2api.exe
+            workbuddy2api-console.exe
             workbuddy2api-linux-amd64
             workbuddy2api-linux-arm64
             config.example.json

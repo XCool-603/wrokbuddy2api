@@ -12,8 +12,15 @@ import (
 )
 
 // runDesktopGUI 在 Windows 下启动原生桌面窗口 (WebView2)。
-// 当用户关闭窗口时，返回以继续退出流程。
-func runDesktopGUI(uiURL string, stopFunc func()) bool {
+// 当用户关闭窗口时，返回以继续退出流程。若环境缺少 WebView2 运行时或初始化异常，安全降级回退到系统浏览器。
+func runDesktopGUI(uiURL string, stopFunc func()) (handled bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			// 若 WebView2 初始化或运行过程崩溃，安全降级
+			handled = false
+		}
+	}()
+
 	w := webview2.NewWithOptions(webview2.WebViewOptions{
 		Debug: false,
 		WindowOptions: webview2.WindowOptions{
