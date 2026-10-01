@@ -577,7 +577,7 @@ func (m *Manager) AutoInstall() error {
 }
 
 func (m *Manager) doInstall() error {
-	const nodeVersion = "v20.18.0"
+	const nodeVersion = "v22.14.0"
 	goos := runtime.GOOS
 	goarch := runtime.GOARCH
 

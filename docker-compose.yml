@@ -27,7 +27,7 @@ services:
   # DeepSeek Harness (dsh) AI Agent 运行环境
   # 容器自动集成，docker compose up -d 默认一并启动
   dsh:
-    image: node:20-alpine
+    image: node:22-alpine
     container_name: workbuddy2api-dsh
     restart: unless-stopped
     working_dir: /workspace
