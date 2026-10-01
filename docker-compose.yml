@@ -1,5 +1,6 @@
 services:
   wb2api:
+    image: ghcr.io/xcool-603/wrokbuddy2api:latest
     build: .
     container_name: workbuddy2api
     restart: unless-stopped
@@ -30,8 +31,9 @@ services:
     container_name: workbuddy2api-dsh
     restart: unless-stopped
     working_dir: /workspace
-    command: sh -c "npx -y @deepseek-ai/dsh web --port 3080"
+    command: sh -c "npm config set registry https://registry.npmmirror.com && npx -y @deepseek-ai/dsh web --port 3080"
     environment:
+      - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
       - OPENAI_BASE_URL=http://wb2api:7863/v1
       - OPENAI_API_BASE=http://wb2api:7863/v1
       - DEEPSEEK_BASE_URL=http://wb2api:7863/v1

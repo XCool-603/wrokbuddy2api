@@ -1170,8 +1170,8 @@ func (h *Handler) checkWebAuth(r *http.Request) bool {
 		}
 	}
 
-	// 未设密码且未启用多用户注册模式时，单机免密放行
-	if pw == "" && (h.cfg.UserMgr == nil) {
+	// 未设密码时（单机模式），免密放行进入控制台（自动作为 admin 身份）
+	if pw == "" {
 		return true
 	}
 	return false
