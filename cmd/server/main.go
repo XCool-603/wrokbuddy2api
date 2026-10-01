@@ -281,9 +281,11 @@ func main() {
 	if cfg.StateFile != "" {
 		usersFile = filepath.Join(filepath.Dir(cfg.StateFile), "users.json")
 	}
+	_ = os.MkdirAll(filepath.Dir(usersFile), 0755)
 	userMgr, err := usermgr.New(usersFile, cfg.WebPassword, cfg.APIKey)
-	if err != nil {
-		log.Printf("WARN: [usermgr] 初始化用户数据失败: %v", err)
+	if err != nil || userMgr == nil {
+		log.Printf("WARN: [usermgr] 初始化持久化用户数据异常 (%v)，自动启用纯内存用户管理器", err)
+		userMgr, _ = usermgr.New("", cfg.WebPassword, cfg.APIKey)
 	}
 
 	// 初始化 DeepSeek Harness (dsh) 进程管理器

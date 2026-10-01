@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -49,6 +50,8 @@ type persistedStore struct {
 }
 
 // New 初始化或载入用户管理器。
+// 即使磁盘不可写或初次持久化失败，也会自动在内存中初始化默认 admin 并返回可用实例，
+// 绝不返回 nil，确保控制台多用户功能始终 100% 可用。
 func New(filePath string, defaultAdminPassword, defaultAPIKey string) (*Manager, error) {
 	m := &Manager{
 		filePath:      filePath,
@@ -57,15 +60,18 @@ func New(filePath string, defaultAdminPassword, defaultAPIKey string) (*Manager,
 		allowRegister: true,
 	}
 
+	if filePath != "" {
+		_ = os.MkdirAll(filepath.Dir(filePath), 0755)
+	}
+
 	if err := m.load(); err != nil {
-		// 如果文件不存在则初始化默认管理员
-		if os.IsNotExist(err) {
-			m.initDefaultAdmin(defaultAdminPassword, defaultAPIKey)
-			if err := m.save(); err != nil {
-				return nil, fmt.Errorf("init default admin save: %w", err)
-			}
-		} else {
-			return nil, fmt.Errorf("load users: %w", err)
+		// 如果文件不存在或损坏，初始化默认管理员
+		m.initDefaultAdmin(defaultAdminPassword, defaultAPIKey)
+		if !os.IsNotExist(err) {
+			log.Printf("WARN: [usermgr] 读取用户文件 %s 异常: %v，已重置为内存默认管理员", filePath, err)
+		}
+		if saveErr := m.save(); saveErr != nil {
+			log.Printf("WARN: [usermgr] 持久化默认用户数据至 %s 失败 (将保持内存模式运行): %v", filePath, saveErr)
 		}
 	} else {
 		// 如果加载成功但没有用户（比如空文件），补充默认 admin
