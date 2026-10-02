@@ -22,7 +22,13 @@ services:
     container_name: workbuddy2api-dsh
     restart: unless-stopped
     working_dir: /workspace
-    command: sh -c "npm config set registry https://registry.npmmirror.com && npx -y @deepseek-ai/dsh web --port 3080"
+    # DeepSeek Harness 官方出于安全限制强制仅监听 127.0.0.1 并拒绝 --host 0.0.0.0，
+    # 导致容器内无法响应外部映射与跨容器访问。此处通过轻量级 Node 桥接层在 0.0.0.0:3080 监听
+    # 并透明转发至容器内部 127.0.0.1:3081，同时重写 Host 解决安全域与跨域阻断。
+    command: >
+      sh -c "npm config set registry https://registry.npmmirror.com &&
+      node -e 'const h=require(\"http\"),n=require(\"net\");const s=h.createServer((q,s)=>{const p=h.request({hostname:\"127.0.0.1\",port:3081,path:q.url,method:q.method,headers:{...q.headers,host:\"127.0.0.1:3081\"}},r=>{s.writeHead(r.statusCode,r.headers);r.pipe(s);});q.pipe(p);p.on(\"error\",()=>{s.writeHead(502);s.end(\"dsh starting...\");});});s.on(\"upgrade\",(q,c,d)=>{const u=n.connect(3081,\"127.0.0.1\",()=>{let m=q.method+\" \"+q.url+\" HTTP/1.1\\r\\n\";for(const[k,v]of Object.entries(q.headers))m+=k+\": \"+(k.toLowerCase()===\"host\"?\"127.0.0.1:3081\":v)+\"\\r\\n\";m+=\"\\r\\n\";u.write(m);if(d&&d.length)u.write(d);c.pipe(u).pipe(c);});u.on(\"error\",()=>c.destroy());c.on(\"error\",()=>u.destroy());});s.listen(3080,\"0.0.0.0\",()=>console.log(\"[dsh-bridge] 0.0.0.0:3080 -> 127.0.0.1:3081 ready\"));' &
+      npx -y @deepseek-ai/dsh web --port 3081"
     environment:
       - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
       - OPENAI_BASE_URL=http://wb2api:7863/v1
