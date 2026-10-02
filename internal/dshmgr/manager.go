@@ -502,7 +502,19 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	origDirector := proxy.Director
 	proxy.Director = func(req *http.Request) {
 		origDirector(req)
-		req.Host = fmt.Sprintf("127.0.0.1:%d", targetPort)
+		targetAuthority := fmt.Sprintf("127.0.0.1:%d", targetPort)
+		req.Host = targetAuthority
+		if req.Header.Get("Origin") != "" {
+			req.Header.Set("Origin", "http://"+targetAuthority)
+		}
+		if req.Header.Get("Referer") != "" {
+			if refURL, err := url.Parse(req.Header.Get("Referer")); err == nil {
+				req.Header.Set("Referer", fmt.Sprintf("http://%s%s", targetAuthority, refURL.RequestURI()))
+			}
+		}
+		if req.Header.Get("Sec-Fetch-Site") != "" {
+			req.Header.Set("Sec-Fetch-Site", "same-origin")
+		}
 	}
 
 	bridgeHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

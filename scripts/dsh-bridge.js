@@ -82,15 +82,29 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  const headers = { ...req.headers };
+  headers.host = `${TARGET_HOST}:${TARGET_PORT}`;
+  if (headers.origin) {
+    headers.origin = `http://${TARGET_HOST}:${TARGET_PORT}`;
+  }
+  if (headers.referer) {
+    try {
+      const refUrl = new URL(headers.referer);
+      headers.referer = `http://${TARGET_HOST}:${TARGET_PORT}${refUrl.pathname}${refUrl.search}`;
+    } catch (e) {
+      headers.referer = `http://${TARGET_HOST}:${TARGET_PORT}/`;
+    }
+  }
+  if (headers['sec-fetch-site']) {
+    headers['sec-fetch-site'] = 'same-origin';
+  }
+
   const options = {
     hostname: TARGET_HOST,
     port: TARGET_PORT,
     path: req.url,
     method: req.method,
-    headers: {
-      ...req.headers,
-      host: `${TARGET_HOST}:${TARGET_PORT}`,
-    },
+    headers: headers,
   };
 
   const proxy = http.request(options, (upstreamRes) => {
@@ -112,8 +126,13 @@ server.on('upgrade', (req, clientSocket, head) => {
   const upstream = net.connect(TARGET_PORT, TARGET_HOST, () => {
     let raw = `${req.method} ${req.url} HTTP/1.1\r\n`;
     for (const [key, val] of Object.entries(req.headers)) {
-      if (key.toLowerCase() === 'host') {
+      const lk = key.toLowerCase();
+      if (lk === 'host') {
         raw += `host: ${TARGET_HOST}:${TARGET_PORT}\r\n`;
+      } else if (lk === 'origin') {
+        raw += `origin: http://${TARGET_HOST}:${TARGET_PORT}\r\n`;
+      } else if (lk === 'sec-fetch-site') {
+        raw += `sec-fetch-site: same-origin\r\n`;
       } else {
         raw += `${key}: ${val}\r\n`;
       }
