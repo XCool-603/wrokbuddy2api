@@ -1768,21 +1768,24 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.manual_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>手动停用</span>';
         } else if (a.disabled) {
           statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.disabled_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>系统禁用</span>';
-        } else if (a.cooling) {
+        } else if (a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0)) {
           let coolText = '限流冷却中';
           let coolTitle = a.reason || '上游触发频控/限流保护';
-          if (a.cool_remaining_sec > 0) {
-            coolText += ` (${a.cool_remaining_sec}s)`;
-          }
           if (a.rate_limited_models && a.rate_limited_models.length > 0) {
             const mNames = a.rate_limited_models.map(m => m.model).join(', ');
             coolTitle += ` [限流模型: ${mNames}]`;
+            if (!a.until) {
+              coolText = '模型限流中';
+            }
+          }
+          if (a.cool_remaining_sec > 0) {
+            coolText += ` (${a.cool_remaining_sec}s)`;
           }
           statusBadge = `<span class="inline-flex items-center gap-1.5 text-amber-400 text-xs cursor-help" title="${escapeHtml(coolTitle)}"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>${coolText}</span>`;
         }
 
         const isRevivable = a.disabled;
-        const isCooling = a.cooling;
+        const isCooling = a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0);
         const isManualDisabled = a.manual_disabled;
 
           let ownerTag = '';

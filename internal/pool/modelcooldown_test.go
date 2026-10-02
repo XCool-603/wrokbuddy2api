@@ -773,3 +773,37 @@ func TestBlockModelBackoffPickSkips(t *testing.T) {
 		t.Fatalf("其他模型应豁免 u1, got %+v", got)
 	}
 }
+
+// TestModelCooldownStatusCoolingAndCountsDetailed 6004 模型级冷却生效时：
+// 1. Status.Cooling 为 true，CoolRemaining > 0，CoolKind 为 "soft_rate"，Reason 为限流原因；
+// 2. CountsDetailed() 将其计入 cooling++ 而非 healthy++；
+// 3. 到期后恢复 healthy。
+func TestModelCooldownStatusCoolingAndCountsDetailed(t *testing.T) {
+	p := New("")
+	p.Add(&auth.Auth{UID: "u1"})
+	reset := time.Now().Add(30 * time.Minute)
+	p.CooldownSoftForModel("u1", 600*time.Second, reset, "deepseek-v4.1-flash", "6004 model rate limit")
+
+	st, ok := p.Status("u1")
+	if !ok {
+		t.Fatal("status missing")
+	}
+	if !st.Cooling {
+		t.Errorf("Status.Cooling = false, want true")
+	}
+	if st.CoolRemaining <= 0 {
+		t.Errorf("Status.CoolRemaining = %d, want > 0", st.CoolRemaining)
+	}
+	if st.CoolKind != "soft_rate" {
+		t.Errorf("Status.CoolKind = %q, want soft_rate", st.CoolKind)
+	}
+	if st.Reason != "6004 model rate limit" {
+		t.Errorf("Status.Reason = %q, want 6004 model rate limit", st.Reason)
+	}
+
+	total, healthy, cooling, disabled, _ := p.CountsDetailed()
+	if total != 1 || cooling != 1 || healthy != 0 || disabled != 0 {
+		t.Errorf("CountsDetailed() = (%d,%d,%d,%d), want (1,0,1,0)", total, healthy, cooling, disabled)
+	}
+}
+

@@ -377,13 +377,20 @@ func (p *Pool) countsDetailedForRealm(realm string) (total, healthy, cooling, di
 			continue
 		}
 		total++
+		hasActiveModelCooldown := false
+		for _, mc := range e.modelCooldowns {
+			if !mc.Until.IsZero() && now.Before(mc.Until) {
+				hasActiveModelCooldown = true
+				break
+			}
+		}
 		switch {
 		// 手动停用与自动禁用同归 disabled 计数：对「多少号不参与选号」这个运维
 		// 问题二者等价，分开会让 total/healthy/cooling/disabled 不闭合。
 		// 具体是哪一种看 /status 账号级的 manual_disabled/disabled 两位。
 		case e.disabled || e.manualDisabled:
 			disabled++
-		case !e.healthy(now):
+		case !e.healthy(now) || hasActiveModelCooldown:
 			cooling++
 		default:
 			healthy++
@@ -462,22 +469,24 @@ func (p *Pool) statusOf(uid string, e *entry) Status {
 	// reason 过期清理：非 disabled 账号若 until 已过期/零值，reason 清空（与落盘
 	// 清理 cooledReasonLocked 同口径）。disabled 账号的 reason 是禁用原因，保留。
 	_, reason := cooledReasonLocked(e, now)
+	rateLimitedModels := p.rateLimitedModelsLocked(e, now)
+	hasModelCooling := len(rateLimitedModels) > 0
 	st := Status{
 		UID: uid,
 		// 限额台账（issue #36）：仅「带解析时间 6004 的模型级软冷却」仍在生效时非空，
 		// 每模型一行（modelCooldowns 内未到期的条目），多模型同时限流全部展示。
 		// 到期判据 = 该模型的独立冷却 until 未过；条件满足才输出，随到期自然消失，
 		// 普通软冷却（无模型级表）/硬冷却不产生台账（零回归）。
-		RateLimitedModels: p.rateLimitedModelsLocked(e, now),
+		RateLimitedModels: rateLimitedModels,
 		// 成本台账（P1-anti-monopoly）：每模型一行（modelCost 内 TTL 未过期的
 		// 条目），运维据此自查「为什么总选它」；只读遍历零风险，过期即消失。
 		ModelCosts: p.modelCostsStatusLocked(e, now),
 		Realm:             e.a.Realm(),
 		Nickname:          e.a.Nickname,
 		Credits:           e.credits,
-		// Cooling 口径含连败降权（degradeUntil）：降权期账号不可选，运维在 /status
-		// 应看到它处于非健康态（CoolRemaining 取三截止最远者，与 healthy 或门同口径）。
-		Cooling: now.Before(e.until) || now.Before(e.breakerUntil) || now.Before(e.degradeUntil),
+		// Cooling 口径含连败降权（degradeUntil）与模型级 6004 限流（hasModelCooling）：
+		// 处于冷却期或存在模型被限流的账号不可选该模型，运维在 /status 应看到它处于非健康态。
+		Cooling: now.Before(e.until) || now.Before(e.breakerUntil) || now.Before(e.degradeUntil) || hasModelCooling,
 		Reason:            reason,
 		Disabled:          e.disabled,
 		ManualDisabled:    e.manualDisabled,
@@ -504,15 +513,18 @@ func (p *Pool) statusOf(uid string, e *entry) Status {
 	}
 	if st.Cooling {
 		// 冷却剩余秒数（向上取整，避免 0 显示为已到期）。口径与 Cooling 判定一致：
-		// 取 until / breakerUntil / degradeUntil 中更远的截止（发现 5——熔断冷却的号
-		// 原实现只算 until，显示"冷却中却 0 秒恢复"；BreakerUntil 虽单独透出，两口径
-		// 不一致误导排查）。全部过期不会进入本分支（Cooling=false）。
+		// 取 until / breakerUntil / degradeUntil / rateLimitedModels 中更远的截止。
 		remain := time.Until(e.until)
 		if b := time.Until(e.breakerUntil); b > remain {
 			remain = b
 		}
 		if d := time.Until(e.degradeUntil); d > remain {
 			remain = d
+		}
+		for _, m := range st.RateLimitedModels {
+			if mr := time.Until(m.Until); mr > remain {
+				remain = mr
+			}
 		}
 		st.CoolRemaining = int64(remain.Seconds() + 0.999)
 		if st.CoolRemaining < 0 {
@@ -525,6 +537,13 @@ func (p *Pool) statusOf(uid string, e *entry) Status {
 		if st.Reason == "" && now.Before(e.degradeUntil) {
 			st.Reason = degradeReason
 			st.CoolKind = "degrade"
+		}
+		// 模型级软限流形态：若账号级无 reason，透出首个限流模型的 reason，coolKind 设为 soft_rate。
+		if st.Reason == "" && hasModelCooling {
+			st.Reason = st.RateLimitedModels[0].Reason
+			if st.CoolKind == "" || st.CoolKind == "unknown" || st.CoolKind == "hard_credit" {
+				st.CoolKind = "soft_rate"
+			}
 		}
 	}
 	return st
