@@ -39,7 +39,14 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 			hostOnly = hostOnly[:colon]
 		}
 		scheme := "http"
-		dshWebURL = fmt.Sprintf("%s://%s:%d", scheme, hostOnly, st.Port)
+		if r.TLS != nil || r.Header.Get("X-Forwarded-Proto") == "https" {
+			scheme = "https"
+		}
+		if st.LaunchToken != "" {
+			dshWebURL = fmt.Sprintf("%s://%s:%d/?token=%s", scheme, hostOnly, st.Port, st.LaunchToken)
+		} else {
+			dshWebURL = fmt.Sprintf("%s://%s:%d", scheme, hostOnly, st.Port)
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -54,6 +61,7 @@ func (h *Handler) handleDshStatus(w http.ResponseWriter, r *http.Request) {
 		"is_docker":        isDockerEnvironment(),
 		"port":             st.Port,
 		"web_url":          dshWebURL,
+		"launch_token":     st.LaunchToken,
 		"started_at":       st.StartedAt,
 		"logs":             st.Logs,
 		"gateway_url":      gatewayURL,

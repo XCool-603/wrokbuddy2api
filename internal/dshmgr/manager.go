@@ -3,6 +3,7 @@ package dshmgr
 import (
 	"archive/tar"
 	"archive/zip"
+	"bufio"
 	"compress/gzip"
 	"context"
 	"fmt"
@@ -29,6 +30,7 @@ type Manager struct {
 	startedAt    time.Time
 	port         int
 	bridgeSrv    *http.Server
+	launchToken  string
 	recentLogs   []string
 	logLimit     int
 	workDir      string
@@ -61,6 +63,7 @@ type Status struct {
 	ExternalRunning bool     `json:"external_running"`
 	Port            int      `json:"port"`
 	WebURL          string   `json:"web_url,omitempty"`
+	LaunchToken     string   `json:"launch_token,omitempty"`
 	StartedAt       string   `json:"started_at,omitempty"`
 	Logs            []string `json:"logs,omitempty"`
 }
@@ -408,10 +411,15 @@ func (m *Manager) GetStatus() Status {
 		Running:         isRunning,
 		ExternalRunning: externalRunning,
 		Port:            m.port,
+		LaunchToken:     m.launchToken,
 		Logs:            logsCopy,
 	}
 	if isRunning {
-		st.WebURL = fmt.Sprintf("http://127.0.0.1:%d", m.port)
+		if m.launchToken != "" {
+			st.WebURL = fmt.Sprintf("http://127.0.0.1:%d/?token=%s", m.port, m.launchToken)
+		} else {
+			st.WebURL = fmt.Sprintf("http://127.0.0.1:%d", m.port)
+		}
 		if !m.startedAt.IsZero() {
 			st.StartedAt = m.startedAt.Format("2006-01-02 15:04:05")
 		} else if externalRunning {
@@ -419,6 +427,27 @@ func (m *Manager) GetStatus() Status {
 		}
 	}
 	return st
+}
+
+func (m *Manager) captureOutput(r io.Reader) {
+	scanner := bufio.NewScanner(r)
+	for scanner.Scan() {
+		line := scanner.Text()
+		m.mu.Lock()
+		m.appendLog(line)
+		if strings.Contains(line, "token=") {
+			idx := strings.Index(line, "token=")
+			tok := line[idx+6:]
+			if end := strings.IndexAny(tok, " &\t\r\n)"); end != -1 {
+				tok = tok[:end]
+			}
+			if len(tok) >= 10 {
+				m.launchToken = tok
+				m.appendLog(fmt.Sprintf("🔑 成功捕获 DSH 启动安全令牌: %s", tok))
+			}
+		}
+		m.mu.Unlock()
+	}
 }
 
 // Start 启动 dsh 进程。自动生成配置文件指向本网关。
@@ -476,14 +505,30 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		req.Host = fmt.Sprintf("127.0.0.1:%d", targetPort)
 	}
 
+	bridgeHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+		m.mu.RLock()
+		tok := m.launchToken
+		m.mu.RUnlock()
+
+		// 若首次访问根路径，无 token 参数且无 dsh-auth- Cookie，自动补齐 token 重定向以完成免密认证
+		if req.Method == http.MethodGet && (req.URL.Path == "/" || req.URL.Path == "/index.html") && tok != "" {
+			if !strings.Contains(req.URL.RawQuery, "token=") && !strings.Contains(req.Header.Get("Cookie"), "dsh-auth-") {
+				target := fmt.Sprintf("/?token=%s", tok)
+				http.Redirect(w, req, target, http.StatusFound)
+				return
+			}
+		}
+		proxy.ServeHTTP(w, req)
+	})
+
 	bridgeLn, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", m.port))
 	if err == nil {
-		bridgeSrv := &http.Server{Handler: proxy}
+		bridgeSrv := &http.Server{Handler: bridgeHandler}
 		m.bridgeSrv = bridgeSrv
 		go func() {
 			_ = bridgeSrv.Serve(bridgeLn)
 		}()
-		m.appendLog(fmt.Sprintf("已建立 0.0.0.0:%d 反向代理桥接 -> 127.0.0.1:%d (允许外部 IP/局域网访问)", m.port, targetPort))
+		m.appendLog(fmt.Sprintf("已建立 0.0.0.0:%d 反向代理桥接 -> 127.0.0.1:%d (允许外部 IP/局域网访问，自动注入认证令牌)", m.port, targetPort))
 	} else {
 		m.appendLog(fmt.Sprintf("0.0.0.0:%d 端口监听提示: %v", m.port, err))
 	}
@@ -491,7 +536,6 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	var cmd *exec.Cmd
 	dshArgs := []string{"-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", targetPort)}
 	if strings.HasSuffix(strings.ToLower(npxExe), ".js") {
-		// 如果是 js 脚本入口（如 npx-cli.js），直接使用 node 二进制执行，跨平台稳定且不依赖系统 shebang / symlink
 		fullArgs := append([]string{npxExe}, dshArgs...)
 		cmd = exec.CommandContext(ctx, nodeExe, fullArgs...)
 	} else {
@@ -499,6 +543,9 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	}
 	cmd.Dir = m.workDir
 	cmd.Env = env
+
+	stdoutPipe, _ := cmd.StdoutPipe()
+	stderrPipe, _ := cmd.StderrPipe()
 
 	m.cmd = cmd
 	m.running = true
@@ -550,6 +597,14 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		m.cmd = nil
 		m.appendLog(fmt.Sprintf("启动失败: %v", err))
 		return fmt.Errorf("启动失败: %w", err)
+	}
+
+	if stdoutPipe != nil && stderrPipe != nil {
+		go m.captureOutput(io.MultiReader(stdoutPipe, stderrPipe))
+	} else if stdoutPipe != nil {
+		go m.captureOutput(stdoutPipe)
+	} else if stderrPipe != nil {
+		go m.captureOutput(stderrPipe)
 	}
 
 	go func() {

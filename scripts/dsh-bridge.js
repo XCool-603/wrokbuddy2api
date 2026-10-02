@@ -1,26 +1,87 @@
 #!/usr/bin/env node
 /**
- * dsh-bridge.js - 0.0.0.0 端口反向代理桥接器
+ * dsh-bridge.js - 0.0.0.0 端口反向代理桥接器与自动令牌注入器
  *
- * 解决 DeepSeek Harness (@deepseek-ai/dsh) 官方强制仅监听 127.0.0.1 并拒绝 --host 0.0.0.0，
- * 导致在 Docker 容器、云服务器、局域网或虚拟机环境中无法被外部 IP 或宿主机访问的问题。
- *
- * 工作原理：
- * 1. 本桥接器在 0.0.0.0:3080 监听，接收来自任何网卡、局域网或外部容器的请求；
- * 2. 将流量透明转发给本地 127.0.0.1:3081 运行的 dsh 进程；
- * 3. 自动将 HTTP/WebSocket 请求头 Host 重写为 127.0.0.1:3081，完美通过 dsh 内部的 trustedHosts 安全白名单；
- * 4. 完整支持 HTTP 流式传输与 WebSocket 双向连接（升级协议）。
+ * 解决 DeepSeek Harness (@deepseek-ai/dsh) 两大网络限制：
+ * 1. 官方强制仅监听 127.0.0.1 并拒绝 --host 0.0.0.0 -> 本桥接器在 0.0.0.0:3080 监听，转发至 127.0.0.1:3081；
+ * 2. 官方要求首次必须带 ?token=... 访问，否则报 "dsh web authentication required" 401 错误 ->
+ *    本桥接器自动捕获 dsh 生成的 Launch Token，当检测到客户端首次裸访问根路径时，自动 302 重定向补全 Token，
+ *    实现真正的全自动免密登录与 Cookie 下发！
  */
 
 const http = require('http');
 const net = require('net');
+const { spawn } = require('child_process');
 
 const LISTEN_HOST = process.env.BRIDGE_HOST || '0.0.0.0';
 const LISTEN_PORT = parseInt(process.env.BRIDGE_PORT || '3080', 10);
 const TARGET_HOST = '127.0.0.1';
 const TARGET_PORT = parseInt(process.env.TARGET_PORT || '3081', 10);
 
+let currentLaunchToken = process.env.DSH_TOKEN || '';
+
+// 捕获日志中的 Token
+function checkLogForToken(text) {
+  const match = text.match(/dsh web:.*?[\?&]token=([A-Za-z0-9_\-]+)/);
+  if (match && match[1]) {
+    currentLaunchToken = match[1];
+    console.log(`[dsh-bridge] 🔑 成功捕获 DSH 启动安全令牌: ${currentLaunchToken}`);
+    console.log(`[dsh-bridge] 🌐 外部免密直连地址: http://${LISTEN_HOST === '0.0.0.0' ? '你的服务器IP' : LISTEN_HOST}:${LISTEN_PORT}/?token=${currentLaunchToken}`);
+  }
+}
+
+// 若传入 --spawn 参数或环境变量指定，由桥接器直接托管拉起 dsh 子进程
+const shouldSpawn = process.argv.includes('--spawn') || process.env.SPAWN_DSH === 'true';
+if (shouldSpawn) {
+  console.log(`[dsh-bridge] 启动 DeepSeek Harness 子进程 (监听 127.0.0.1:${TARGET_PORT})...`);
+  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
+  const child = spawn(npxCmd, ['-y', '@deepseek-ai/dsh', 'web', '--port', String(TARGET_PORT)], {
+    stdio: ['inherit', 'pipe', 'pipe'],
+    env: process.env,
+  });
+
+  child.stdout.on('data', (data) => {
+    const s = data.toString();
+    process.stdout.write(s);
+    checkLogForToken(s);
+  });
+
+  child.stderr.on('data', (data) => {
+    const s = data.toString();
+    process.stderr.write(s);
+    checkLogForToken(s);
+  });
+
+  child.on('exit', (code, signal) => {
+    console.log(`[dsh-bridge] DSH 子进程已退出 (code: ${code}, signal: ${signal})`);
+    process.exit(code || 0);
+  });
+}
+
 const server = http.createServer((req, res) => {
+  const reqHost = req.headers.host || `${LISTEN_HOST}:${LISTEN_PORT}`;
+  let parsedUrl;
+  try {
+    parsedUrl = new URL(req.url, `http://${reqHost}`);
+  } catch (e) {
+    parsedUrl = { pathname: '/', searchParams: new URLSearchParams() };
+  }
+
+  const hasTokenParam = parsedUrl.searchParams.has('token');
+  const cookieHeader = req.headers.cookie || '';
+  const hasAuthCookie = cookieHeader.includes('dsh-auth-');
+
+  // 若捕获到了 Launch Token，且客户端首次直接访问根路径（无 token 且无 cookie），自动补全 Token 重定向下发 Cookie
+  if (req.method === 'GET' && (parsedUrl.pathname === '/' || parsedUrl.pathname === '/index.html') && !hasTokenParam && !hasAuthCookie && currentLaunchToken) {
+    parsedUrl.searchParams.set('token', currentLaunchToken);
+    res.writeHead(302, {
+      'Location': parsedUrl.pathname + parsedUrl.search,
+      'Cache-Control': 'no-store',
+    });
+    res.end();
+    return;
+  }
+
   const options = {
     hostname: TARGET_HOST,
     port: TARGET_PORT,
@@ -40,7 +101,7 @@ const server = http.createServer((req, res) => {
   proxy.on('error', (err) => {
     if (!res.headersSent) {
       res.writeHead(502, { 'Content-Type': 'text/plain; charset=utf-8' });
-      res.end(`[dsh-bridge] 正在等待 DeepSeek Harness 在 127.0.0.1:${TARGET_PORT} 就绪... (错误: ${err.message})`);
+      res.end(`[dsh-bridge] 正在等待 DeepSeek Harness 在 127.0.0.1:${TARGET_PORT} 就绪... (错误: ${err.message})\n`);
     }
   });
 
