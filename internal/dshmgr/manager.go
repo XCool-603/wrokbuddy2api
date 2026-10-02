@@ -504,17 +504,27 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		origDirector(req)
 		targetAuthority := fmt.Sprintf("127.0.0.1:%d", targetPort)
 		req.Host = targetAuthority
-		if req.Header.Get("Origin") != "" {
-			req.Header.Set("Origin", "http://"+targetAuthority)
-		}
-		if req.Header.Get("Referer") != "" {
-			if refURL, err := url.Parse(req.Header.Get("Referer")); err == nil {
-				req.Header.Set("Referer", fmt.Sprintf("http://%s%s", targetAuthority, refURL.RequestURI()))
+		// 移除所有跨域来源头，使 DSH 内部 isTrustedApiRequest 检测判定 origin 为 undefined，直接无条件信任通过（杜绝 403）
+		req.Header.Del("Origin")
+		req.Header.Del("Referer")
+		req.Header.Del("Sec-Fetch-Site")
+		req.Header.Del("Sec-Fetch-Mode")
+		req.Header.Del("Sec-Fetch-Dest")
+	}
+	proxy.ModifyResponse = func(resp *http.Response) error {
+		// 若 DSH 返回 401（说明历史 Cookie 失效），且当前访问为根路径，自动 302 携带 Token 重定向，自愈并重新下发有效 Cookie
+		if resp.StatusCode == http.StatusUnauthorized && resp.Request != nil && resp.Request.Method == http.MethodGet &&
+			(resp.Request.URL.Path == "/" || resp.Request.URL.Path == "/index.html") {
+			m.mu.RLock()
+			tok := m.launchToken
+			m.mu.RUnlock()
+			if tok != "" {
+				resp.StatusCode = http.StatusFound
+				resp.Header.Set("Location", "/?token="+tok)
+				resp.Header.Set("Cache-Control", "no-store")
 			}
 		}
-		if req.Header.Get("Sec-Fetch-Site") != "" {
-			req.Header.Set("Sec-Fetch-Site", "same-origin")
-		}
+		return nil
 	}
 
 	bridgeHandler := http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {

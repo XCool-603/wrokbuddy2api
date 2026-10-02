@@ -22,10 +22,10 @@ services:
     container_name: workbuddy2api-dsh
     restart: unless-stopped
     working_dir: /workspace
-    # 自动以桥接模式拉起：0.0.0.0:3080 监听并自动捕获 Token，解决 127.0.0.1 阻断与 401 认证报错
+    # 自动以桥接模式拉起：0.0.0.0:3080 监听并自动捕获 Token，彻底解决 127.0.0.1 阻断、401 认证与 /api 403 跨域安全拦截
     command: >
       sh -c "npm config set registry https://registry.npmmirror.com &&
-      node dsh-bridge.js --spawn"
+      node /app/scripts/dsh-bridge.js --spawn"
     environment:
       - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
       - OPENAI_BASE_URL=http://wb2api:7863/v1
@@ -33,10 +33,12 @@ services:
       - DEEPSEEK_BASE_URL=http://wb2api:7863/v1
       - OPENAI_API_KEY=wb2a-admin-secret
       - PORT=3080
+      - DSH_BRIDGE_REVISION=20261003-v2
     ports:
       - "3080:3080"
     volumes:
       - ./data/dsh:/workspace
+      - ./scripts:/app/scripts:ro
       - ./scripts/dsh-bridge.js:/workspace/dsh-bridge.js:ro
     depends_on:
       - wb2api
