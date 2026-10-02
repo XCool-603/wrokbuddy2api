@@ -368,4 +368,76 @@ func TestBatchImportWithRealmSpecification(t *testing.T) {
 	}
 }
 
+func TestBatchImportWithCommentsAndUpstreamFormat(t *testing.T) {
+	authDir := t.TempDir()
+	p := pool.New("")
+	h := NewHandler(Config{
+		Pool:    p,
+		AuthDir: authDir,
+	})
+
+	// 1. 测试带 // 和 # 注释的 JSON 文本导入
+	commentedJSON := `
+	// 这是第一行注释说明
+	# 这是第二行注释说明
+	[
+		// 账号 1
+		{
+			"auth": {"accessToken": "at_comm_1", "refreshToken": "rt_comm_1"},
+			"account": {"uid": "comm_user_1"}
+		}
+	]
+	`
+	reqBody, _ := json.Marshal(map[string]string{"content": commentedJSON})
+	req := httptest.NewRequest(http.MethodPost, "/ui/oauth/batch_import", bytes.NewReader(reqBody))
+	req.Header.Set("Content-Type", "application/json")
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("batch import commented json status %d: %s", rec.Code, rec.Body.String())
+	}
+
+	// 2. 测试粘贴上游 API 响应包裹格式: {"code": 0, "data": {"accessToken": "...", "refreshToken": "..."}}
+	upstreamRespJSON := `{
+		"code": 0,
+		"msg": "success",
+		"data": {
+			"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.up_sig",
+			"refreshToken": "up_ref_123",
+			"expiresIn": 7200,
+			"uid": "up_user_888"
+		}
+	}`
+	reqBody2, _ := json.Marshal(map[string]string{"content": upstreamRespJSON})
+	req2 := httptest.NewRequest(http.MethodPost, "/ui/oauth/batch_import", bytes.NewReader(reqBody2))
+	req2.Header.Set("Content-Type", "application/json")
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, req2)
+
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("batch import upstream json status %d: %s", rec2.Code, rec2.Body.String())
+	}
+
+	// 3. 测试带有特殊符号 UID 的账号落盘与池入库（如 auth0|12345 或 user:name）
+	specialUIDJSON := `{
+		"accessToken": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.spec_sig",
+		"refreshToken": "spec_ref",
+		"uid": "oauth2|special:uid/123"
+	}`
+	reqBody3, _ := json.Marshal(map[string]string{"content": specialUIDJSON})
+	req3 := httptest.NewRequest(http.MethodPost, "/ui/oauth/batch_import", bytes.NewReader(reqBody3))
+	req3.Header.Set("Content-Type", "application/json")
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, req3)
+
+	if rec3.Code != http.StatusOK {
+		t.Fatalf("batch import special uid status %d: %s", rec3.Code, rec3.Body.String())
+	}
+
+	if len(p.List()) != 3 {
+		t.Fatalf("expected 3 accounts in pool, got %d", len(p.List()))
+	}
+}
+
 

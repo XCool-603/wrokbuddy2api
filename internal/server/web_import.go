@@ -22,15 +22,36 @@ type importItem struct {
 	data []byte
 }
 
+// stripAllCommentLines 过滤掉整行以 // 或 # 开头的注释行
+func stripAllCommentLines(data []byte) []byte {
+	lines := bytes.Split(data, []byte("\n"))
+	var keep [][]byte
+	for _, l := range lines {
+		trimmed := bytes.TrimSpace(l)
+		if bytes.HasPrefix(trimmed, []byte("//")) || bytes.HasPrefix(trimmed, []byte("#")) {
+			continue
+		}
+		keep = append(keep, l)
+	}
+	return bytes.TrimSpace(bytes.Join(keep, []byte("\n")))
+}
+
 // extractAuthItems 将任意来源的原始 JSON 凭证字节解构成独立的凭证项，支持：
 // 1. JSON 数组: [ {...}, {...} ]
 // 2. 包装对象: {"accounts": [...]}, {"auths": [...]}, {"data": [...]}, {"items": [...]}
 // 3. 多段换行/连续 JSON (NDJSON / Concatenated JSON)
-// 4. 单个 JSON 对象
+// 4. 单/多行 Token、卡密文本 (token----refreshToken)
+// 5. 单个 JSON 对象
 func extractAuthItems(data []byte, defaultName string) []importItem {
 	data = auth.CleanRawInput(data)
 	if len(data) == 0 {
 		return nil
+	}
+
+	// 优先尝试去除注释后是否为有效 JSON（支持用户粘贴包含 // 或 # 说明的 JSON）
+	dataNoComments := stripAllCommentLines(data)
+	if len(dataNoComments) > 0 && (bytes.HasPrefix(dataNoComments, []byte("[")) || bytes.HasPrefix(dataNoComments, []byte("{"))) {
+		data = dataNoComments
 	}
 
 	// 1. JSON 数组: [ {...}, {...} ]
@@ -55,7 +76,7 @@ func extractAuthItems(data []byte, defaultName string) []importItem {
 	if bytes.HasPrefix(data, []byte("{")) {
 		var wrap map[string]json.RawMessage
 		if err := json.Unmarshal(data, &wrap); err == nil {
-			for _, key := range []string{"accounts", "auths", "data", "items", "list", "account_list", "tokens"} {
+			for _, key := range []string{"accounts", "auths", "data", "items", "list", "account_list", "tokens", "result"} {
 				if rawArr, ok := wrap[key]; ok {
 					var list []json.RawMessage
 					if err := json.Unmarshal(rawArr, &list); err == nil && len(list) > 0 {
@@ -70,6 +91,28 @@ func extractAuthItems(data []byte, defaultName string) []importItem {
 							}
 						}
 						return items
+					}
+					// 嵌套包装对象：例如 {"code": 0, "data": {"accounts": [...]}}
+					var subWrap map[string]json.RawMessage
+					if err := json.Unmarshal(rawArr, &subWrap); err == nil {
+						for _, subKey := range []string{"accounts", "auths", "items", "list", "tokens"} {
+							if subArr, ok := subWrap[subKey]; ok {
+								var subList []json.RawMessage
+								if err := json.Unmarshal(subArr, &subList); err == nil && len(subList) > 0 {
+									items := make([]importItem, 0, len(subList))
+									for idx, raw := range subList {
+										rawTrimmed := bytes.TrimSpace(raw)
+										if len(rawTrimmed) > 0 {
+											items = append(items, importItem{
+												name: fmt.Sprintf("%s#%d", defaultName, idx+1),
+												data: rawTrimmed,
+											})
+										}
+									}
+									return items
+								}
+							}
+						}
 					}
 				}
 			}
@@ -115,7 +158,7 @@ func extractAuthItems(data []byte, defaultName string) []importItem {
 			})
 			lineIdx++
 		}
-		if len(lineItems) > 1 {
+		if len(lineItems) > 0 {
 			return lineItems
 		}
 	}
@@ -155,12 +198,11 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
-	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
+	safeUID := auth.SanitizeFilename(uid)
+	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
 	a.FilePath = targetFile
 	if err := a.SaveAtomic(); err != nil {
-		log.Printf("ERR: [import] single import save failed: uid=%s err=%v", uid, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{"error": fmt.Sprintf("保存失败: %v", err)})
-		return
+		log.Printf("WARN: [import] single import save failed: uid=%s err=%v (仍载入内存池)", uid, err)
 	}
 
 	// 立即将新账号同步入账号池并清除历史冷却与禁用状态
@@ -366,12 +408,11 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 		} else if user != nil && user.Role != usermgr.RoleAdmin && user.Username != "admin" && user.ID != "u_admin" && user.ID != "admin" {
 			a.Owner = user.ID
 		}
-		targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
+		safeUID := auth.SanitizeFilename(uid)
+		targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
 		a.FilePath = targetFile
 		if err := a.SaveAtomic(); err != nil {
-			failedCount++
-			failReasons = append(failReasons, fmt.Sprintf("%s: 落盘失败 (%v)", item.name, err))
-			continue
+			log.Printf("WARN: [import] 保存文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
 		}
 		if h.cfg.Pool != nil {
 			h.cfg.Pool.Add(a)

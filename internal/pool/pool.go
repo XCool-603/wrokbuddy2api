@@ -3,6 +3,8 @@
 package pool
 
 import (
+	"log"
+	"os"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -296,10 +298,24 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 		seen[a.UID] = true
 		p.upsertLocked(a)
 	}
+
+	// 防御性保护：若扫描结果为空且池中已有账号，避免因目录暂未就绪或挂载卷偶发延迟将全池误清空
+	if len(auths) == 0 && len(p.byUID) > 0 {
+		log.Printf("WARN: [pool] SyncToDir 扫描到 0 个账号（当前池中包含 %d 个账号），跳过全量清空以防止误删", len(p.byUID))
+		return
+	}
+
 	changed := false
 	for uid := range p.byUID {
 		if !seen[uid] {
+			// 若该账号关联的凭证文件仍在磁盘上，不误删
+			if e := p.byUID[uid]; e != nil && e.a != nil && e.a.FilePath != "" {
+				if _, err := os.Stat(e.a.FilePath); err == nil {
+					continue
+				}
+			}
 			delete(p.byUID, uid)
+			log.Printf("INFO: [pool] uid %s 凭证文件已不存在，从账号池中剔除", uid)
 			changed = true
 		}
 	}

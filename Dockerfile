@@ -14,9 +14,9 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wb2api ./cmd/serve
 
 FROM alpine:3.20
 # python3：login.sh 的 JSON 解析 / 签到 / 落盘；bash：shell 脚本体；nodejs & npm：内嵌支持 dsh Agent 运行。
-RUN apk add --no-cache wget ca-certificates tzdata python3 bash nodejs npm \
+RUN apk add --no-cache wget ca-certificates tzdata python3 bash nodejs npm su-exec \
  && adduser -D -u 10001 app \
- && mkdir -p /app/auths /app/data \
+ && mkdir -p /app/auths /app/data /app/scripts \
  && chown -R app:app /app
 WORKDIR /app
 # 脚本置入 + 去 CRLF（Windows 检出可能性）在切到 app 之前以 root 完成——
@@ -33,13 +33,15 @@ COPY scripts/global_region.py /app/scripts/global_region.py
 COPY scripts/task_common.py /app/scripts/task_common.py
 COPY scripts/task_runner.py /app/scripts/task_runner.py
 COPY scripts/school_open_day_2026.py /app/scripts/school_open_day_2026.py
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN sed -i 's/\r$//' /app/*.sh && chmod 755 /app/*.sh
 RUN sed -i 's/\r$//' /app/scripts/*.py && chmod 755 /app/scripts/*.py
+RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod 755 /app/docker-entrypoint.sh
 # 镜像不带真实配置：落 example 作为默认（生产由挂载卷 /app/config.json 覆盖）
 COPY config.example.json /app/config.json
-RUN chown app:app /app/wb2api && chmod 755 /app/wb2api
-USER app
+RUN chown -R app:app /app
 EXPOSE 7863
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
   CMD wget -qO- http://127.0.0.1:7863/healthz || exit 1
-ENTRYPOINT ["/app/wb2api", "-config", "/app/config.json"]
+ENTRYPOINT ["/app/docker-entrypoint.sh"]
+CMD ["-config", "/app/config.json"]

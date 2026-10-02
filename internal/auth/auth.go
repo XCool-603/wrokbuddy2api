@@ -228,9 +228,11 @@ func (a *Auth) NeedsRefresh(within time.Duration) bool {
 	return time.Now().Add(within).Unix() >= a.ExpiresAt
 }
 
-// CleanRawInput 清理 UTF-8 BOM、Markdown 代码块包裹及全角中文引号。
+// CleanRawInput 清理 UTF-8 BOM、Markdown 代码块包裹、全角中文引号及 Windows 换行符。
 func CleanRawInput(raw []byte) []byte {
 	raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")) // UTF-8 BOM
+	raw = bytes.ReplaceAll(raw, []byte("\r\n"), []byte("\n"))
+	raw = bytes.ReplaceAll(raw, []byte("\r"), []byte("\n"))
 	raw = bytes.TrimSpace(raw)
 	// Markdown 代码块清理: ```json ... ``` 或 ``` ... ```
 	if bytes.HasPrefix(raw, []byte("```")) {
@@ -248,6 +250,33 @@ func CleanRawInput(raw []byte) []byte {
 	raw = bytes.ReplaceAll(raw, []byte("‘"), []byte("'"))
 	raw = bytes.ReplaceAll(raw, []byte("’"), []byte("'"))
 	return raw
+}
+
+// SanitizeFilename 清理 UID/文件名中的非法字符与路径遍历，防止在 Linux/Windows 或 Docker 挂载目录下落盘失败。
+func SanitizeFilename(name string) string {
+	name = strings.TrimSpace(name)
+	if name == "" {
+		return "account"
+	}
+	// 过滤路径遍历
+	name = filepath.Base(name)
+	name = strings.TrimPrefix(name, "..")
+	// 替换 Windows/Linux 文件系统禁用字符: / \ : * ? " < > | 以及控制字符
+	var sb strings.Builder
+	for _, r := range name {
+		switch r {
+		case '/', '\\', ':', '*', '?', '"', '<', '>', '|', '\r', '\n', '\t', 0:
+			sb.WriteRune('_')
+		default:
+			sb.WriteRune(r)
+		}
+	}
+	res := strings.TrimSpace(sb.String())
+	res = strings.Trim(res, "._ ")
+	if res == "" {
+		return "account"
+	}
+	return res
 }
 
 // SetRealm 加锁设置账号域（"cn" 或 "global"）。
@@ -335,13 +364,17 @@ func tryParseRawToken(str string) *Auth {
 	}
 
 	if at == "" {
-		// 支持 token----refreshToken, token#refreshToken, token|refreshToken, token,refreshToken
-		for _, sep := range []string{"----", "---", "--", "#", "|", ","} {
+		// 支持 token----refreshToken, token---refreshToken, token|refreshToken, token\trefreshToken, token,refreshToken, token#refreshToken
+		for _, sep := range []string{"----", "---", "|", "\t", "#", ","} {
 			if strings.Contains(str, sep) {
 				parts := strings.SplitN(str, sep, 2)
-				at = strings.TrimSpace(parts[0])
-				rt = strings.TrimSpace(parts[1])
-				break
+				p0 := strings.TrimSpace(parts[0])
+				p1 := strings.TrimSpace(parts[1])
+				if p0 != "" && p1 != "" {
+					at = p0
+					rt = p1
+					break
+				}
 			}
 		}
 	}
@@ -350,7 +383,7 @@ func tryParseRawToken(str string) *Auth {
 		at = str
 	}
 
-	if len(at) < 15 {
+	if len(at) < 10 {
 		return nil
 	}
 
@@ -367,21 +400,13 @@ func tryParseRawToken(str string) *Auth {
 	claims := ParseJWTClaims(at)
 	if claims != nil {
 		if a.UID == "" {
-			if sub, ok := claims["sub"].(string); ok && sub != "" {
-				a.UID = sub
-			} else if uid, ok := claims["uid"].(string); ok && uid != "" {
-				a.UID = uid
-			}
+			a.UID = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id")
 		}
 		if exp, ok := claims["exp"].(float64); ok && exp > 0 {
 			a.ExpiresAt = int64(exp)
 		}
 		if a.Nickname == "" {
-			if name, ok := claims["name"].(string); ok && name != "" {
-				a.Nickname = name
-			} else if nick, ok := claims["nickname"].(string); ok && nick != "" {
-				a.Nickname = nick
-			}
+			a.Nickname = extractValString(claims, "name", "nickname", "nick_name", "username")
 		}
 		if iss, ok := claims["iss"].(string); ok && iss != "" {
 			if strings.Contains(iss, "workbuddy.ai") {
@@ -483,30 +508,49 @@ func Parse(raw []byte) (*Auth, error) {
 		return nil, fmt.Errorf("storage_parse_error: %w", err)
 	}
 
-	var authMap, accountMap map[string]any
+	var authMap, accountMap, dataMap map[string]any
 	if sub, ok := m["auth"].(map[string]any); ok {
 		authMap = sub
 	}
 	if sub, ok := m["account"].(map[string]any); ok {
 		accountMap = sub
 	}
+	// 支持上游 API 响应包裹格式：例如 {"code": 0, "data": {"accessToken": "..."}}
+	for _, k := range []string{"data", "result", "response", "token_info", "credentials"} {
+		if sub, ok := m[k].(map[string]any); ok {
+			dataMap = sub
+			break
+		}
+	}
 
 	at := extractValString(authMap, "accessToken", "access_token", "token", "jwt", "bearer_token", "apiKey", "auth_token")
+	if at == "" {
+		at = extractValString(dataMap, "accessToken", "access_token", "token", "jwt", "bearer_token", "apiKey", "auth_token")
+	}
 	if at == "" {
 		at = extractValString(m, "accessToken", "access_token", "token", "jwt", "bearer_token", "apiKey", "auth_token")
 	}
 
 	rt := extractValString(authMap, "refreshToken", "refresh_token", "refresh")
 	if rt == "" {
+		rt = extractValString(dataMap, "refreshToken", "refresh_token", "refresh")
+	}
+	if rt == "" {
 		rt = extractValString(m, "refreshToken", "refresh_token", "refresh")
 	}
 
 	expAt := extractValInt64(authMap, "expiresAt", "expires_at", "expire_at", "exp")
 	if expAt == 0 {
+		expAt = extractValInt64(dataMap, "expiresAt", "expires_at", "expire_at", "exp")
+	}
+	if expAt == 0 {
 		expAt = extractValInt64(m, "expiresAt", "expires_at", "expire_at", "exp")
 	}
 	if expAt == 0 {
 		expIn := extractValInt64(authMap, "expiresIn", "expires_in", "expire_in")
+		if expIn == 0 {
+			expIn = extractValInt64(dataMap, "expiresIn", "expires_in", "expire_in")
+		}
 		if expIn == 0 {
 			expIn = extractValInt64(m, "expiresIn", "expires_in", "expire_in")
 		}
@@ -517,25 +561,40 @@ func Parse(raw []byte) (*Auth, error) {
 
 	domain := extractValString(authMap, "domain", "api_domain", "host")
 	if domain == "" {
+		domain = extractValString(dataMap, "domain", "api_domain", "host")
+	}
+	if domain == "" {
 		domain = extractValString(m, "domain", "api_domain", "host")
 	}
 
 	realm := extractValString(authMap, "realm")
+	if realm == "" {
+		realm = extractValString(dataMap, "realm")
+	}
 	if realm == "" {
 		realm = extractValString(m, "realm")
 	}
 
 	uid := extractValString(accountMap, "uid", "user_id", "userId", "id", "sub", "account_id")
 	if uid == "" {
+		uid = extractValString(dataMap, "uid", "user_id", "userId", "id", "sub", "account_id")
+	}
+	if uid == "" {
 		uid = extractValString(m, "uid", "user_id", "userId", "id", "sub", "account_id")
 	}
 
 	ent := extractValString(accountMap, "enterpriseId", "enterprise_id", "enterpriseID")
 	if ent == "" {
+		ent = extractValString(dataMap, "enterpriseId", "enterprise_id", "enterpriseID")
+	}
+	if ent == "" {
 		ent = extractValString(m, "enterpriseId", "enterprise_id", "enterpriseID")
 	}
 
 	nick := extractValString(accountMap, "nickname", "nick_name", "name", "username", "email")
+	if nick == "" {
+		nick = extractValString(dataMap, "nickname", "nick_name", "name", "username", "email")
+	}
 	if nick == "" {
 		nick = extractValString(m, "nickname", "nick_name", "name", "username", "email")
 	}
@@ -543,6 +602,9 @@ func Parse(raw []byte) (*Auth, error) {
 	deviceToken := extractValString(m, "device_token", "deviceToken")
 	if deviceToken == "" {
 		deviceToken = extractValString(authMap, "device_token", "deviceToken")
+	}
+	if deviceToken == "" {
+		deviceToken = extractValString(dataMap, "device_token", "deviceToken")
 	}
 
 	owner := extractValString(m, "owner")
@@ -570,16 +632,10 @@ func Parse(raw []byte) (*Auth, error) {
 			}
 		}
 		if uid == "" {
-			if sub, ok := claims["sub"].(string); ok && sub != "" {
-				uid = sub
-			} else if u, ok := claims["uid"].(string); ok && u != "" {
-				uid = u
-			}
+			uid = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id")
 		}
 		if nick == "" {
-			if name, ok := claims["name"].(string); ok && name != "" {
-				nick = name
-			}
+			nick = extractValString(claims, "name", "nickname", "nick_name", "username")
 		}
 	}
 
@@ -601,12 +657,12 @@ func Parse(raw []byte) (*Auth, error) {
 
 // SaveAtomic 以嵌套形原子写回 FilePath（tmp + rename），保持嵌套形（插件可读）格式。
 // 全程持 a.mu：防止与 RefreshToken 修改 token 字段并发，杜绝写回半更新。
-// 防御：accessToken 为空时拒绝写回，避免误用空凭证覆盖有效文件。
+// 防御：accessToken 与 refreshToken 均为空时拒绝写回，避免误用空凭证覆盖有效文件。
 func (a *Auth) SaveAtomic() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if strings.TrimSpace(a.AccessToken) == "" {
-		return fmt.Errorf("save refused: empty accessToken (uid=%s)", a.UID)
+	if strings.TrimSpace(a.AccessToken) == "" && strings.TrimSpace(a.RefreshToken) == "" {
+		return fmt.Errorf("save refused: empty accessToken and refreshToken (uid=%s)", a.UID)
 	}
 	if a.FilePath == "" {
 		return fmt.Errorf("no FilePath set")
@@ -638,13 +694,22 @@ func (a *Auth) SaveAtomic() error {
 		return err
 	}
 	tmp := a.FilePath + ".tmp"
-	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
-		return err
+	if err := os.WriteFile(tmp, raw, 0o644); err != nil {
+		// 如果写 tmp 失败（例如跨文件系统或临时受限），回退直接写入目标文件
+		if writeErr := os.WriteFile(a.FilePath, raw, 0o644); writeErr != nil {
+			return fmt.Errorf("write tmp failed: %w (fallback direct write: %v)", err, writeErr)
+		}
+		return nil
 	}
 	defer func() { _ = os.Remove(tmp) }()
 	if err := os.Rename(tmp, a.FilePath); err != nil {
 		_ = os.Remove(a.FilePath)
-		return os.Rename(tmp, a.FilePath)
+		if err2 := os.Rename(tmp, a.FilePath); err2 != nil {
+			// 在 Docker 挂载卷或 Windows/WSL2 上 rename 可能受限，回退为直接写入目标文件
+			if writeErr := os.WriteFile(a.FilePath, raw, 0o644); writeErr != nil {
+				return fmt.Errorf("rename failed (%v) and fallback direct write failed: %w", err, writeErr)
+			}
+		}
 	}
 	return nil
 }

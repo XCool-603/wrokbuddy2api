@@ -107,16 +107,19 @@ func main() {
 		}
 	}
 
-	// 自动创建 auth_dir 和 state_file 目录，避免首次双击运行找不到目录报错
+	// 自动创建 auth_dir 和 state_file 目录，保证目录具有完全读写权限
 	if cfg.AuthDir != "" {
-		if err := os.MkdirAll(cfg.AuthDir, 0755); err != nil {
+		if err := os.MkdirAll(cfg.AuthDir, 0777); err != nil {
 			log.Printf("WARN: mkdir auth_dir %s: %v", cfg.AuthDir, err)
 		}
+		_ = os.Chmod(cfg.AuthDir, 0777)
 	}
 	if cfg.StateFile != "" {
-		if err := os.MkdirAll(filepath.Dir(cfg.StateFile), 0755); err != nil {
-			log.Printf("WARN: mkdir state dir %s: %v", filepath.Dir(cfg.StateFile), err)
+		stateDir := filepath.Dir(cfg.StateFile)
+		if err := os.MkdirAll(stateDir, 0777); err != nil {
+			log.Printf("WARN: mkdir state dir %s: %v", stateDir, err)
 		}
+		_ = os.Chmod(stateDir, 0777)
 	}
 
 	auths, err := auth.LoadDir(cfg.AuthDir)

@@ -279,13 +279,10 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
-	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", uid))
+	safeUID := auth.SanitizeFilename(uid)
+	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
 	if err := os.WriteFile(targetFile, docBytes, 0644); err != nil {
-		log.Printf("ERR: [oauth] failed to save auth file %s: %v", targetFile, err)
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": fmt.Sprintf("保存授权文件失败: %v", err),
-		})
-		return
+		log.Printf("WARN: [oauth] 保存授权文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
 	}
 
 	// 立即将新账号同步入账号池，清除历史冷却与禁用状态

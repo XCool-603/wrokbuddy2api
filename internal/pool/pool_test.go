@@ -1317,24 +1317,27 @@ func TestAutoFlush(t *testing.T) {
 	dir := t.TempDir()
 	fp := filepath.Join(dir, "state.json")
 	p := New(fp)
+	defer p.Close()
 	p.Add(&auth.Auth{UID: "u1"})
 	p.SetCredits("u1", 77)
 
 	deadline := time.Now().Add(2 * time.Second)
+	var st Status
+	var ok bool
 	for {
 		if _, err := os.Stat(fp); err == nil {
-			break
+			p2 := New(fp)
+			p2.Add(&auth.Auth{UID: "u1"})
+			st, ok = p2.Status("u1")
+			p2.Close()
+			if ok && st.Credits == 77 {
+				break
+			}
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("state.json not written by background flusher")
+			t.Fatalf("auto flush not persisted: %+v ok=%v", st, ok)
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-	p2 := New(fp)
-	p2.Add(&auth.Auth{UID: "u1"})
-	st, ok := p2.Status("u1")
-	if !ok || st.Credits != 77 {
-		t.Fatalf("auto flush not persisted: %+v ok=%v", st, ok)
 	}
 }
 

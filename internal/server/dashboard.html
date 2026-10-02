@@ -1009,6 +1009,9 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         <div id="oauthStep1" class="text-center py-6 space-y-3">
           <div class="inline-block animate-spin rounded-full h-8 w-8 border-2 border-indigo-500 border-t-transparent"></div>
           <p class="text-xs text-slate-300 font-medium">正在向腾讯 / WorkBuddy 服务器申请官方 OAuth 设备码...</p>
+          <div class="pt-2">
+            <button onclick="closeOAuthModal()" class="px-4 py-1.5 text-xs text-slate-400 hover:text-white transition">取消</button>
+          </div>
         </div>
 
         <!-- Step 2: Open browser & auto polling -->
@@ -1052,9 +1055,12 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
             </div>
           </div>
 
-          <div class="text-center pt-1">
-            <button onclick="triggerImmediatePoll()" class="text-xs text-slate-400 hover:text-white underline transition">
-              我已授权完毕，立即同步凭证
+          <div class="pt-2 border-t border-slate-800 flex items-center justify-between gap-3">
+            <button onclick="closeOAuthModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer">
+              ✕ 取消授权并关闭
+            </button>
+            <button onclick="triggerImmediatePoll()" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl text-xs font-semibold shadow transition cursor-pointer flex items-center gap-1">
+              <span>我已在网页确认，立即同步</span>
             </button>
           </div>
         </div>
@@ -1064,8 +1070,13 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           <div class="w-12 h-12 rounded-2xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center mx-auto">
             <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"/></svg>
           </div>
-          <p class="text-sm text-white font-bold" id="oauthSuccessTitle">授权入池成功！</p>
+          <p class="text-sm text-white font-bold" id="oauthSuccessTitle">🎉 授权入池成功！</p>
           <p class="text-xs text-slate-400 font-mono" id="oauthSuccessDetail"></p>
+          <div class="pt-2">
+            <button onclick="closeOAuthModal()" class="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-xl shadow transition">
+              完成并关闭
+            </button>
+          </div>
         </div>
       </div>
     </div>
@@ -2018,6 +2029,12 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             closeOAuthModal();
           }, 2500);
           return true;
+        } else if (data.error) {
+          const statusText = document.getElementById('pollStatusText');
+          if (statusText) {
+            statusText.innerText = '授权提示: ' + data.error;
+            statusText.className = 'text-amber-400 font-mono text-[11px]';
+          }
         } else if (data.notice) {
           const statusText = document.getElementById('pollStatusText');
           if (statusText) statusText.innerText = data.notice;
@@ -2029,9 +2046,35 @@ eyJhbGciOi...----refresh_token_here'></textarea>
     }
 
     async function triggerImmediatePoll() {
-      const ok = await checkOAuthPoll();
-      if (!ok) {
-        alert('暂未检测到授权完成。请确认是否已在浏览器中点击确认授权。');
+      const statusText = document.getElementById('pollStatusText');
+      if (statusText) {
+        statusText.innerText = '正在主动检查授权凭证...';
+        statusText.className = 'text-indigo-400 font-mono text-[11px] animate-pulse';
+      }
+      try {
+        const res = await fetch('/ui/oauth/poll', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ realm: currentRealm, state: currentOAuthState })
+        });
+        const data = await res.json();
+        if (data.success) {
+          document.getElementById('oauthStep2').classList.add('hidden');
+          document.getElementById('oauthStep3').classList.remove('hidden');
+          document.getElementById('oauthSuccessDetail').innerText = `UID: ${data.uid} | 昵称: ${data.nickname || '无'}`;
+          refreshData();
+          setTimeout(() => {
+            closeOAuthModal();
+          }, 2500);
+          return;
+        }
+        if (data.error) {
+          alert('授权检查异常: ' + data.error);
+        } else {
+          alert('暂未检测到授权完成。请确认是否已在浏览器中点击授权确认按钮；若刚刚点击完成，请等待 2-3 秒再次同步。');
+        }
+      } catch (e) {
+        alert('网络请求失败: ' + e);
       }
     }
 
