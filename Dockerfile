@@ -1,7 +1,7 @@
 FROM golang:1.23-alpine AS build
 WORKDIR /src
 ENV GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
-COPY go.mod ./
+COPY go.mod go.sum ./
 RUN go mod download
 COPY . .
 # 一次编译全部二进制（工具进镜像，容器内可直接跑脚本）。全部 -trimpath -s -w。
@@ -13,8 +13,10 @@ RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wb2api ./cmd/serve
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/activity_bin ./cmd/activity
 
 FROM alpine:3.20
+# 国内加速：替换 Alpine 官方海外源为阿里云 CDN 源，彻底解决 apk 下载 nodejs/npm/python3 耗时 120s+ 及卡死超时问题
 # python3：login.sh 的 JSON 解析 / 签到 / 落盘；bash：shell 脚本体；nodejs & npm：内嵌支持 dsh Agent 运行。
-RUN apk add --no-cache wget ca-certificates tzdata python3 bash nodejs npm su-exec \
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
+ && apk add --no-cache wget ca-certificates tzdata python3 bash nodejs npm su-exec \
  && adduser -D -u 10001 app \
  && mkdir -p /app/auths /app/data /app/scripts \
  && chown -R app:app /app
