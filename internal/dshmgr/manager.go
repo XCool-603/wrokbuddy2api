@@ -486,6 +486,8 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	}
 
 	targetPort := m.port + 1
+	dshHomeDir := filepath.Join(m.workDir, ".dsh")
+	_ = os.MkdirAll(dshHomeDir, 0755)
 	env = append(env,
 		fmt.Sprintf("%s=%s%c%s", pathKey, localBin, os.PathListSeparator, os.Getenv(pathKey)),
 		fmt.Sprintf("OPENAI_BASE_URL=%s", gatewayURL),
@@ -493,6 +495,7 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		fmt.Sprintf("DEEPSEEK_BASE_URL=%s", gatewayURL),
 		fmt.Sprintf("OPENAI_API_KEY=%s", apiKey),
 		fmt.Sprintf("PORT=%d", targetPort),
+		fmt.Sprintf("DSH_HOME=%s", dshHomeDir),
 	)
 
 	// DeepSeek Harness 官方出于安全限制强制仅监听 127.0.0.1 并拒绝 --host 0.0.0.0。

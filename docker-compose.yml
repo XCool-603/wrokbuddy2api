@@ -33,7 +33,8 @@ services:
       - DEEPSEEK_BASE_URL=http://wb2api:7863/v1
       - OPENAI_API_KEY=wb2a-admin-secret
       - PORT=3080
-      - DSH_BRIDGE_REVISION=20261003-v2
+      - DSH_HOME=/workspace/.dsh
+      - DSH_BRIDGE_REVISION=20261003-v4
     ports:
       - "3080:3080"
     volumes:
