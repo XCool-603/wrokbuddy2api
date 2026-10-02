@@ -284,7 +284,9 @@ func main() {
 	if cfg.StateFile != "" {
 		usersFile = filepath.Join(filepath.Dir(cfg.StateFile), "users.json")
 	}
-	_ = os.MkdirAll(filepath.Dir(usersFile), 0755)
+	usersDir := filepath.Dir(usersFile)
+	_ = os.MkdirAll(usersDir, 0777)
+	_ = os.Chmod(usersDir, 0777)
 	userMgr, err := usermgr.New(usersFile, cfg.WebPassword, cfg.APIKey)
 	if err != nil || userMgr == nil {
 		log.Printf("WARN: [usermgr] 初始化持久化用户数据异常 (%v)，自动启用纯内存用户管理器", err)

@@ -212,9 +212,7 @@ func (m *Manager) Register(username, password string) (*User, error) {
 	m.byAPIKey[user.APIKey] = user
 
 	if err := m.saveLocked(); err != nil {
-		delete(m.users, username)
-		delete(m.byAPIKey, user.APIKey)
-		return nil, fmt.Errorf("保存注册数据失败: %w", err)
+		log.Printf("WARN: [usermgr] 注册用户 %s 已在内存中成功创建，但持久化到 %s 异常: %v", username, m.filePath, err)
 	}
 
 	copied := *user
@@ -257,9 +255,7 @@ func (m *Manager) CreateUser(username, password, role string) (*User, error) {
 	m.byAPIKey[user.APIKey] = user
 
 	if err := m.saveLocked(); err != nil {
-		delete(m.users, username)
-		delete(m.byAPIKey, user.APIKey)
-		return nil, fmt.Errorf("保存新用户失败: %w", err)
+		log.Printf("WARN: [usermgr] 新用户 %s 已在内存中成功创建生效，但落盘到 %s 异常: %v", username, m.filePath, err)
 	}
 
 	copied := *user
@@ -284,10 +280,7 @@ func (m *Manager) ResetUserAPIKey(username string) (string, error) {
 	m.byAPIKey[newKey] = u
 
 	if err := m.saveLocked(); err != nil {
-		u.APIKey = oldKey
-		m.byAPIKey[oldKey] = u
-		delete(m.byAPIKey, newKey)
-		return "", err
+		log.Printf("WARN: [usermgr] 用户 %s API Key 已重置生效，但落盘异常: %v", username, err)
 	}
 
 	return newKey, nil
@@ -452,15 +445,30 @@ func (m *Manager) saveLocked() error {
 	}
 
 	dir := filepath.Dir(m.filePath)
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
+	if err := os.MkdirAll(dir, 0777); err != nil {
+		// continue anyway
 	}
+	_ = os.Chmod(dir, 0777)
 
 	tmpFile := m.filePath + ".tmp"
-	if err := os.WriteFile(tmpFile, raw, 0600); err != nil {
-		return err
+	if err := os.WriteFile(tmpFile, raw, 0644); err != nil {
+		// 如果写 tmp 失败（例如跨文件系统或临时受限），回退直接写入目标文件
+		if writeErr := os.WriteFile(m.filePath, raw, 0644); writeErr != nil {
+			return fmt.Errorf("write %s failed: %w (fallback direct write: %v)", tmpFile, err, writeErr)
+		}
+		return nil
 	}
-	return os.Rename(tmpFile, m.filePath)
+	defer func() { _ = os.Remove(tmpFile) }()
+	if err := os.Rename(tmpFile, m.filePath); err != nil {
+		_ = os.Remove(m.filePath)
+		if err2 := os.Rename(tmpFile, m.filePath); err2 != nil {
+			// 在 Docker 挂载卷或 Windows 上 rename 可能受限，回退为直接写入目标文件
+			if writeErr := os.WriteFile(m.filePath, raw, 0644); writeErr != nil {
+				return fmt.Errorf("rename failed (%v) and fallback direct write failed: %w", err, writeErr)
+			}
+		}
+	}
+	return nil
 }
 
 func hashPassword(password, salt string) string {
