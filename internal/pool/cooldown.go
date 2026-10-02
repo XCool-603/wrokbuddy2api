@@ -226,7 +226,11 @@ func (p *Pool) cappedSoftUntilLocked(now, resetAt time.Time) time.Time {
 	if resetAt.After(now) {
 		return resetAt
 	}
-	return now.Add(time.Millisecond)
+	fallbackDur := 30 * time.Second
+	if max := p.softRateMaxOr(); max < fallbackDur {
+		fallbackDur = max
+	}
+	return now.Add(fallbackDur)
 }
 
 // softRateMaxOr 返回生效的 softRateMax（未注入时按默认 2h），供封顶计算。

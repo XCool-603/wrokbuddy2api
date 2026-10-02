@@ -330,6 +330,21 @@ func (e *entry) expiry(now time.Time) time.Time {
 	return t
 }
 
+// expiryForModel 返回账号当前在指定 reqModel 下生效的冷却截止时间（取账号级冷却与模型级冷却的有效截止）。
+// 仅当账号既有账号级冷却又有该模型 6004 独立冷却时，取两者中较晚截止者（须两重冷却均解除才可服务该模型）；
+// 若仅有模型级冷却，则返回该模型的冷却截止。不在任何冷却期返回零值。
+func (e *entry) expiryForModel(now time.Time, reqModel string) time.Time {
+	t := e.expiry(now)
+	if reqModel != "" && len(e.modelCooldowns) > 0 {
+		if mc, ok := e.modelCooldowns[reqModel]; ok && !mc.Until.IsZero() && now.Before(mc.Until) {
+			if t.IsZero() || mc.Until.After(t) {
+				t = mc.Until
+			}
+		}
+	}
+	return t
+}
+
 // fallbackKind 报告兜底账号属于哪一类冷却（soft：即时软冷却/连败降权；breaker：熔断期）。
 // 只对参与兜底的账号调用（CoolHard 已被 pickEarliestExpiryLocked 排除）。判定口径：
 // 若熔断截止是当前生效的最近截止（含"仅有熔断无软冷却"），记为 breaker；否则记为 soft
@@ -338,6 +353,21 @@ func (e *entry) fallbackKind(now time.Time) string {
 	if !e.breakerUntil.IsZero() && now.Before(e.breakerUntil) {
 		if e.until.IsZero() || !now.Before(e.until) || e.breakerUntil.Before(e.until) {
 			return "breaker"
+		}
+	}
+	return "soft"
+}
+
+// fallbackKindForModel 报告兜底账号在指定模型下的冷却类型（breaker / model_soft / soft）。
+func (e *entry) fallbackKindForModel(now time.Time, reqModel string) string {
+	if !e.breakerUntil.IsZero() && now.Before(e.breakerUntil) {
+		if e.until.IsZero() || !now.Before(e.until) || e.breakerUntil.Before(e.until) {
+			return "breaker"
+		}
+	}
+	if reqModel != "" && len(e.modelCooldowns) > 0 {
+		if mc, ok := e.modelCooldowns[reqModel]; ok && !mc.Until.IsZero() && now.Before(mc.Until) {
+			return "model_soft"
 		}
 	}
 	return "soft"

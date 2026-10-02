@@ -324,3 +324,154 @@ func TestLoadDirLoadsArbitraryNamedAuthFile(t *testing.T) {
 		t.Fatalf("want 1 account with uid=u_arb, got %+v", list)
 	}
 }
+
+func TestParseRobustFallbacks(t *testing.T) {
+	// 1. 测试嵌套结构中的 snake_case 和顶层兜底字段
+	nestedJSON := []byte(`{
+		"auth": {
+			"access_token": "at_snake",
+			"refresh_token": "rt_snake",
+			"expires_in": 7200
+		},
+		"account": {
+			"user_id": "uid_from_user_id",
+			"enterprise_id": "ent_snake",
+			"name": "nick_from_name"
+		},
+		"realm": "global",
+		"device_token": "dev_tok_1"
+	}`)
+	a, err := Parse(nestedJSON)
+	if err != nil {
+		t.Fatalf("Parse nested with snake_case failed: %v", err)
+	}
+	if a.AccessToken != "at_snake" || a.RefreshToken != "rt_snake" {
+		t.Errorf("token mismatch: at=%s rt=%s", a.AccessToken, a.RefreshToken)
+	}
+	if a.UID != "uid_from_user_id" || a.EnterpriseID != "ent_snake" || a.Nickname != "nick_from_name" {
+		t.Errorf("account mismatch: uid=%s ent=%s nick=%s", a.UID, a.EnterpriseID, a.Nickname)
+	}
+	if a.Realm() != "global" || a.DeviceToken != "dev_tok_1" {
+		t.Errorf("realm/device mismatch: realm=%s dev=%s", a.Realm(), a.DeviceToken)
+	}
+	if a.ExpiresAt <= 0 {
+		t.Errorf("expiresAt should be computed from expires_in, got %d", a.ExpiresAt)
+	}
+
+	// 2. 测试扁平结构中的 snake_case 字段
+	flatJSON := []byte(`{
+		"access_token": "at_flat_snake",
+		"refresh_token": "rt_flat_snake",
+		"expires_at": 1800000000,
+		"user_id": "uid_flat_user_id",
+		"name": "name_flat"
+	}`)
+	b, err := Parse(flatJSON)
+	if err != nil {
+		t.Fatalf("Parse flat with snake_case failed: %v", err)
+	}
+	if b.AccessToken != "at_flat_snake" || b.RefreshToken != "rt_flat_snake" || b.ExpiresAt != 1800000000 {
+		t.Errorf("flat tokens mismatch: %+v", b)
+	}
+	if b.UID != "uid_flat_user_id" || b.Nickname != "name_flat" {
+		t.Errorf("flat account mismatch: uid=%s nick=%s", b.UID, b.Nickname)
+	}
+}
+
+func TestLoadDirInfersUIDFromFilename(t *testing.T) {
+	dir := t.TempDir()
+	doc := `{"auth":{"accessToken":"token_x","refreshToken":"rt_x"},"account":{}}`
+	fp := filepath.Join(dir, "workbuddy-auto10086.json")
+	if err := os.WriteFile(fp, []byte(doc), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	list, err := LoadDir(dir)
+	if err != nil {
+		t.Fatalf("LoadDir: %v", err)
+	}
+	if len(list) != 1 {
+		t.Fatalf("want 1 account, got %d", len(list))
+	}
+	if list[0].UID != "auto10086" {
+		t.Errorf("expected UID inferred as auto10086, got %s", list[0].UID)
+	}
+}
+
+func TestSaveAtomicOverwritesExistingFile(t *testing.T) {
+	dir := t.TempDir()
+	fp := filepath.Join(dir, "workbuddy-overwrite.json")
+	a := &Auth{
+		AccessToken:  "token_v1",
+		RefreshToken: "rt_v1",
+		UID:          "u_ow",
+		FilePath:     fp,
+	}
+	if err := a.SaveAtomic(); err != nil {
+		t.Fatalf("initial save: %v", err)
+	}
+
+	// 再次保存以覆盖已有文件
+	a.AccessToken = "token_v2"
+	if err := a.SaveAtomic(); err != nil {
+		t.Fatalf("overwrite save: %v", err)
+	}
+
+	raw, err := os.ReadFile(fp)
+	if err != nil {
+		t.Fatalf("read overwritten file: %v", err)
+	}
+	parsed, err := Parse(raw)
+	if err != nil {
+		t.Fatalf("parse overwritten file: %v", err)
+	}
+	if parsed.AccessToken != "token_v2" {
+		t.Errorf("expected token_v2, got %s", parsed.AccessToken)
+	}
+	if _, err := os.Stat(fp + ".tmp"); !os.IsNotExist(err) {
+		t.Errorf(".tmp file should have been cleaned up")
+	}
+}
+
+func TestParseResilience(t *testing.T) {
+	// 1. 数字类型 uid 与 expires_in
+	jsonWithNum := []byte(`{"accessToken":"tok_num","account":{"uid":987654,"enterpriseId":1234},"expires_in":"7200"}`)
+	a1, err := Parse(jsonWithNum)
+	if err != nil {
+		t.Fatalf("parse json with numeric uid failed: %v", err)
+	}
+	if a1.UID != "987654" || a1.EnterpriseID != "1234" || a1.AccessToken != "tok_num" {
+		t.Errorf("unexpected a1: %+v", a1)
+	}
+
+	// 2. Markdown 代码块包裹与中文引号
+	mdJson := []byte("```json\n{“accessToken”: “tok_md”, “uid”: “u_chinese”, “nickname”: “测试”}\n```")
+	a2, err := Parse(mdJson)
+	if err != nil {
+		t.Fatalf("parse markdown json with chinese quotes failed: %v", err)
+	}
+	if a2.AccessToken != "tok_md" || a2.UID != "u_chinese" || a2.Nickname != "测试" {
+		t.Errorf("unexpected a2: %+v", a2)
+	}
+
+	// 3. 原始 Token 字符串格式 token----refreshToken
+	rawPair := []byte("eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-z9B----refresh_12345678")
+	a3, err := Parse(rawPair)
+	if err != nil {
+		t.Fatalf("parse raw token pair failed: %v", err)
+	}
+	if a3.AccessToken != "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.e30.t-z9B" || a3.RefreshToken != "refresh_12345678" {
+		t.Errorf("unexpected a3: %+v", a3)
+	}
+
+	// 4. 字段兼容：token 替代 accessToken
+	jsonToken := []byte(`{"token":"tok_alias","user_id":"u_alias"}`)
+	a4, err := Parse(jsonToken)
+	if err != nil {
+		t.Fatalf("parse json with token alias failed: %v", err)
+	}
+	if a4.AccessToken != "tok_alias" || a4.UID != "u_alias" {
+		t.Errorf("unexpected a4: %+v", a4)
+	}
+}
+

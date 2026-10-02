@@ -846,18 +846,160 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         </div>
       </div>
     </div>
+
+    <!-- TAB 6: 用户权限与角色中心 (User & Role Management) -->
+    <div id="tabContent-users" class="space-y-6 hidden">
+      <!-- User Overview Metrics -->
+      <section class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">总注册用户</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="userStatTotal" class="text-2xl font-bold font-mono text-white">0</span>
+            <span class="text-[10px] text-slate-500">USERS</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-purple-400">
+            <span>多租户安全隔离</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">系统管理员</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="userStatAdmins" class="text-2xl font-bold font-mono text-indigo-400">0</span>
+            <span class="text-[10px] text-slate-500">ADMINS</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-indigo-400">
+            <span>拥有全量管控权</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
+          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">普通隔离用户</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="userStatRegular" class="text-2xl font-bold font-mono text-emerald-400">0</span>
+            <span class="text-[10px] text-slate-500">MEMBERS</span>
+          </div>
+          <div class="mt-2 flex items-center text-[11px] text-emerald-400">
+            <span>独立专属 API Key</span>
+          </div>
+        </div>
+
+        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group flex flex-col justify-between">
+          <div>
+            <p class="text-xs font-medium text-slate-400">开放自主注册</p>
+            <div class="flex items-center gap-2 mt-1">
+              <span id="allowRegisterStatusText" class="text-base font-bold text-emerald-400">已开放</span>
+            </div>
+          </div>
+          <div class="mt-2">
+            <button id="btnToggleAllowRegister" onclick="toggleAllowRegister()" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-lg text-xs transition">
+              切换开放状态
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Users Management Table Panel -->
+      <section class="glass-panel rounded-3xl border border-slate-800 p-6 shadow-glass space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800/80">
+          <div class="flex items-center gap-2.5">
+            <div class="w-8 h-8 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
+            </div>
+            <div>
+              <h3 class="text-sm font-bold text-white">用户列表与权限调度中心</h3>
+              <p class="text-xs text-slate-400">管理控制台登录用户、API Key 授权、账号归属及状态调度</p>
+            </div>
+          </div>
+          <div class="flex items-center gap-2 flex-wrap">
+            <div class="relative">
+              <input id="userSearchInput" type="text" oninput="filterAdminUsers()" placeholder="搜索用户名 / UID / Key..." class="bg-slate-900 border border-slate-700/80 rounded-xl px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500 w-48 sm:w-56" />
+            </div>
+            <button onclick="toggleCreateUserForm()" class="px-3.5 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-xl text-xs transition flex items-center gap-1.5 shadow-sm">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
+              <span>添加用户</span>
+            </button>
+            <button onclick="loadAdminUsers()" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/40 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+              <span>刷新</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Add User Form (Collapsible) -->
+        <div id="adminCreateUserForm" class="p-4 bg-slate-900/90 rounded-2xl border border-indigo-500/30 space-y-3 hidden">
+          <div class="flex items-center justify-between border-b border-slate-800 pb-2">
+            <div class="text-xs font-semibold text-white flex items-center gap-1.5">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>创建新用户账号</span>
+            </div>
+            <button onclick="toggleCreateUserForm()" class="text-slate-400 hover:text-white text-xs">✕ 取消</button>
+          </div>
+          <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <div>
+              <label class="block text-[11px] text-slate-300 font-medium mb-1">用户名</label>
+              <input id="newAdminUname" type="text" placeholder="3-32 位字符 (如: dev_user)" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-300 font-medium mb-1">登录初始密码</label>
+              <input id="newAdminPass" type="password" placeholder="至少 6 位密码" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
+            </div>
+            <div>
+              <label class="block text-[11px] text-slate-300 font-medium mb-1">角色权限</label>
+              <select id="newAdminRole" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
+                <option value="user" selected>普通用户 (普通隔离池 + 专属 Key)</option>
+                <option value="admin">系统管理员 (全权限)</option>
+              </select>
+            </div>
+          </div>
+          <div id="createUserErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
+          <div class="flex justify-end gap-2 pt-1">
+            <button onclick="toggleCreateUserForm()" class="px-3 py-1 text-xs text-slate-400 hover:text-white transition">取消</button>
+            <button id="btnSubmitCreateUser" onclick="submitAdminCreateUser()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition">
+              确认创建
+            </button>
+          </div>
+        </div>
+
+        <!-- Users Table -->
+        <div class="overflow-x-auto custom-scroll border border-slate-800/80 rounded-2xl">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/80 border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-3 font-semibold">用户标识</th>
+                <th class="px-4 py-3 font-semibold">用户名</th>
+                <th class="px-4 py-3 font-semibold">角色</th>
+                <th class="px-4 py-3 font-semibold">专属 API Key</th>
+                <th class="px-4 py-3 font-semibold">名下账号</th>
+                <th class="px-4 py-3 font-semibold">状态</th>
+                <th class="px-4 py-3 font-semibold">注册时间</th>
+                <th class="px-4 py-3 font-semibold text-right">操作</th>
+              </tr>
+            </thead>
+            <tbody id="adminUsersTableBody" class="divide-y divide-slate-800/60 font-mono">
+              <tr>
+                <td colspan="8" class="py-8 text-center text-slate-500 font-sans">正在加载用户列表...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </div>
   </main>
 
   <!-- OAuth Modal -->
-  <div id="oauthModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+  <div id="oauthModal" onclick="if(event.target===this) closeOAuthModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
-      <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
+      <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
 
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <h3 id="oauthModalTitle" class="text-base font-bold text-white flex items-center gap-2">
           <span>授权添加账号</span>
         </h3>
-        <button onclick="closeOAuthModal()" class="text-slate-400 hover:text-white transition">
+        <button onclick="closeOAuthModal()" class="relative z-10 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer" title="关闭授权弹窗 (Esc)">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
@@ -900,7 +1042,10 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
                 <span id="pollIndicator" class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></span>
                 <span id="pollStatusText" class="text-emerald-400 font-mono text-[11px]">后台自动轮询检测中...</span>
               </span>
-              <span id="pollCountdown" class="text-[11px] font-mono text-slate-500">60s</span>
+              <div class="flex items-center gap-2">
+                <button id="btnPollResume" onclick="resumePolling()" class="hidden px-2 py-0.5 bg-indigo-600/30 hover:bg-indigo-600/50 text-indigo-300 hover:text-white rounded-lg text-[10px] font-mono transition border border-indigo-500/30">继续检测</button>
+                <span id="pollCountdown" class="text-[11px] font-mono text-slate-500">180s</span>
+              </div>
             </div>
             <div class="w-full bg-slate-800 rounded-full h-1 overflow-hidden">
               <div id="pollProgressBar" class="bg-indigo-500 h-1 rounded-full transition-all duration-300" style="width: 100%"></div>
@@ -927,19 +1072,33 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
   </div>
 
   <!-- Batch & Manual Import Modal -->
-  <div id="importModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+  <div id="importModal" onclick="if(event.target===this) closeImportModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-lg w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="absolute -right-10 -top-10 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none"></div>
+
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <h3 class="text-base font-bold text-white flex items-center gap-2">
           <svg class="w-5 h-5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
           <span>一键批量导入凭证</span>
         </h3>
-        <button onclick="closeImportModal()" class="text-slate-400 hover:text-white transition">
+        <button onclick="closeImportModal()" class="relative z-10 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer" title="关闭导入弹窗 (Esc)">
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
 
-      <div class="py-4 space-y-4">
+      <div class="py-4 space-y-3.5">
+        <!-- Target Realm Selector -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between p-2.5 bg-slate-900/80 border border-slate-800 rounded-xl text-xs gap-2">
+          <div class="flex items-center gap-2 text-slate-300 font-medium">
+            <span>🌐 凭证目标环境:</span>
+          </div>
+          <select id="importTargetRealm" class="bg-slate-950 border border-slate-700 rounded-lg px-2.5 py-1 text-xs text-indigo-300 font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
+            <option value="" selected>自动检测 (凭证缺省时默认国内版 CN)</option>
+            <option value="cn">🇨🇳 强制设为国内版 (CN - copilot.tencent.com)</option>
+            <option value="global">🌍 强制设为国际版 (Global - www.workbuddy.ai)</option>
+          </select>
+        </div>
+
         <!-- Mode Tabs -->
         <div class="flex p-1 bg-slate-900 border border-slate-800 rounded-xl text-xs font-medium">
           <button id="tabImportUpload" onclick="switchImportTab('upload')" class="flex-1 py-1.5 rounded-lg bg-indigo-600 text-white font-semibold transition flex items-center justify-center gap-1.5">
@@ -948,19 +1107,19 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           </button>
           <button id="tabImportPaste" onclick="switchImportTab('paste')" class="flex-1 py-1.5 rounded-lg text-slate-400 hover:text-white transition flex items-center justify-center gap-1.5">
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"/></svg>
-            <span>粘贴 JSON (单个/数组)</span>
+            <span>粘贴凭证 (JSON / 原始 Token)</span>
           </button>
         </div>
 
         <!-- Panel 1: File / ZIP Upload -->
         <div id="importPanelUpload" class="space-y-3">
-          <div class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-2xl p-6 text-center transition cursor-pointer bg-slate-900/40 group" onclick="document.getElementById('batchFileInput').click()">
-            <input type="file" id="batchFileInput" accept=".zip,.json" multiple class="hidden" onchange="handleBatchFileSelect(event)" />
+          <div id="importDropZone" class="border-2 border-dashed border-slate-700 hover:border-indigo-500/60 rounded-2xl p-6 text-center transition cursor-pointer bg-slate-900/40 group" onclick="document.getElementById('batchFileInput').click()" ondragover="handleImportDragOver(event)" ondragleave="handleImportDragLeave(event)" ondrop="handleImportDrop(event)">
+            <input type="file" id="batchFileInput" accept=".zip,.json,.txt" multiple class="hidden" onclick="event.stopPropagation()" onchange="handleBatchFileSelect(event)" />
             <div class="w-12 h-12 rounded-2xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center mx-auto mb-3 group-hover:scale-110 transition duration-300">
               <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
             </div>
             <p class="text-xs text-white font-medium">点击选择或拖拽文件到此处</p>
-            <p class="text-[11px] text-slate-400 mt-1">支持从其他机器导出的 <span class="text-indigo-300 font-mono">.zip</span> 备份包，或按住 Ctrl 选择多个 <span class="text-indigo-300 font-mono">.json</span> 凭证</p>
+            <p class="text-[11px] text-slate-400 mt-1">支持 <span class="text-indigo-300 font-mono">.zip</span> 备份包、<span class="text-indigo-300 font-mono">.json</span> 凭证文件，或包含 Token 的 <span class="text-indigo-300 font-mono">.txt</span> 文件；支持批量多选</p>
           </div>
           <div id="batchFileList" class="text-xs font-mono text-slate-300 max-h-28 overflow-y-auto custom-scroll space-y-1 hidden p-2 bg-slate-900 rounded-xl border border-slate-800"></div>
         </div>
@@ -968,18 +1127,21 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         <!-- Panel 2: Text Paste -->
         <div id="importPanelPaste" class="space-y-2 hidden">
           <p class="text-xs text-slate-400 leading-relaxed">
-            支持单个 JSON 对象或多个账号组成的 JSON 数组 <code class="text-indigo-300 font-mono">[{...}, {...}]</code>：
+            支持 WorkBuddy 账号凭证 JSON、JSON 数组、单/多行原始 Token (<code class="text-indigo-300 font-mono">ey...</code>) 或 <code class="text-indigo-300 font-mono">token----refreshToken</code>：
           </p>
-          <textarea id="importJsonText" rows="7" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500 custom-scroll" placeholder='[
+          <textarea id="importJsonText" rows="7" class="w-full bg-slate-900 border border-slate-700/80 rounded-xl p-3 text-xs text-slate-200 font-mono placeholder-slate-600 focus:outline-none focus:border-indigo-500 custom-scroll" placeholder='// 格式 1：标准 JSON 数组或单个 JSON
+[
   {
     "auth": { "accessToken": "...", "refreshToken": "...", "realm": "cn" },
     "account": { "uid": "10001", "nickname": "账号A" }
-  },
-  {
-    "auth": { "accessToken": "...", "refreshToken": "...", "realm": "global" },
-    "account": { "uid": "10002", "nickname": "账号B" }
   }
-]'></textarea>
+]
+
+// 格式 2：直接粘贴原始 Token (单行或多行)
+eyJhbGciOiJIUzI1Ni...
+
+// 格式 3：卡密分隔格式 (token----refreshToken)
+eyJhbGciOi...----refresh_token_here'></textarea>
         </div>
 
         <div id="importError" class="text-xs text-rose-400 font-mono hidden"></div>
@@ -988,7 +1150,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
 
       <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-3">
         <button onclick="closeImportModal()" class="px-4 py-2 text-xs text-slate-400 hover:text-white transition">取消</button>
-        <button id="btnSubmitImport" onclick="submitImport()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-1.5">
+        <button id="btnSubmitImport" onclick="submitImport()" class="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold rounded-xl shadow transition flex items-center gap-1.5 cursor-pointer">
           <span>确认导入</span>
         </button>
       </div>
@@ -1035,8 +1197,11 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
   </div>
 
   <!-- Fullscreen Login & Register Overlay -->
-  <div id="loginOverlay" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50 hidden">
+  <div id="loginOverlay" onclick="if(event.target===this) showLoginModal(false)" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50 hidden">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-sm w-full p-8 shadow-2xl relative overflow-hidden text-center space-y-6">
+      <button type="button" onclick="showLoginModal(false)" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer z-10" title="关闭 (Esc)">
+        <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+      </button>
       <div class="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
       <div class="absolute -left-8 -bottom-8 w-32 h-32 bg-purple-500/20 rounded-full blur-2xl"></div>
 
@@ -1149,112 +1314,27 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     </div>
   </div>
 
-  <!-- Admin User Management Modal -->
-  <div id="adminUsersModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
-    <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-4xl w-full p-6 shadow-2xl relative overflow-hidden space-y-4 max-h-[90vh] flex flex-col">
-      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
-        <div class="flex items-center gap-2">
-          <svg class="w-5 h-5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z"/></svg>
-          <h3 class="text-base font-bold text-white">用户权限与角色管理 (User & Role Management)</h3>
-        </div>
-        <button onclick="closeAdminUsersModal()" class="text-slate-400 hover:text-white transition">
-          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
-        </button>
-      </div>
-
-      <!-- Settings Bar -->
-      <div class="flex items-center justify-between p-3.5 bg-slate-900/60 rounded-xl border border-slate-800 text-xs">
-        <div class="flex items-center gap-2">
-          <span class="text-slate-300 font-medium">开放自主用户注册:</span>
-          <span id="allowRegisterStatusText" class="text-emerald-400 font-semibold">已开放</span>
-        </div>
-        <div class="flex items-center gap-2">
-          <button onclick="toggleCreateUserForm()" class="px-3 py-1.5 bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-500 hover:to-teal-500 text-white font-semibold rounded-lg text-xs transition flex items-center gap-1 shadow-sm">
-            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"/></svg>
-            <span>添加新用户</span>
-          </button>
-          <button id="btnToggleAllowRegister" onclick="toggleAllowRegister()" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-200 border border-slate-700 rounded-lg text-xs transition">
-            切换注册状态
-          </button>
-          <button onclick="loadAdminUsers()" class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-xs transition">
-            刷新用户列表
-          </button>
-        </div>
-      </div>
-
-      <!-- Admin Create User Form (Collapsible) -->
-      <div id="adminCreateUserForm" class="p-4 bg-slate-900/90 rounded-xl border border-indigo-500/30 space-y-3 hidden">
-        <div class="flex items-center justify-between">
-          <div class="text-xs font-semibold text-white flex items-center gap-1.5">
-            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span>添加新用户账号</span>
-          </div>
-          <button onclick="toggleCreateUserForm()" class="text-slate-400 hover:text-white text-xs">取消</button>
-        </div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
-          <div>
-            <label class="block text-[11px] text-slate-300 font-medium mb-1">用户名</label>
-            <input id="newAdminUname" type="text" placeholder="3-32位字符" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
-          </div>
-          <div>
-            <label class="block text-[11px] text-slate-300 font-medium mb-1">登录初始密码</label>
-            <input id="newAdminPass" type="password" placeholder="至少6位密码" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white placeholder-slate-500 font-mono focus:outline-none focus:border-indigo-500" />
-          </div>
-          <div>
-            <label class="block text-[11px] text-slate-300 font-medium mb-1">角色权限</label>
-            <select id="newAdminRole" class="w-full bg-slate-950 border border-slate-700 rounded-lg px-3 py-1.5 text-xs text-white font-mono focus:outline-none focus:border-indigo-500 cursor-pointer">
-              <option value="user" selected>普通用户 (普通用户隔离池与专属 Key)</option>
-              <option value="admin">系统管理员 (全权限)</option>
-            </select>
-          </div>
-        </div>
-        <div id="createUserErrorMsg" class="text-xs text-rose-400 font-mono hidden"></div>
-        <div class="flex justify-end gap-2 pt-1">
-          <button onclick="toggleCreateUserForm()" class="px-3 py-1 text-xs text-slate-400 hover:text-white transition">取消</button>
-          <button id="btnSubmitCreateUser" onclick="submitAdminCreateUser()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-semibold rounded-lg shadow transition">
-            确认创建用户
-          </button>
-        </div>
-      </div>
-
-      <!-- Users Table -->
-      <div class="overflow-y-auto custom-scroll flex-1 border border-slate-800 rounded-xl">
-        <table class="w-full text-left text-xs text-slate-300">
-          <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/80 sticky top-0 border-b border-slate-800">
-            <tr>
-              <th class="px-4 py-3 font-semibold">用户标识</th>
-              <th class="px-4 py-3 font-semibold">用户名</th>
-              <th class="px-4 py-3 font-semibold">角色</th>
-              <th class="px-4 py-3 font-semibold">API Key 授权凭据</th>
-              <th class="px-4 py-3 font-semibold">状态</th>
-              <th class="px-4 py-3 font-semibold">注册时间</th>
-              <th class="px-4 py-3 font-semibold text-right">操作</th>
-            </tr>
-          </thead>
-          <tbody id="adminUsersTableBody" class="divide-y divide-slate-800/60 font-mono">
-            <tr>
-              <td colspan="7" class="py-8 text-center text-slate-500 font-sans">正在加载用户列表...</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-
-      <div class="pt-2 border-t border-slate-800 flex items-center justify-between text-xs text-slate-500">
-        <div>💡 普通用户仅能访问其绑定的账号或系统公共账号，且拥有独立隔离的 API Key。</div>
-        <button onclick="closeAdminUsersModal()" class="px-4 py-1.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition">关闭</button>
-      </div>
-    </div>
-  </div>
-
   <script>
     let currentRealm = 'cn';
     let currentOAuthUrl = '';
+    let currentOAuthState = '';
     let pollTimer = null;
     let pollCountdownInterval = null;
-    let pollRemainingSec = 60;
+    let pollRemainingSec = 180;
 
     let hasWebPassword = false;
     let currentActiveTab = 'accounts';
+
+    // 全局 ESC 键关闭弹窗
+    window.addEventListener('keydown', function(e) {
+      if (e.key === 'Escape') {
+        closeOAuthModal();
+        closeImportModal();
+        showLoginModal(false);
+        const cpModal = document.getElementById('changePasswordModal');
+        if (cpModal) cpModal.classList.add('hidden');
+      }
+    });
 
     function toggleHeaderAuthMenu() {
       const menu = document.getElementById('headerAuthDropdown');
@@ -1272,29 +1352,29 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     });
 
     function switchMainTab(tab) {
-      if (tab === 'users') {
-        openAdminUsersModal();
-        return;
-      }
       currentActiveTab = tab;
-      const tabs = ['accounts', 'access', 'analytics', 'playground', 'dsh'];
+      const tabs = ['accounts', 'access', 'analytics', 'playground', 'dsh', 'users'];
       for (const t of tabs) {
         const btn = document.getElementById('mainTabBtn-' + t);
         const panel = document.getElementById('tabContent-' + t);
         if (t === tab) {
           if (btn) {
-            btn.className = 'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition';
+            btn.className = 'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 bg-indigo-600 text-white shadow-md shadow-indigo-600/25 transition whitespace-nowrap';
           }
           if (panel) panel.classList.remove('hidden');
         } else {
           if (btn) {
-            btn.className = 'px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 text-slate-400 hover:text-white hover:bg-slate-800/60 transition';
+            const defaultClass = (t === 'users') ? 'text-purple-400 hover:text-purple-300 hover:bg-purple-500/10' : 'text-slate-400 hover:text-white hover:bg-slate-800/60';
+            btn.className = `px-4 py-2 rounded-xl text-xs font-semibold flex items-center gap-2 ${defaultClass} transition whitespace-nowrap`;
           }
           if (panel) panel.classList.add('hidden');
         }
       }
       if (tab === 'dsh') {
         fetchDshStatus(false);
+      }
+      if (tab === 'users') {
+        loadAdminUsers();
       }
     }
 
@@ -1615,8 +1695,13 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       for (let i = logs.length - 1; i >= 0; i--) {
         const item = logs[i];
         let statusBadge = '<span class="text-emerald-400 font-bold">' + item.status + '</span>';
+        let errSnippet = '';
         if (item.status >= 400) {
-          statusBadge = '<span class="text-rose-400 font-bold">' + item.status + '</span>';
+          const errTip = item.error ? escapeHtml(item.error) : '';
+          statusBadge = `<span class="text-rose-400 font-bold cursor-help" title="${errTip}">${item.status}</span>`;
+          if (item.error) {
+            errSnippet = `<div class="text-[11px] text-rose-400/90 mt-0.5 max-w-[280px] truncate" title="${errTip}">⚠️ ${errTip}</div>`;
+          }
         }
 
         html += `
@@ -1626,6 +1711,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
             <td class="py-2.5 px-2 font-medium text-slate-200">
               <span class="text-indigo-300">${escapeHtml(item.model)}</span>
               <span class="text-[10px] text-slate-500 ml-1">(${item.mode})</span>
+              ${errSnippet}
             </td>
             <td class="py-2.5 px-2 text-slate-300 truncate max-w-[140px]" title="${escapeHtml(item.account)}">
               ${escapeHtml(item.account)}
@@ -1796,8 +1882,16 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       }
     }
 
+    let oauthAbortController = null;
+
     async function openOAuthModal(realm) {
+      if (oauthAbortController) {
+        oauthAbortController.abort();
+      }
+      oauthAbortController = new AbortController();
+
       currentRealm = realm;
+      currentOAuthState = '';
       stopPolling();
 
       document.getElementById('oauthModalTitle').innerHTML = realm === 'global' 
@@ -1813,12 +1907,20 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         const res = await fetch('/ui/oauth/start', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ realm })
+          body: JSON.stringify({ realm }),
+          signal: oauthAbortController.signal
         });
         const data = await res.json();
+        // 检查弹窗是否已被关闭
+        const modal = document.getElementById('oauthModal');
+        if (!modal || modal.classList.contains('hidden')) {
+          return;
+        }
+
         if (data.url) {
           const cleanUrl = data.url.trim();
           currentOAuthUrl = cleanUrl;
+          currentOAuthState = data.state || '';
           document.getElementById('oauthLinkBtn').href = cleanUrl;
           document.getElementById('oauthStep1').classList.add('hidden');
           document.getElementById('oauthStep2').classList.remove('hidden');
@@ -1833,6 +1935,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           closeOAuthModal();
         }
       } catch (e) {
+        if (e.name === 'AbortError') return;
         alert('网络请求失败: ' + e);
         closeOAuthModal();
       }
@@ -1846,16 +1949,27 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
 
     function startAutoPolling() {
       stopPolling();
-      pollRemainingSec = 60;
+      pollRemainingSec = 180;
       updatePollUI();
+
+      const resumeBtn = document.getElementById('btnPollResume');
+      if (resumeBtn) resumeBtn.classList.add('hidden');
+      const statusText = document.getElementById('pollStatusText');
+      if (statusText) {
+        statusText.innerText = '后台自动轮询检测中...';
+        statusText.className = 'text-emerald-400 font-mono text-[11px]';
+      }
 
       pollCountdownInterval = setInterval(() => {
         pollRemainingSec--;
         updatePollUI();
         if (pollRemainingSec <= 0) {
           stopPolling();
-          document.getElementById('pollStatusText').innerText = '轮询超时，请重试';
-          document.getElementById('pollStatusText').className = 'text-rose-400 font-mono text-[11px]';
+          if (statusText) {
+            statusText.innerText = '轮询等待超时';
+            statusText.className = 'text-amber-400 font-mono text-[11px]';
+          }
+          if (resumeBtn) resumeBtn.classList.remove('hidden');
         }
       }, 1000);
 
@@ -1867,6 +1981,10 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       }, 2500);
     }
 
+    function resumePolling() {
+      startAutoPolling();
+    }
+
     function stopPolling() {
       if (pollTimer) clearInterval(pollTimer);
       if (pollCountdownInterval) clearInterval(pollCountdownInterval);
@@ -1875,9 +1993,11 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     }
 
     function updatePollUI() {
-      document.getElementById('pollCountdown').innerText = pollRemainingSec + 's';
-      const pct = Math.max(0, (pollRemainingSec / 60) * 100);
-      document.getElementById('pollProgressBar').style.width = pct + '%';
+      const countdownEl = document.getElementById('pollCountdown');
+      if (countdownEl) countdownEl.innerText = Math.max(0, pollRemainingSec) + 's';
+      const pct = Math.max(0, (pollRemainingSec / 180) * 100);
+      const bar = document.getElementById('pollProgressBar');
+      if (bar) bar.style.width = pct + '%';
     }
 
     async function checkOAuthPoll() {
@@ -1885,7 +2005,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         const res = await fetch('/ui/oauth/poll', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ realm: currentRealm })
+          body: JSON.stringify({ realm: currentRealm, state: currentOAuthState })
         });
         const data = await res.json();
         if (data.success) {
@@ -1896,8 +2016,11 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
           refreshData();
           setTimeout(() => {
             closeOAuthModal();
-          }, 3000);
+          }, 2500);
           return true;
+        } else if (data.notice) {
+          const statusText = document.getElementById('pollStatusText');
+          if (statusText) statusText.innerText = data.notice;
         }
       } catch (err) {
         // continue polling
@@ -1913,8 +2036,13 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     }
 
     function closeOAuthModal() {
+      if (oauthAbortController) {
+        oauthAbortController.abort();
+        oauthAbortController = null;
+      }
       stopPolling();
-      document.getElementById('oauthModal').classList.add('hidden');
+      const modal = document.getElementById('oauthModal');
+      if (modal) modal.classList.add('hidden');
     }
 
     // Batch & Manual Import
@@ -1963,10 +2091,33 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       document.getElementById('importModal').classList.add('hidden');
     }
 
-    function handleBatchFileSelect(event) {
-      const files = event.target.files;
+    function handleImportDragOver(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const zone = document.getElementById('importDropZone');
+      if (zone) zone.classList.add('border-indigo-500', 'bg-indigo-500/10');
+    }
+
+    function handleImportDragLeave(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const zone = document.getElementById('importDropZone');
+      if (zone) zone.classList.remove('border-indigo-500', 'bg-indigo-500/10');
+    }
+
+    function handleImportDrop(e) {
+      e.preventDefault();
+      e.stopPropagation();
+      const zone = document.getElementById('importDropZone');
+      if (zone) zone.classList.remove('border-indigo-500', 'bg-indigo-500/10');
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length > 0) {
+        handleBatchFiles(Array.from(e.dataTransfer.files));
+      }
+    }
+
+    function handleBatchFiles(files) {
       if (!files || files.length === 0) return;
-      selectedBatchFiles = Array.from(files);
+      selectedBatchFiles = files;
 
       const listEl = document.getElementById('batchFileList');
       listEl.innerHTML = '';
@@ -1987,6 +2138,12 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       document.getElementById('importSuccess').classList.add('hidden');
     }
 
+    function handleBatchFileSelect(event) {
+      const files = event.target.files;
+      if (!files || files.length === 0) return;
+      handleBatchFiles(Array.from(files));
+    }
+
     async function submitImport() {
       const btn = document.getElementById('btnSubmitImport');
       const errBox = document.getElementById('importError');
@@ -1994,9 +2151,12 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       errBox.classList.add('hidden');
       succBox.classList.add('hidden');
 
+      const targetRealmEl = document.getElementById('importTargetRealm');
+      const targetRealm = targetRealmEl ? targetRealmEl.value.trim() : '';
+
       if (currentImportTab === 'upload') {
         if (!selectedBatchFiles || selectedBatchFiles.length === 0) {
-          errBox.innerText = '请先点击上方区域选择 ZIP 压缩包或 JSON 文件';
+          errBox.innerText = '请先点击上方区域选择或拖拽 ZIP 压缩包或 JSON 文件';
           errBox.classList.remove('hidden');
           return;
         }
@@ -2004,6 +2164,9 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         const formData = new FormData();
         for (const file of selectedBatchFiles) {
           formData.append('file', file);
+        }
+        if (targetRealm) {
+          formData.append('realm', targetRealm);
         }
 
         btn.disabled = true;
@@ -2015,22 +2178,23 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
             body: formData
           });
           const data = await res.json();
-          if (res.ok && data.success) {
-            let msg = `🎉 批量导入成功！解析到 ${data.total} 个账号，成功写入 ${data.success_count} 个。`;
+          if (res.ok && data.success && data.success_count > 0) {
+            refreshData(); // 立即刷新，不用等待定时器！
+            let msg = `🎉 批量导入成功！解析到 ${data.total} 个凭证，成功载入 ${data.success_count} 个。`;
             if (data.failed_count > 0) {
-              msg += ` 失败 ${data.failed_count} 个。`;
+              msg += ` (失败 ${data.failed_count} 个: ${data.fail_reasons.join('; ')})`;
             }
             succBox.innerText = msg;
             succBox.classList.remove('hidden');
             setTimeout(() => {
               closeImportModal();
-              refreshData();
-            }, 1200);
+            }, data.failed_count > 0 ? 5000 : 1500);
           } else {
-            errBox.innerText = data.error || '批量导入失败';
+            let errMsg = data.error || (data.failed_count > 0 ? `全部导入失败 (${data.failed_count} 个)` : '批量导入失败');
             if (data.fail_reasons && data.fail_reasons.length > 0) {
-              errBox.innerText += ': ' + data.fail_reasons.join('; ');
+              errMsg += ':\n' + data.fail_reasons.join('\n');
             }
+            errBox.innerText = errMsg;
             errBox.classList.remove('hidden');
           }
         } catch (e) {
@@ -2044,33 +2208,38 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         // 粘贴文本 JSON
         const jsonStr = document.getElementById('importJsonText').value.trim();
         if (!jsonStr) {
-          errBox.innerText = '请填入凭证 JSON 文本或数组';
+          errBox.innerText = '请填入凭证 JSON 文本、数组或原始 Token';
           errBox.classList.remove('hidden');
           return;
         }
 
         btn.disabled = true;
-        btn.innerHTML = `<span>正在解析写入...</span>`;
+        btn.innerHTML = `<svg class="w-4 h-4 animate-spin" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg><span>正在解析写入...</span>`;
 
         try {
           const res = await fetch('/ui/oauth/batch_import', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ content: jsonStr })
+            body: JSON.stringify({ content: jsonStr, realm: targetRealm })
           });
           const data = await res.json();
-          if (res.ok && data.success) {
-            succBox.innerText = `🎉 导入成功！已成功载入 ${data.success_count} 个账号凭证。`;
+          if (res.ok && data.success && data.success_count > 0) {
+            refreshData(); // 立即刷新，不用等待定时器！
+            let msg = `🎉 导入成功！已成功载入 ${data.success_count} 个账号凭证。`;
+            if (data.failed_count > 0) {
+              msg += ` (失败 ${data.failed_count} 个: ${data.fail_reasons.join('; ')})`;
+            }
+            succBox.innerText = msg;
             succBox.classList.remove('hidden');
             setTimeout(() => {
               closeImportModal();
-              refreshData();
-            }, 1000);
+            }, data.failed_count > 0 ? 5000 : 1500);
           } else {
-            errBox.innerText = data.error || '导入失败';
+            let errMsg = data.error || (data.failed_count > 0 ? `导入失败 (${data.failed_count} 个)` : '导入失败');
             if (data.fail_reasons && data.fail_reasons.length > 0) {
-              errBox.innerText += ': ' + data.fail_reasons.join('; ');
+              errMsg += ':\n' + data.fail_reasons.join('\n');
             }
+            errBox.innerText = errMsg;
             errBox.classList.remove('hidden');
           }
         } catch (e) {
@@ -2528,10 +2697,10 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     }
 
     async function doLogout() {
-      if (!confirm('确定要退出当前账号吗？')) return;
+      if (!confirm('确定要退出当前控制台账号吗？')) return;
       try {
         await fetch('/ui/auth/logout', { method: 'POST' });
-        showLoginModal(true);
+        location.reload();
       } catch (e) {
         location.reload();
       }
@@ -2553,23 +2722,27 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
       }
     }
 
+    let rawAdminUsers = [];
+    let userAccountCounts = {};
+
     function openAdminUsersModal() {
-      document.getElementById('adminUsersModal').classList.remove('hidden');
-      loadAdminUsers();
+      switchMainTab('users');
     }
 
     function closeAdminUsersModal() {
-      document.getElementById('adminUsersModal').classList.add('hidden');
+      switchMainTab('accounts');
     }
 
     async function loadAdminUsers() {
       const tbody = document.getElementById('adminUsersTableBody');
-      tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">正在加载用户数据...</td></tr>';
+      if (tbody) {
+        tbody.innerHTML = '<tr><td colspan="8" class="py-6 text-center text-slate-500 font-sans">正在加载用户数据...</td></tr>';
+      }
       try {
         const res = await fetch('/ui/admin/users');
         const data = await res.json();
         if (!res.ok) {
-          tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-rose-400 font-sans">${escapeHtml(data.error || '无权加载')}</td></tr>`;
+          if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-rose-400 font-sans">${escapeHtml(data.error || '无权加载')}</td></tr>`;
           return;
         }
 
@@ -2577,55 +2750,171 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         const regText = document.getElementById('allowRegisterStatusText');
         if (regText) {
           regText.innerText = systemAllowRegister ? '已开放' : '已关闭自主注册';
-          regText.className = systemAllowRegister ? 'text-emerald-400 font-semibold' : 'text-amber-400 font-semibold';
+          regText.className = systemAllowRegister ? 'text-base font-bold text-emerald-400' : 'text-base font-bold text-amber-400';
         }
 
-        const users = data.users || [];
-        if (!users.length) {
-          tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-500 font-sans">暂无用户记录</td></tr>';
-          return;
-        }
+        rawAdminUsers = data.users || [];
+        userAccountCounts = data.account_counts || {};
 
-        let html = '';
-        for (const u of users) {
-          const isAdmin = (u.role === 'admin');
-          const roleBadge = isAdmin
-            ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">管理员</span>'
-            : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">普通用户</span>';
+        // 统计卡片
+        const total = rawAdminUsers.length;
+        const admins = rawAdminUsers.filter(u => u.role === 'admin').length;
+        const regulars = total - admins;
 
-          const statusBadge = u.disabled
-            ? '<span class="text-rose-400 text-xs">已禁用</span>'
-            : '<span class="text-emerald-400 text-xs">正常</span>';
+        const statTotal = document.getElementById('userStatTotal');
+        if (statTotal) statTotal.innerText = total;
+        const statAdmins = document.getElementById('userStatAdmins');
+        if (statAdmins) statAdmins.innerText = admins;
+        const statRegular = document.getElementById('userStatRegular');
+        if (statRegular) statRegular.innerText = regulars;
 
-          const created = u.created_at ? new Date(u.created_at).toLocaleString('zh-CN', { hour12: false }) : '-';
+        filterAdminUsers();
+      } catch (err) {
+        if (tbody) tbody.innerHTML = `<tr><td colspan="8" class="py-6 text-center text-rose-400 font-sans">网络错误: ${escapeHtml(err)}</td></tr>`;
+      }
+    }
 
-          html += `
-            <tr class="hover:bg-slate-800/40 transition">
-              <td class="px-4 py-3 text-slate-500">${escapeHtml(u.id)}</td>
-              <td class="px-4 py-3 font-semibold text-white">${escapeHtml(u.username)}</td>
-              <td class="px-4 py-3">${roleBadge}</td>
-              <td class="px-4 py-3 text-indigo-300 font-mono text-[11px] truncate max-w-[180px]" title="${escapeHtml(u.api_key)}">${escapeHtml(u.api_key)}</td>
-              <td class="px-4 py-3">${statusBadge}</td>
-              <td class="px-4 py-3 text-slate-400 text-[11px] font-sans">${escapeHtml(created)}</td>
-              <td class="px-4 py-3 text-right space-x-2 font-sans">
-                ${!isAdmin ? `
-                  <button onclick="toggleUserDisabled('${escapeHtml(u.username)}', ${!u.disabled})" class="text-xs ${u.disabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-amber-400 hover:text-amber-300'} hover:underline">
-                    ${u.disabled ? '启用' : '禁用'}
-                  </button>
-                  <button onclick="toggleUserRole('${escapeHtml(u.username)}', '${u.role === 'admin' ? 'user' : 'admin'}')" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
-                    ${u.role === 'admin' ? '设为普通用户' : '升为管理员'}
-                  </button>
-                  <button onclick="deleteUser('${escapeHtml(u.username)}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">
-                    删除
+    function filterAdminUsers() {
+      const kw = (document.getElementById('userSearchInput') ? document.getElementById('userSearchInput').value : '').trim().toLowerCase();
+      if (!kw) {
+        renderAdminUsers(rawAdminUsers);
+        return;
+      }
+      const filtered = rawAdminUsers.filter(u => {
+        return (u.username && u.username.toLowerCase().includes(kw)) ||
+               (u.id && u.id.toLowerCase().includes(kw)) ||
+               (u.api_key && u.api_key.toLowerCase().includes(kw)) ||
+               (u.role && u.role.toLowerCase().includes(kw));
+      });
+      renderAdminUsers(filtered);
+    }
+
+    function copyToClipboard(text, msg) {
+      if (!text) return;
+      navigator.clipboard.writeText(text).then(() => {
+        alert(msg || '已成功复制到剪贴板！');
+      }).catch(() => {
+        prompt('请手动按 Ctrl+C 复制:', text);
+      });
+    }
+
+    function renderAdminUsers(users) {
+      const tbody = document.getElementById('adminUsersTableBody');
+      if (!tbody) return;
+
+      if (!users || !users.length) {
+        tbody.innerHTML = '<tr><td colspan="8" class="py-8 text-center text-slate-500 font-sans">暂无匹配的用户记录</td></tr>';
+        return;
+      }
+
+      let html = '';
+      for (const u of users) {
+        const isAdmin = (u.role === 'admin');
+        const roleBadge = isAdmin
+          ? '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-indigo-500/20 text-indigo-400 border border-indigo-500/30">系统管理员</span>'
+          : '<span class="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-800 text-slate-300 border border-slate-700">普通用户</span>';
+
+        const statusBadge = u.disabled
+          ? '<span class="px-2 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-400 border border-rose-500/30">已禁用</span>'
+          : '<span class="px-2 py-0.5 rounded text-[10px] bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">正常</span>';
+
+        const created = u.created_at ? new Date(u.created_at).toLocaleString('zh-CN', { hour12: false }) : '-';
+        
+        const acctCount = isAdmin 
+          ? '<span class="text-indigo-400 font-sans text-xs">系统全量</span>'
+          : `<span class="font-mono text-xs text-slate-300">${userAccountCounts[u.username] || userAccountCounts[u.id] || 0} 个</span>`;
+
+        html += `
+          <tr class="hover:bg-slate-800/40 transition">
+            <td class="px-4 py-3 text-slate-400 font-mono text-xs">
+              <span class="cursor-pointer hover:text-white" onclick="copyToClipboard('${escapeHtml(u.id)}', '已复制用户 ID')" title="点击复制">${escapeHtml(u.id)}</span>
+            </td>
+            <td class="px-4 py-3 font-semibold text-white font-sans text-xs">
+              ${escapeHtml(u.username)}
+            </td>
+            <td class="px-4 py-3">${roleBadge}</td>
+            <td class="px-4 py-3">
+              <div class="flex items-center gap-1.5 font-mono text-[11px] text-indigo-300">
+                <span class="truncate max-w-[130px] sm:max-w-[180px]" title="${escapeHtml(u.api_key)}">${escapeHtml(u.api_key)}</span>
+                <button onclick="copyToClipboard('${escapeHtml(u.api_key)}', '已复制该用户的专属 API Key')" class="p-1 hover:text-white bg-slate-800 hover:bg-slate-700 rounded transition text-[10px]" title="一键复制 Key">📋</button>
+              </div>
+            </td>
+            <td class="px-4 py-3">${acctCount}</td>
+            <td class="px-4 py-3">${statusBadge}</td>
+            <td class="px-4 py-3 text-slate-400 text-[11px] font-sans">${escapeHtml(created)}</td>
+            <td class="px-4 py-3 text-right space-x-1.5 font-sans">
+              <button onclick="adminResetPassword('${escapeHtml(u.username)}')" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline">
+                改密
+              </button>
+              <button onclick="adminResetKey('${escapeHtml(u.username)}')" class="text-xs text-cyan-400 hover:text-cyan-300 hover:underline">
+                换Key
+              </button>
+              ${!isAdmin ? `
+                <button onclick="toggleUserDisabled('${escapeHtml(u.username)}', ${!u.disabled})" class="text-xs ${u.disabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-amber-400 hover:text-amber-300'} hover:underline">
+                  ${u.disabled ? '启用' : '禁用'}
+                </button>
+                <button onclick="toggleUserRole('${escapeHtml(u.username)}', 'admin')" class="text-xs text-purple-400 hover:text-purple-300 hover:underline">
+                  升管理
+                </button>
+                <button onclick="deleteUser('${escapeHtml(u.username)}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">
+                  删除
+                </button>
+              ` : `
+                ${u.username !== 'admin' ? `
+                  <button onclick="toggleUserRole('${escapeHtml(u.username)}', 'user')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">
+                    降普通
                   </button>
                 ` : '<span class="text-slate-600 text-xs">-</span>'}
-              </td>
-            </tr>
-          `;
+              `}
+            </td>
+          </tr>
+        `;
+      }
+      tbody.innerHTML = html;
+    }
+
+    async function adminResetPassword(username) {
+      const newPass = prompt(`请输入用户 "${username}" 的新登录密码 (至少 6 位):`);
+      if (newPass === null) return;
+      if (!newPass || newPass.trim().length < 6) {
+        alert('新密码长度至少需要 6 位字符！');
+        return;
+      }
+      try {
+        const res = await fetch('/ui/admin/user/reset_password', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, new_password: newPass.trim() })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(`✅ 用户 "${username}" 的登录密码已重置成功！`);
+          loadAdminUsers();
+        } else {
+          alert('重置密码失败: ' + (data.error || '未知错误'));
         }
-        tbody.innerHTML = html;
-      } catch (err) {
-        tbody.innerHTML = `<tr><td colspan="7" class="py-6 text-center text-rose-400 font-sans">网络错误: ${escapeHtml(err)}</td></tr>`;
+      } catch (e) {
+        alert('网络异常: ' + e);
+      }
+    }
+
+    async function adminResetKey(username) {
+      if (!confirm(`确定重置用户 "${username}" 的专属 API Key 吗？重置后该用户的原 Key 将立即失效！`)) return;
+      try {
+        const res = await fetch('/ui/admin/user/reset_key', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username })
+        });
+        const data = await res.json();
+        if (res.ok && data.success) {
+          alert(`✅ 用户 "${username}" 的 API Key 已重置！\n新 Key: ${data.api_key}`);
+          loadAdminUsers();
+        } else {
+          alert('重置 API Key 失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('网络异常: ' + e);
       }
     }
 
@@ -2649,7 +2938,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
     }
 
     async function toggleUserRole(username, role) {
-      if (!confirm(`确定将用户 "${username}" 的角色更改为 "${role}" 吗？`)) return;
+      if (!confirm(`确定将用户 "${username}" 的角色更改为 "${role === 'admin' ? '系统管理员' : '普通用户'}" 吗？`)) return;
       try {
         const res = await fetch('/ui/admin/user/role', {
           method: 'POST',
@@ -2772,7 +3061,7 @@ OPENAI_BASE_URL="http://127.0.0.1:7863/v1" OPENAI_API_KEY="wb2a-admin-secret" np
         }
       } finally {
         btn.disabled = false;
-        btn.innerText = '确认创建用户';
+        btn.innerText = '确认创建';
       }
     }
 

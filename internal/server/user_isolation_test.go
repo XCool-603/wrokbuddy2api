@@ -117,3 +117,89 @@ func TestUserAuthAndIsolation(t *testing.T) {
 		t.Fatalf("Dashboard accounts must include pool accounts! body: %s", body)
 	}
 }
+
+func TestAdminUserManagementEndpoints(t *testing.T) {
+	tmpDir := t.TempDir()
+	usersDB := filepath.Join(tmpDir, "users.json")
+	mgr, _ := usermgr.New(usersDB, "admin123456", "sk-admin-key")
+	mgr.Register("testuser", "oldpass123")
+
+	h := NewHandler(Config{
+		Pool:    pool.New(""),
+		APIKey:  "sk-admin-key",
+		UserMgr: mgr,
+	})
+
+	// 1. 管理员登录
+	adminLoginReq := httptest.NewRequest(http.MethodPost, "/ui/auth/login", strings.NewReader(`{"username":"admin","password":"admin123456"}`))
+	adminLoginW := httptest.NewRecorder()
+	h.ServeHTTP(adminLoginW, adminLoginReq)
+	if adminLoginW.Code != http.StatusOK {
+		t.Fatalf("admin login failed: %d", adminLoginW.Code)
+	}
+	adminCookie := adminLoginW.Result().Cookies()[0]
+
+	// 2. 普通用户登录
+	userLoginReq := httptest.NewRequest(http.MethodPost, "/ui/auth/login", strings.NewReader(`{"username":"testuser","password":"oldpass123"}`))
+	userLoginW := httptest.NewRecorder()
+	h.ServeHTTP(userLoginW, userLoginReq)
+	if userLoginW.Code != http.StatusOK {
+		t.Fatalf("user login failed: %d", userLoginW.Code)
+	}
+	userCookie := userLoginW.Result().Cookies()[0]
+
+	// 3. 普通用户尝试访问 /ui/admin/users -> 403
+	forbidReq := httptest.NewRequest(http.MethodGet, "/ui/admin/users", nil)
+	forbidReq.AddCookie(userCookie)
+	forbidW := httptest.NewRecorder()
+	h.ServeHTTP(forbidW, forbidReq)
+	if forbidW.Code != http.StatusForbidden {
+		t.Fatalf("normal user accessing admin endpoint should return 403, got %d", forbidW.Code)
+	}
+
+	// 4. 管理员访问 /ui/admin/users -> 200
+	listReq := httptest.NewRequest(http.MethodGet, "/ui/admin/users", nil)
+	listReq.AddCookie(adminCookie)
+	listW := httptest.NewRecorder()
+	h.ServeHTTP(listW, listReq)
+	if listW.Code != http.StatusOK {
+		t.Fatalf("admin listing users failed: %d %s", listW.Code, listW.Body.String())
+	}
+	if !strings.Contains(listW.Body.String(), "testuser") || !strings.Contains(listW.Body.String(), "admin") {
+		t.Fatalf("users list missing users: %s", listW.Body.String())
+	}
+
+	// 5. 管理员重置 testuser 密码
+	resetPwReq := httptest.NewRequest(http.MethodPost, "/ui/admin/user/reset_password", strings.NewReader(`{"username":"testuser","new_password":"newpass666"}`))
+	resetPwReq.AddCookie(adminCookie)
+	resetPwW := httptest.NewRecorder()
+	h.ServeHTTP(resetPwW, resetPwReq)
+	if resetPwW.Code != http.StatusOK {
+		t.Fatalf("reset password failed: %d %s", resetPwW.Code, resetPwW.Body.String())
+	}
+
+	// 用新密码登录应成功，旧密码登录应失败
+	authNew, errNew := mgr.Authenticate("testuser", "newpass666")
+	if errNew != nil || authNew == nil {
+		t.Fatalf("authenticate with new password failed: %v", errNew)
+	}
+	_, errOld := mgr.Authenticate("testuser", "oldpass123")
+	if errOld == nil {
+		t.Fatalf("old password should no longer work")
+	}
+
+	// 6. 管理员重置 testuser API Key
+	oldKey := authNew.APIKey
+	resetKeyReq := httptest.NewRequest(http.MethodPost, "/ui/admin/user/reset_key", strings.NewReader(`{"username":"testuser"}`))
+	resetKeyReq.AddCookie(adminCookie)
+	resetKeyW := httptest.NewRecorder()
+	h.ServeHTTP(resetKeyW, resetKeyReq)
+	if resetKeyW.Code != http.StatusOK {
+		t.Fatalf("reset key failed: %d %s", resetKeyW.Code, resetKeyW.Body.String())
+	}
+	uFresh, _ := mgr.FindByUsername("testuser")
+	if uFresh.APIKey == oldKey {
+		t.Fatalf("API Key was not updated")
+	}
+}
+

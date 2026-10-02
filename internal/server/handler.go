@@ -12,6 +12,8 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -103,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.10"
+const CurrentVersion = "v1.2.13"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -632,7 +634,12 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// 只落"大请求"（≥4MB 固定阈值，原 max_body_mb/2 语义的接替）：小探针
 	// （{"input":"hi"} 之类）会覆盖掉真正要看的对话请求。
 	if os.Getenv("WB2A_DUMP_REQ") != "" && len(body) >= dumpReqMinBytes {
-		if err := os.WriteFile("/app/data/last_request.json", body, 0o600); err != nil {
+		dumpDir := "./data"
+		if h.cfg.StateFile != "" {
+			dumpDir = filepath.Dir(h.cfg.StateFile)
+		}
+		_ = os.MkdirAll(dumpDir, 0755)
+		if err := os.WriteFile(filepath.Join(dumpDir, "last_request.json"), body, 0o600); err != nil {
 			log.Printf("ERR: [server] dump req: %v", err)
 		}
 	}
@@ -643,6 +650,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	_ = json.Unmarshal(body, &peek)
 
 	realm, bareModel := resolveModel(peek.Model)
+	if bareModel == "auto" || bareModel == "default-model" || bareModel == "" {
+		bareModel = "deepseek-v4.1-flash"
+	}
 
 	// 若客户端请求的是 dsh 虚拟智能体模型，直接转发至本地或容器内的 dsh 服务端口
 	if strings.EqualFold(bareModel, "dsh") || strings.EqualFold(peek.Model, "dsh") || strings.EqualFold(bareModel, "deepseek-harness") {
@@ -819,24 +829,48 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			// 模型感知 + realm 感知 + 用户隔离选号：模型非空时启用 6004 模型级冷却豁免
 			// （healthyForModel），realm 谓词过滤跨域账号。
 			acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
-			// 如果原始请求未带显式域前缀（即纯裸模型名，如 "auto" 或 "deepseek-v4.1-flash"），
-			// 当默认 realm 无可用账号时，自动降级选择另一个域（如 global），实现双域容灾互补。
-			// 若显式传了 "global:" 或 "cn:"，则严格遵循客户端指定的域，不跨域顶替。
-			if acct == nil && !strings.HasPrefix(peek.Model, "cn:") && !strings.HasPrefix(peek.Model, "global:") {
-				otherRealm := "global"
-				if realm == "global" {
-					otherRealm = "cn"
-				}
-				// 尝试在另一个域选号
-				acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
-				if acct == nil {
-					// 兜底：全池任意可用健康号（仍受 reqOwner 隔离限制）
-					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
+			// 双域动态容灾互补：当首选 realm 无可用健康账号时（全在冷却中或占满），
+			// 自动尝试在另一个域选号（global <-> cn），实现跨域容灾互补与高可用。
+			if acct == nil {
+				totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+				hasExplicitPrefix := strings.HasPrefix(peek.Model, "cn:") || strings.HasPrefix(peek.Model, "global:")
+				// 若未带显式域前缀，或者该域本身配置了账号但当前全部不可用（限流/冷却/占满），
+				// 则动态故障转移到另一个域（如 cn <-> global），实现双域容灾互补。
+				// 仅在显式指定了域前缀且池中根本没有任何该域账号时，严格返回 503（测试 TestChatRealmGlobalAbortedNoGlobalAccount 保险契约）。
+				if !hasExplicitPrefix || totalInRealm > 0 {
+					otherRealm := "global"
+					if realm == "global" {
+						otherRealm = "cn"
+					}
+					// 尝试在另一个域选号
+					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
+					if acct == nil {
+						// 兜底：全池任意可用健康号（仍受 reqOwner 隔离限制）
+						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
+					}
+					if acct != nil {
+						log.Printf("INFO: [server] realm failover %s -> %s for model=%s (acct=%s, owner=%s)",
+							realm, acct.Realm(), bareModel, acct.UID, acct.OwnerValue())
+					}
 				}
 			}
 		}
 		if acct == nil {
-			st.status = http.StatusServiceUnavailable
+			diag := h.cfg.Pool.DiagnosticsForModelRealmAndOwner(bareModel, realm, reqOwner, tried)
+			log.Printf("WARN: [server] chat pick failed (turn=%d/%d): model=%s (realm=%s bare=%s) owner=%q -> %s",
+				i+1, h.cfg.MaxRotate, peek.Model, realm, bareModel, reqOwner, diag.Summary)
+			st.errDetail = diag.Summary
+			if diag.IsRateLimited {
+				st.status = http.StatusTooManyRequests
+				if !diag.EarliestReset.IsZero() {
+					delta := int(time.Until(diag.EarliestReset).Seconds())
+					if delta > 0 {
+						w.Header().Set("Retry-After", strconv.Itoa(delta))
+					}
+				}
+			} else {
+				st.status = http.StatusServiceUnavailable
+			}
 			break
 		}
 		st.uid = acct.UID
@@ -863,6 +897,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		if acct.NeedsRefresh(h.cfg.RefreshSkew) {
 			if err := h.cfg.Upstream.RefreshToken(acct); err != nil {
 				lastErr = err
+				log.Printf("WARN: [server] token refresh failed: acct=%s err=%v", logfmt.Label(acct.UID, acct.Nickname), err)
+				st.errDetail = fmt.Sprintf("token 刷新失败: %v", err)
 				var ue *upstream.Error
 				if errors.As(err, &ue) && ue.Kind == upstream.ErrSessionDead {
 					// 12153 一次失败不杀号（临时触发会误杀）：与 scheduler keepalive/checkin
@@ -906,7 +942,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			// 连败兜底（issue #114）：喂连败计数——连不上上游是「不知道原因的失败」，
 			// 连败 N 次临时出池，单次/偶发不罚（NoteFailures 内部达阈才动作）。
 			// 上游 client 已打 transport error 日志。
+			log.Printf("WARN: [server] upstream transport error: acct=%s model=%s err=%v", logfmt.Label(acct.UID, acct.Nickname), bareModel, terr)
 			st.status = http.StatusServiceUnavailable
+			st.errDetail = fmt.Sprintf("上游连接异常: %v", terr)
 			lastErr = terr
 			h.cfg.Pool.NoteFailures(acct.UID)
 			fail(acct.UID)
@@ -950,6 +988,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					// 空 body 兜底：无上游原文可透传，保留可读分类文案（不编造原文）。
 					msg = "content blocked by upstream content firewall"
 				}
+				log.Printf("WARN: [server] upstream content blocked: acct=%s model=%s msg=%s", logfmt.Label(acct.UID, acct.Nickname), bareModel, logfmt.Truncate(msg, 150))
+				st.errDetail = fmt.Sprintf("内容审核拦截: %s", logfmt.Truncate(msg, 80))
 				writeOpenAIErrorHint(w, http.StatusBadRequest, "content_blocked", msg,
 					h.hintOf(upstream.ErrContentBlocked, string(respBody), bareModel, reqHasImage, uerr))
 				st.status = http.StatusBadRequest
@@ -965,7 +1005,10 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			if kind == upstream.ErrPromptTooLong {
 				h.applyErrorPolicy(acct.UID, kind, string(respBody), bareModel, uerr)
 				fail(acct.UID)
-				writeOpenAIErrorHint(w, http.StatusBadRequest, "prompt_too_long", promptTooLongMessage(string(respBody)),
+				longMsg := promptTooLongMessage(string(respBody))
+				log.Printf("WARN: [server] prompt too long: acct=%s model=%s msg=%s", logfmt.Label(acct.UID, acct.Nickname), bareModel, logfmt.Truncate(longMsg, 150))
+				st.errDetail = fmt.Sprintf("上下文超限: %s", logfmt.Truncate(longMsg, 80))
+				writeOpenAIErrorHint(w, http.StatusBadRequest, "prompt_too_long", longMsg,
 					h.hintOf(upstream.ErrPromptTooLong, string(respBody), bareModel, reqHasImage, uerr))
 				st.status = http.StatusBadRequest
 				return
@@ -979,6 +1022,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				if strings.TrimSpace(msg) == "" {
 					msg = "image request was rejected by upstream"
 				}
+				log.Printf("WARN: [server] image invalid: acct=%s model=%s msg=%s", logfmt.Label(acct.UID, acct.Nickname), bareModel, logfmt.Truncate(msg, 150))
+				st.errDetail = fmt.Sprintf("图片无效: %s", logfmt.Truncate(msg, 80))
 				writeOpenAIErrorHint(w, http.StatusBadRequest, "image_invalid", msg,
 					h.hintOf(upstream.ErrImageInvalid, string(respBody), bareModel, reqHasImage, uerr))
 				st.status = http.StatusBadRequest
@@ -986,7 +1031,10 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 			// lastErr 携带完整 body（uerr.Msg 在 upstream 侧截断 200 字符，透传语义
 			// 5755fe3 要求原文全量）+ Kind/RetryAfter（末端映射与冷却时长共用）。
+			log.Printf("WARN: [server] upstream error (turn=%d/%d): acct=%s model=%s status=%d kind=%s body=%s",
+				i+1, h.cfg.MaxRotate, logfmt.Label(acct.UID, acct.Nickname), bareModel, status, kind, logfmt.Truncate(string(respBody), 200))
 			lastErr = &upstream.Error{Kind: kind, Status: status, Msg: string(respBody), RetryAfter: uerr.RetryAfter}
+			st.errDetail = fmt.Sprintf("上游错误 %d (%s): %s", status, kind, logfmt.Truncate(string(respBody), 100))
 			h.applyErrorPolicy(acct.UID, kind, string(respBody), bareModel, uerr)
 			fail(acct.UID)
 			// WAF IP 级 fail-fast（优先于 rotateBackoff 退避——IP 级拦截时退避无意义，
@@ -1120,6 +1168,17 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			// 上游原文优先：透传 code/msg/requestId，不拼接本地前缀。
 			msg = s
 		}
+	} else {
+		// 本地选号/调度失败（无上游返回错误）
+		if st.status == http.StatusTooManyRequests {
+			status = http.StatusTooManyRequests
+			code = "rate_limit_exceeded"
+			if st.errDetail != "" {
+				msg = fmt.Sprintf("rate limited: all accounts are cooling down: %s", st.errDetail)
+			}
+		} else if st.errDetail != "" {
+			msg = fmt.Sprintf("all accounts are temporarily unavailable: %s", st.errDetail)
+		}
 	}
 	writeOpenAIErrorHint(w, status, code, msg, hint)
 	st.status = status
@@ -1209,8 +1268,9 @@ func (h *Handler) applyErrorPolicy(uid string, kind upstream.ErrKind, body, mode
 		//     豁免（既有 issue #31 语义）。
 		//   - 账号级（非 6004）→ CooldownSoftRate：写账号级 until，不产生模型豁免
 		//     （普通账号级限流不该因切模型绕过）。
+		isModelLimit := upstream.IsModelRateLimit(body)
 		if resetAt, ok := upstream.ParseRateReset(body); ok {
-			if upstream.IsModelRateLimit(body) {
+			if isModelLimit {
 				h.cfg.Pool.CooldownSoftForModel(uid, h.cfg.SoftCooldown, resetAt, model, "6004 model rate limit")
 				return
 			}
@@ -1403,6 +1463,15 @@ func (h *Handler) hintOf(kind upstream.ErrKind, body, bareModel string, hasImage
 	return upstream.GatewayHint(kind, msg, h.hintContext(bareModel, hasImage))
 }
 
+var dshProxyClient = &http.Client{
+	Timeout: 10 * time.Minute,
+	Transport: &http.Transport{
+		MaxIdleConns:        100,
+		MaxIdleConnsPerHost: 20,
+		IdleConnTimeout:     90 * time.Second,
+	},
+}
+
 // proxyToDsh 将发往 dsh 模型的 chat/completions 请求反向代理至正在运行的 DeepSeek Harness 实例。
 func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte) {
 	if h.cfg.DshMgr == nil {
@@ -1428,8 +1497,7 @@ func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte
 		}
 	}
 
-	client := &http.Client{Timeout: 10 * time.Minute}
-	resp, err := client.Do(req)
+	resp, err := dshProxyClient.Do(req)
 	if err != nil && st.ExternalRunning {
 		// 备用：Docker 网络模式尝试直连 dsh 容器
 		targetURLDocker := fmt.Sprintf("http://dsh:%d/v1/chat/completions", st.Port)
@@ -1439,7 +1507,7 @@ func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte
 					reqDocker.Header.Add(k, v)
 				}
 			}
-			resp, err = client.Do(reqDocker)
+			resp, err = dshProxyClient.Do(reqDocker)
 		}
 	}
 

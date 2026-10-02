@@ -30,6 +30,7 @@ type RecentLogItem struct {
 	Tokens    string  `json:"tokens"`
 	TokenRate string  `json:"token_rate"`
 	Duration  float64 `json:"duration"`
+	Error     string  `json:"error,omitempty"`
 }
 
 var (
@@ -79,6 +80,8 @@ type chatStat struct {
 	credit    float64
 	hasCredit bool
 
+	errDetail string // 错误详情（如 503 无可用账号诊断、429 限流恢复时间、WAF 拦截等）
+
 	logged bool
 }
 
@@ -101,7 +104,7 @@ func (s *chatStat) done() {
 	}
 	s.logged = true
 	total := time.Since(s.start)
-	logChatRow(s.ttfb, total, s.model, s.mode, s.uid, s.nick, s.status, s.toks)
+	logChatRow(s.ttfb, total, s.model, s.mode, s.uid, s.nick, s.status, s.toks, s.errDetail)
 	recordChatMetric(s, total)
 }
 
@@ -278,9 +281,13 @@ const (
 //   - uid/nick：完整 uid 与账号昵称，经 logfmt.Label 拼成 "昵称(uid8)" 展示——只有
 //     uid8 时人眼无法判断是哪个号，要辨认必须再查 auths/，排障多一跳；
 //   - toks<0 表示 usage 缺失，显示 "-"。
-func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status int, toks int) {
+func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status int, toks int, errDetail ...string) {
 	if !chatLogEnabled {
 		return
+	}
+	var errStr string
+	if len(errDetail) > 0 {
+		errStr = errDetail[0]
 	}
 	seq := chatSeq.Add(1)
 	model = logfmt.Pad(logfmt.Truncate(model, chatModelWidth), chatModelWidth)
@@ -313,6 +320,9 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 		logfmt.Pad(tokpsField, chatRateWidth),
 		total.Seconds(),
 	)
+	if status >= 400 && errStr != "" {
+		fmt.Fprintf(os.Stdout, "       ↳ [FAIL REASON] %s\n", errStr)
+	}
 
 	AddRecentLog(RecentLogItem{
 		ID:        seq,
@@ -325,5 +335,6 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 		Tokens:    tokField,
 		TokenRate: tokpsField,
 		Duration:  total.Seconds(),
+		Error:     errStr,
 	})
 }

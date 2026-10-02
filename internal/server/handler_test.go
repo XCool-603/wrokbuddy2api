@@ -336,6 +336,44 @@ func TestChatLocalNoAccountKeepsOwnMessage(t *testing.T) {
 	}
 }
 
+// TestChatRateLimitedModelReturns429WithDiagnostics 验证当模型全账号限流时，网关返回 429 及详细诊断信息
+func TestChatRateLimitedModelReturns429WithDiagnostics(t *testing.T) {
+	up := newFakeUpstream(t, func(authz string) (int, string, bool) {
+		t.Fatal("no upstream call expected when all accounts are rate-limited")
+		return 200, "", false
+	})
+	p := testPoolWith(&auth.Auth{UID: "g1", Domain: "www.workbuddy.ai", Owner: "u1"})
+	reset := time.Now().Add(5 * time.Minute)
+	p.CooldownSoftForModel("g1", time.Minute, reset, "deepseek-v4.1-flash", "6004 model rate limit")
+
+	h := NewHandler(Config{Pool: p, Upstream: up, GlobalEnabled: true})
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(`{"model":"global:deepseek-v4.1-flash","messages":[]}`)))
+
+	if rec.Code != http.StatusTooManyRequests {
+		t.Fatalf("code=%d want 429 (TooManyRequests), body=%s", rec.Code, rec.Body.String())
+	}
+	if rec.Header().Get("Retry-After") == "" {
+		t.Errorf("Retry-After header should be set")
+	}
+
+	var e struct {
+		Error struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &e); err != nil {
+		t.Fatalf("resp not json: %v", err)
+	}
+	if e.Error.Code != "rate_limit_exceeded" {
+		t.Errorf("code=%q want rate_limit_exceeded", e.Error.Code)
+	}
+	if !strings.Contains(e.Error.Message, "deepseek-v4.1-flash") || !strings.Contains(e.Error.Message, "限流冷却中") {
+		t.Errorf("message=%q should contain model rate limit diagnostics", e.Error.Message)
+	}
+}
+
 func TestChatNonStreamAggregates(t *testing.T) {
 	up := newFakeUpstream(t, func(authz string) (int, string, bool) {
 		if authz != "Bearer at1" {

@@ -3,12 +3,15 @@
 package auth
 
 import (
+	"bytes"
+	"encoding/base64"
 	"encoding/json"
 	"fmt"
 	"log"
 	"os"
 	"path/filepath"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -225,106 +228,375 @@ func (a *Auth) NeedsRefresh(within time.Duration) bool {
 	return time.Now().Add(within).Unix() >= a.ExpiresAt
 }
 
-// Parse 兼容两种磁盘形态：
-//
-//	嵌套形 {"auth":{...},"account":{...}}  （插件 OAuth 输出）
-//	扁平形 {"accessToken":...,"uid":...}   （手写/旧版）
+// CleanRawInput 清理 UTF-8 BOM、Markdown 代码块包裹及全角中文引号。
+func CleanRawInput(raw []byte) []byte {
+	raw = bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")) // UTF-8 BOM
+	raw = bytes.TrimSpace(raw)
+	// Markdown 代码块清理: ```json ... ``` 或 ``` ... ```
+	if bytes.HasPrefix(raw, []byte("```")) {
+		if idx := bytes.IndexByte(raw, '\n'); idx != -1 {
+			raw = raw[idx+1:]
+		}
+		if idx := bytes.LastIndex(raw, []byte("```")); idx != -1 {
+			raw = raw[:idx]
+		}
+		raw = bytes.TrimSpace(raw)
+	}
+	// 中文全角引号转义
+	raw = bytes.ReplaceAll(raw, []byte("“"), []byte("\""))
+	raw = bytes.ReplaceAll(raw, []byte("”"), []byte("\""))
+	raw = bytes.ReplaceAll(raw, []byte("‘"), []byte("'"))
+	raw = bytes.ReplaceAll(raw, []byte("’"), []byte("'"))
+	return raw
+}
+
+// SetRealm 加锁设置账号域（"cn" 或 "global"）。
+func (a *Auth) SetRealm(realm string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.realm = strings.TrimSpace(realm)
+}
+
+// ParseJWTClaims 解析并提取 JWT Payload 中的 claims 字典。
+func ParseJWTClaims(token string) map[string]any {
+	parts := strings.Split(token, ".")
+	if len(parts) != 3 {
+		return nil
+	}
+	payload := parts[1]
+	b, err := base64.RawURLEncoding.DecodeString(payload)
+	if err != nil {
+		b, err = base64.URLEncoding.DecodeString(payload)
+		if err != nil {
+			return nil
+		}
+	}
+	var claims map[string]any
+	_ = json.Unmarshal(b, &claims)
+	return claims
+}
+
+func parseJWTClaims(token string) map[string]any {
+	return ParseJWTClaims(token)
+}
+
+func tryParseRawToken(str string) *Auth {
+	str = strings.TrimSpace(str)
+	if str == "" {
+		return nil
+	}
+	str = strings.TrimPrefix(str, "Bearer ")
+	str = strings.TrimPrefix(str, "bearer ")
+
+	var at, rt, explicitRealm, explicitUID, explicitNick string
+
+	// 支持 key-value 格式：例如 access_token=xxx 或 accessToken: xxx
+	if strings.Contains(str, "\n") || strings.Contains(str, "=") || (strings.Contains(str, ":") && !strings.HasPrefix(str, "http")) {
+		lines := strings.Split(str, "\n")
+		var kvAt, kvRt string
+		for _, line := range lines {
+			line = strings.TrimSpace(line)
+			if line == "" || strings.HasPrefix(line, "#") || strings.HasPrefix(line, "//") {
+				continue
+			}
+			var k, v string
+			if strings.Contains(line, "=") {
+				parts := strings.SplitN(line, "=", 2)
+				k = strings.ToLower(strings.TrimSpace(parts[0]))
+				v = strings.TrimSpace(parts[1])
+			} else if strings.Contains(line, ":") {
+				parts := strings.SplitN(line, ":", 2)
+				k = strings.ToLower(strings.TrimSpace(parts[0]))
+				v = strings.TrimSpace(parts[1])
+			}
+			v = strings.Trim(v, `"'`)
+			switch k {
+			case "access_token", "accesstoken", "token", "jwt", "apikey":
+				kvAt = v
+			case "refresh_token", "refreshtoken", "refresh":
+				kvRt = v
+			case "realm":
+				explicitRealm = v
+			case "uid", "user_id", "userid", "id":
+				explicitUID = v
+			case "nickname", "nick", "name":
+				explicitNick = v
+			}
+		}
+		if kvAt != "" {
+			at = kvAt
+			if kvRt != "" {
+				rt = kvRt
+			}
+		}
+	}
+
+	if at == "" {
+		// 支持 token----refreshToken, token#refreshToken, token|refreshToken, token,refreshToken
+		for _, sep := range []string{"----", "---", "--", "#", "|", ","} {
+			if strings.Contains(str, sep) {
+				parts := strings.SplitN(str, sep, 2)
+				at = strings.TrimSpace(parts[0])
+				rt = strings.TrimSpace(parts[1])
+				break
+			}
+		}
+	}
+
+	if at == "" {
+		at = str
+	}
+
+	if len(at) < 15 {
+		return nil
+	}
+
+	a := &Auth{
+		AccessToken:  at,
+		RefreshToken: rt,
+		ExpiresAt:    time.Now().Add(30 * 24 * time.Hour).Unix(),
+		realm:        explicitRealm,
+		UID:          explicitUID,
+		Nickname:     explicitNick,
+	}
+
+	// 尝试解构 JWT Payload
+	claims := ParseJWTClaims(at)
+	if claims != nil {
+		if a.UID == "" {
+			if sub, ok := claims["sub"].(string); ok && sub != "" {
+				a.UID = sub
+			} else if uid, ok := claims["uid"].(string); ok && uid != "" {
+				a.UID = uid
+			}
+		}
+		if exp, ok := claims["exp"].(float64); ok && exp > 0 {
+			a.ExpiresAt = int64(exp)
+		}
+		if a.Nickname == "" {
+			if name, ok := claims["name"].(string); ok && name != "" {
+				a.Nickname = name
+			} else if nick, ok := claims["nickname"].(string); ok && nick != "" {
+				a.Nickname = nick
+			}
+		}
+		if iss, ok := claims["iss"].(string); ok && iss != "" {
+			if strings.Contains(iss, "workbuddy.ai") {
+				a.Domain = iss
+				if a.realm == "" {
+					a.realm = "global"
+				}
+			}
+		}
+	}
+
+	if a.UID == "" {
+		a.UID = fmt.Sprintf("token_%d", time.Now().UnixNano()%100000000)
+	}
+
+	return a
+}
+
+func extractValString(m map[string]any, keys ...string) string {
+	if m == nil {
+		return ""
+	}
+	for _, k := range keys {
+		if v, ok := m[k]; ok && v != nil {
+			switch val := v.(type) {
+			case string:
+				if s := strings.TrimSpace(val); s != "" {
+					return s
+				}
+			case json.Number:
+				return val.String()
+			case float64:
+				return fmt.Sprintf("%.0f", val)
+			case int:
+				return strconv.Itoa(val)
+			case int64:
+				return strconv.FormatInt(val, 10)
+			}
+		}
+	}
+	return ""
+}
+
+func extractValInt64(m map[string]any, keys ...string) int64 {
+	if m == nil {
+		return 0
+	}
+	for _, k := range keys {
+		if v, ok := m[k]; ok && v != nil {
+			switch val := v.(type) {
+			case json.Number:
+				if n, err := val.Int64(); err == nil {
+					return n
+				}
+				if f, err := val.Float64(); err == nil {
+					return int64(f)
+				}
+			case float64:
+				return int64(val)
+			case int64:
+				return val
+			case int:
+				return int64(val)
+			case string:
+				s := strings.TrimSpace(val)
+				if n, err := strconv.ParseInt(s, 10, 64); err == nil {
+					return n
+				}
+			}
+		}
+	}
+	return 0
+}
+
+// Parse 兼容多种凭证输入格式：
+// 1. 嵌套形 {"auth":{...},"account":{...}}  （插件 OAuth 输出）
+// 2. 扁平形 {"accessToken":...,"uid":...}   （手写/标准导出）
+// 3. 原始 Token 字符串（JWT 或 token----refreshToken 组合）
+// 4. 数字/字符串兼容类型容错与 Markdown/中文符号净化
 func Parse(raw []byte) (*Auth, error) {
+	raw = CleanRawInput(raw)
 	if len(raw) == 0 {
 		return nil, fmt.Errorf("empty auth storage")
 	}
-	var probe map[string]json.RawMessage
-	if err := json.Unmarshal(raw, &probe); err != nil {
+
+	// 1. 如果不是以 '{' 开头，尝试作为原始 Token / 组合文本解析
+	if !bytes.HasPrefix(raw, []byte("{")) {
+		if a := tryParseRawToken(string(raw)); a != nil {
+			return a, nil
+		}
+		return nil, fmt.Errorf("storage_parse_error: invalid character '%c' looking for beginning of JSON object", raw[0])
+	}
+
+	// 2. 作为 JSON 解析，采用 UseNumber 避免整型数字 ID/时间戳反序列化类型失败
+	var m map[string]any
+	dec := json.NewDecoder(bytes.NewReader(raw))
+	dec.UseNumber()
+	if err := dec.Decode(&m); err != nil {
 		return nil, fmt.Errorf("storage_parse_error: %w", err)
 	}
-	var a Auth
-	if _, nested := probe["auth"]; nested {
-		var n struct {
-			Auth struct {
-				AccessToken  string `json:"accessToken"`
-				RefreshToken string `json:"refreshToken"`
-				ExpiresAt    int64  `json:"expiresAt"`
-				Domain       string `json:"domain"`
-				Realm        string `json:"realm"`
-			} `json:"auth"`
-			Account struct {
-				UID          string `json:"uid"`
-				EnterpriseID string `json:"enterpriseId"`
-				Nickname     string `json:"nickname"`
-			} `json:"account"`
-			// DeviceToken 顶层 device_token（嵌套形与扁平形共用）。
-			// 放在 auth 段之外，手写时无需嵌进 auth 对象，降低配置门槛。
-			DeviceToken string `json:"device_token"`
-			Owner       string `json:"owner"`
+
+	var authMap, accountMap map[string]any
+	if sub, ok := m["auth"].(map[string]any); ok {
+		authMap = sub
+	}
+	if sub, ok := m["account"].(map[string]any); ok {
+		accountMap = sub
+	}
+
+	at := extractValString(authMap, "accessToken", "access_token", "token", "jwt", "bearer_token", "apiKey", "auth_token")
+	if at == "" {
+		at = extractValString(m, "accessToken", "access_token", "token", "jwt", "bearer_token", "apiKey", "auth_token")
+	}
+
+	rt := extractValString(authMap, "refreshToken", "refresh_token", "refresh")
+	if rt == "" {
+		rt = extractValString(m, "refreshToken", "refresh_token", "refresh")
+	}
+
+	expAt := extractValInt64(authMap, "expiresAt", "expires_at", "expire_at", "exp")
+	if expAt == 0 {
+		expAt = extractValInt64(m, "expiresAt", "expires_at", "expire_at", "exp")
+	}
+	if expAt == 0 {
+		expIn := extractValInt64(authMap, "expiresIn", "expires_in", "expire_in")
+		if expIn == 0 {
+			expIn = extractValInt64(m, "expiresIn", "expires_in", "expire_in")
 		}
-		if err := json.Unmarshal(raw, &n); err != nil {
-			return nil, fmt.Errorf("storage_parse_error: %w", err)
-		}
-		a = Auth{
-			AccessToken:  n.Auth.AccessToken,
-			RefreshToken: n.Auth.RefreshToken,
-			ExpiresAt:    n.Auth.ExpiresAt,
-			Domain:       n.Auth.Domain,
-			realm:        n.Auth.Realm,
-			UID:          n.Account.UID,
-			EnterpriseID: n.Account.EnterpriseID,
-			Nickname:     n.Account.Nickname,
-			DeviceToken:  n.DeviceToken,
-			Owner:        n.Owner,
-		}
-	} else {
-		var f struct {
-			AccessToken      string `json:"accessToken"`
-			AccessTokenSnake string `json:"access_token"`
-			RefreshToken     string `json:"refreshToken"`
-			RefreshTokenSnake string `json:"refresh_token"`
-			ExpiresAt        int64  `json:"expiresAt"`
-			ExpiresIn        int64  `json:"expires_in"`
-			Domain           string `json:"domain"`
-			Realm            string `json:"realm"`
-			UID              string `json:"uid"`
-			EnterpriseID     string `json:"enterpriseId"`
-			EnterpriseIDSnake string `json:"enterprise_id"`
-			Nickname         string `json:"nickname"`
-			DeviceToken      string `json:"device_token"`
-			Owner            string `json:"owner"`
-		}
-		if err := json.Unmarshal(raw, &f); err != nil {
-			return nil, fmt.Errorf("storage_parse_error: %w", err)
-		}
-		at := f.AccessToken
-		if at == "" {
-			at = f.AccessTokenSnake
-		}
-		rt := f.RefreshToken
-		if rt == "" {
-			rt = f.RefreshTokenSnake
-		}
-		ent := f.EnterpriseID
-		if ent == "" {
-			ent = f.EnterpriseIDSnake
-		}
-		expAt := f.ExpiresAt
-		if expAt == 0 && f.ExpiresIn > 0 {
-			expAt = time.Now().Unix() + f.ExpiresIn
-		}
-		a = Auth{
-			AccessToken:  at,
-			RefreshToken: rt,
-			ExpiresAt:    expAt,
-			Domain:       f.Domain,
-			realm:        f.Realm,
-			UID:          f.UID,
-			EnterpriseID: ent,
-			Nickname:     f.Nickname,
-			DeviceToken:  f.DeviceToken,
-			Owner:        f.Owner,
+		if expIn > 0 {
+			expAt = time.Now().Unix() + expIn
 		}
 	}
-	if strings.TrimSpace(a.AccessToken) == "" {
+
+	domain := extractValString(authMap, "domain", "api_domain", "host")
+	if domain == "" {
+		domain = extractValString(m, "domain", "api_domain", "host")
+	}
+
+	realm := extractValString(authMap, "realm")
+	if realm == "" {
+		realm = extractValString(m, "realm")
+	}
+
+	uid := extractValString(accountMap, "uid", "user_id", "userId", "id", "sub", "account_id")
+	if uid == "" {
+		uid = extractValString(m, "uid", "user_id", "userId", "id", "sub", "account_id")
+	}
+
+	ent := extractValString(accountMap, "enterpriseId", "enterprise_id", "enterpriseID")
+	if ent == "" {
+		ent = extractValString(m, "enterpriseId", "enterprise_id", "enterpriseID")
+	}
+
+	nick := extractValString(accountMap, "nickname", "nick_name", "name", "username", "email")
+	if nick == "" {
+		nick = extractValString(m, "nickname", "nick_name", "name", "username", "email")
+	}
+
+	deviceToken := extractValString(m, "device_token", "deviceToken")
+	if deviceToken == "" {
+		deviceToken = extractValString(authMap, "device_token", "deviceToken")
+	}
+
+	owner := extractValString(m, "owner")
+	if owner == "" {
+		owner = extractValString(accountMap, "owner")
+	}
+
+	// 如果 accessToken 为空但 refreshToken 存在，允许自动占位以供上游调度器刷新
+	if strings.TrimSpace(at) == "" && strings.TrimSpace(rt) != "" {
+		at = "pending_refresh"
+		if expAt == 0 {
+			expAt = 1 // 立即触发刷新
+		}
+	}
+
+	if strings.TrimSpace(at) == "" {
 		return nil, fmt.Errorf("parse_error: missing accessToken")
 	}
-	return &a, nil
+
+	// 若未指定 expAt 或 uid，尝试从 JWT claims 中解析补充
+	if claims := parseJWTClaims(at); claims != nil {
+		if expAt == 0 {
+			if exp, ok := claims["exp"].(float64); ok && exp > 0 {
+				expAt = int64(exp)
+			}
+		}
+		if uid == "" {
+			if sub, ok := claims["sub"].(string); ok && sub != "" {
+				uid = sub
+			} else if u, ok := claims["uid"].(string); ok && u != "" {
+				uid = u
+			}
+		}
+		if nick == "" {
+			if name, ok := claims["name"].(string); ok && name != "" {
+				nick = name
+			}
+		}
+	}
+
+	a := &Auth{
+		AccessToken:  at,
+		RefreshToken: rt,
+		ExpiresAt:    expAt,
+		Domain:       domain,
+		realm:        realm,
+		UID:          uid,
+		EnterpriseID: ent,
+		Nickname:     nick,
+		DeviceToken:  deviceToken,
+		Owner:        owner,
+	}
+
+	return a, nil
 }
 
 // SaveAtomic 以嵌套形原子写回 FilePath（tmp + rename），保持嵌套形（插件可读）格式。
@@ -369,7 +641,12 @@ func (a *Auth) SaveAtomic() error {
 	if err := os.WriteFile(tmp, raw, 0o600); err != nil {
 		return err
 	}
-	return os.Rename(tmp, a.FilePath)
+	defer func() { _ = os.Remove(tmp) }()
+	if err := os.Rename(tmp, a.FilePath); err != nil {
+		_ = os.Remove(a.FilePath)
+		return os.Rename(tmp, a.FilePath)
+	}
+	return nil
 }
 
 // AuthFileGlob auth 文件的统一 glob 模式（宽侧：workbuddy*.json）。
@@ -438,6 +715,14 @@ func LoadDir(dir string) ([]*Auth, error) {
 			continue
 		}
 		a.FilePath = f
+		if a.UID == "" {
+			base := strings.TrimSuffix(filepath.Base(f), filepath.Ext(f))
+			base = strings.TrimPrefix(base, "workbuddy-")
+			base = strings.TrimPrefix(base, "workbuddy_")
+			if base != "" {
+				a.UID = base
+			}
+		}
 		if prev, ok := seenUID[a.UID]; ok {
 			log.Printf("WARN: uid %s duplicated across %s and %s — 后者覆盖（不同 realm 同名 UID？）",
 				logfmt.Label(a.UID, a.Nickname), prev, f)
