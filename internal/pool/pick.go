@@ -6,6 +6,7 @@ import (
 	"math"
 	"math/rand/v2"
 	"sort"
+	"strings"
 	"time"
 
 	"workbuddy2api/internal/auth"
@@ -42,6 +43,35 @@ func (p *Pool) Pick(model string) *auth.Auth {
 // minPickGap=0（测试用）时过滤恒通过，退化为纯加权随机。
 // reqModel 非空时把健康口径换成 healthyForModel（6004 模型豁免生效；PickExcluding 传 ""）。
 // realm 非空时候选过滤叠加 Realm()==realm 谓词（分池选号域；PickExcluding 传 ""）。
+// IsOwnerMatch 检查账号 owner 是否匹配请求者身份（支持 user.ID|username 复合参数与公共账号判断）。
+func IsOwnerMatch(acctOwner, reqOwner string) bool {
+	if reqOwner == "" || reqOwner == "admin" || reqOwner == "u_admin" {
+		return true
+	}
+	if acctOwner == "public" {
+		return true
+	}
+	if acctOwner == reqOwner {
+		return true
+	}
+	if strings.Contains(reqOwner, "|") {
+		for _, part := range strings.Split(reqOwner, "|") {
+			if part != "" && acctOwner == part {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// pick 在 healthy 候选集中按三因子权重加权随机选出账号，并记录 lastUsed（防并发撞号）。
+// 候选集是 top5 近似：先按三因子权重（weightOf）降序取前 5（credits 只是权重的一个因子，
+// 闲置补偿与成功率同样决定谁进短名单），再在 top5 内做防撞号过滤。
+// 并发防雪崩：跳过 lastUsed 距今 < minPickGap 的账号（除非 top5 全部刚被用过，
+// 此时退回最近最少使用 LRU 账号），迫使高并发请求发散，而不是全部撞同一高分账号。
+// minPickGap=0（测试用）时过滤恒通过，退化为纯加权随机。
+// reqModel 非空时把健康口径换成 healthyForModel（6004 模型豁免生效；PickExcluding 传 ""）。
+// realm 非空时候选过滤叠加 Realm()==realm 谓词（分池选号域；PickExcluding 传 ""）。
 // owner 非空时候选过滤限定 ownerMatch(e.a.Owner, owner)。
 // 注意：模型豁免只进 normal 选号（候选 healthy 判定）；全冷却兜底不参与模型豁免——
 // 兜底本来就是在"无任何 direct 可用"时的降级，切模型可用性已在 normal 阶段体现。
@@ -57,12 +87,16 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 	}
 	realmOK := func(e *entry) bool { return realm == "" || e.a.Realm() == realm }
 	ownerOK := func(e *entry) bool {
-		if owner == "" || owner == "admin" {
+		if owner == "" || owner == "admin" || owner == "u_admin" {
 			return true // 管理员或未限定 owner 可用全部账号（包含公共账号与所有用户账号）
 		}
-		// 普通用户：严格只能使用绑定在自己名下的账号（owner == 用户标识）或明确标记为 public 的共享公共账号；
-		// 严禁路由到 admin 或 owner 为空的未指定账号
-		return e.a.OwnerValue() == owner || e.a.OwnerValue() == "public"
+		acctOwner := e.a.OwnerValue()
+		// 公共账号（标记为 public 的公共池账号）对普通用户开放调度
+		if acctOwner == "public" {
+			return true
+		}
+		// 私有账号：仅属于当前用户
+		return IsOwnerMatch(acctOwner, owner)
 	}
 	healthyOf := func(e *entry) bool { return realmOK(e) && ownerOK(e) && e.healthy(now) }
 	if reqModel != "" {
@@ -256,9 +290,9 @@ func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, re
 		if realm != "" && e.a.Realm() != realm {
 			continue // 域过滤：池内跨 realm 的冷却账号不参与本 realm 兜底
 		}
-		if owner != "" && owner != "admin" {
-			// 普通用户兜底同样严格隔离：只能使用自己名下账号或明确标记为 public 的公共账号
-			if e.a.OwnerValue() != owner && e.a.OwnerValue() != "public" {
+		if owner != "" && owner != "admin" && owner != "u_admin" {
+			// 普通用户兜底隔离：使用自己名下账号或公共/未指定账号
+			if !IsOwnerMatch(e.a.OwnerValue(), owner) {
 				continue
 			}
 		}

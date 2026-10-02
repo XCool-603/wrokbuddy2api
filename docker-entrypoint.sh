@@ -1,18 +1,14 @@
 #!/bin/sh
 set -e
 
+# 设置宽松 umask，保证容器内创建的文件与宿主机双向读写无障碍
+umask 000
+
 # 确保挂载的数据卷目录存在
 mkdir -p /app/auths /app/data
 
-# 修复宿主机挂载卷权限（自动解决跨宿主机与容器 UID 导致的无权读写问题）
-chmod 777 /app/auths /app/data 2>/dev/null || true
-chmod 666 /app/auths/* 2>/dev/null || true
-chmod 666 /app/data/* 2>/dev/null || true
+# 递归放行挂载卷权限（自动解决宿主机挂载卷导致的读写被拒）
+chmod -R 777 /app/auths /app/data 2>/dev/null || true
 
-# 若容器以 root 启动，将目录属主移交给 app(10001)，并通过 su-exec 降权运行主程序
-if [ "$(id -u)" = "0" ]; then
-    chown -R app:app /app/auths /app/data 2>/dev/null || true
-    exec su-exec app /app/wb2api "$@"
-else
-    exec /app/wb2api "$@"
-fi
+# 直接运行主程序（容器内以 root 权限执行，彻底消除 UID 10001 跨卷挂载 Permission Denied）
+exec /app/wb2api "$@"

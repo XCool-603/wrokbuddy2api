@@ -119,7 +119,10 @@ func (m *Manager) SetAllowRegister(allow bool) error {
 	m.mu.Lock()
 	m.allowRegister = allow
 	m.mu.Unlock()
-	return m.save()
+	if err := m.save(); err != nil {
+		log.Printf("WARN: [usermgr] 开放注册配置已在内存中生效，但落盘异常: %v", err)
+	}
+	return nil
 }
 
 // Authenticate 用户登录验证，成功返回 User 副本。
@@ -311,7 +314,10 @@ func (m *Manager) ChangePassword(username, oldPassword, newPassword string, bypa
 	u.Salt = salt
 	u.PasswordHash = hashPassword(newPassword, salt)
 
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		log.Printf("WARN: [usermgr] 用户 %s 密码修改已在内存中生效，但落盘异常: %v", username, err)
+	}
+	return nil
 }
 
 // ToggleUserDisabled 启用/禁用用户（管理员操作）。
@@ -328,7 +334,10 @@ func (m *Manager) ToggleUserDisabled(username string, disabled bool) error {
 	}
 
 	u.Disabled = disabled
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		log.Printf("WARN: [usermgr] 用户 %s 启用/禁用状态已在内存中生效，但落盘异常: %v", username, err)
+	}
+	return nil
 }
 
 // SetUserRole 修改用户角色（管理员操作）。
@@ -349,7 +358,10 @@ func (m *Manager) SetUserRole(username, role string) error {
 	}
 
 	u.Role = role
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		log.Printf("WARN: [usermgr] 用户 %s 角色修改已在内存中生效，但落盘异常: %v", username, err)
+	}
+	return nil
 }
 
 // DeleteUser 删除用户（管理员操作）。
@@ -369,7 +381,10 @@ func (m *Manager) DeleteUser(username string) error {
 	delete(m.users, username)
 	delete(m.byAPIKey, u.APIKey)
 
-	return m.saveLocked()
+	if err := m.saveLocked(); err != nil {
+		log.Printf("WARN: [usermgr] 用户 %s 已在内存中删除，但落盘异常: %v", username, err)
+	}
+	return nil
 }
 
 // ListUsers 列出所有用户（管理员操作）。
@@ -451,11 +466,12 @@ func (m *Manager) saveLocked() error {
 	_ = os.Chmod(dir, 0777)
 
 	tmpFile := m.filePath + ".tmp"
-	if err := os.WriteFile(tmpFile, raw, 0644); err != nil {
+	if err := os.WriteFile(tmpFile, raw, 0666); err != nil {
 		// 如果写 tmp 失败（例如跨文件系统或临时受限），回退直接写入目标文件
-		if writeErr := os.WriteFile(m.filePath, raw, 0644); writeErr != nil {
+		if writeErr := os.WriteFile(m.filePath, raw, 0666); writeErr != nil {
 			return fmt.Errorf("write %s failed: %w (fallback direct write: %v)", tmpFile, err, writeErr)
 		}
+		_ = os.Chmod(m.filePath, 0666)
 		return nil
 	}
 	defer func() { _ = os.Remove(tmpFile) }()
@@ -463,11 +479,12 @@ func (m *Manager) saveLocked() error {
 		_ = os.Remove(m.filePath)
 		if err2 := os.Rename(tmpFile, m.filePath); err2 != nil {
 			// 在 Docker 挂载卷或 Windows 上 rename 可能受限，回退为直接写入目标文件
-			if writeErr := os.WriteFile(m.filePath, raw, 0644); writeErr != nil {
+			if writeErr := os.WriteFile(m.filePath, raw, 0666); writeErr != nil {
 				return fmt.Errorf("rename failed (%v) and fallback direct write failed: %w", err, writeErr)
 			}
 		}
 	}
+	_ = os.Chmod(m.filePath, 0666)
 	return nil
 }
 

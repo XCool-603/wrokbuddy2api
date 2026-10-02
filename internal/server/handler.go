@@ -671,7 +671,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	reqOwner := ""
 	if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
 		if u.Role != usermgr.RoleAdmin {
-			reqOwner = u.ID // 普通用户仅路由自己的私有账号或系统公共账号
+			// 普通用户：带上 ID 和 Username 组合键，兼容凭证以 ID 或 Username 绑定的私有账号
+			reqOwner = u.ID + "|" + u.Username
 		}
 	}
 
@@ -817,9 +818,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			if acct == nil || (realm != "" && acct.Realm() != realm) {
 				// 粘性号在当前模型不可用（冷却/占满/该模型被 6004 限额）或 realm 不符 → 解绑。
 				unbindSticky()
-			} else if reqOwner != "" && reqOwner != "admin" {
-				// 普通用户隔离校验：若粘性号不属于该普通用户且非 public，解绑并重新轮换
-				if acct.OwnerValue() != reqOwner && acct.OwnerValue() != "public" {
+			} else if reqOwner != "" && reqOwner != "admin" && reqOwner != "u_admin" {
+				// 普通用户隔离校验：若粘性号不属于该普通用户且非公共号，解绑并重新轮换
+				if !pool.IsOwnerMatch(acct.OwnerValue(), reqOwner) {
 					unbindSticky()
 					acct = nil
 				}

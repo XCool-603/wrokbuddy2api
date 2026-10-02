@@ -1,6 +1,6 @@
 services:
   wb2api:
-    image: ghcr.io/xcool-603/wrokbuddy2api:latest
+    image: workbuddy2api:latest
     build: .
     container_name: workbuddy2api
     restart: unless-stopped

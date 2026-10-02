@@ -792,6 +792,9 @@ func LoadDir(dir string) ([]*Auth, error) {
 			log.Printf("WARN: uid %s duplicated across %s and %s — 后者覆盖（不同 realm 同名 UID？）",
 				logfmt.Label(a.UID, a.Nickname), prev, f)
 		}
+		if a.Owner == "" {
+			a.Owner = "public"
+		}
 		seenUID[a.UID] = f
 		if a.RealmStored() == "" {
 			if changed, r := a.BackfillRealm(); changed {

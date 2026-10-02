@@ -54,7 +54,7 @@ func (p *Pool) DiagnosticsForModelRealmAndOwner(reqModel, realm, owner string, t
 		}
 
 		// 用户隔离
-		ownerOK := (owner == "" || owner == "admin" || e.a.OwnerValue() == owner || e.a.OwnerValue() == "public")
+		ownerOK := (owner == "" || owner == "admin" || owner == "u_admin" || IsOwnerMatch(e.a.OwnerValue(), owner))
 		if ownerOK {
 			d.OwnerMatched++
 		} else {
