@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/upstream"
@@ -189,5 +190,55 @@ func TestChatRealmGlobalDisabledEscapeHatch(t *testing.T) {
 	cf.mu.Unlock()
 	if gotPath != "/v2/chat/completions" {
 		t.Errorf("global disabled escape hatch: path=%q want CN /v2/chat/completions", gotPath)
+	}
+}
+
+// TestChatDualRealmFailoverGlobalToCN 验证：当 global 账号对某模型处于限流冷却时，
+// 请求 global:deepseek-v4.1-flash 自动故障转移到可用的 CN 账号成功响应。
+func TestChatDualRealmFailoverGlobalToCN(t *testing.T) {
+	cf := newRealmFake(t)
+	p := testPoolWith(
+		&auth.Auth{UID: "cn1", AccessToken: "at_cn", Domain: "www.codebuddy.cn", ExpiresAt: 9999999999},
+		&auth.Auth{UID: "gl1", AccessToken: "at_gl", Domain: "www.workbuddy.ai", ExpiresAt: 9999999999},
+	)
+	p.CooldownSoftForModel("gl1", time.Minute, time.Now().Add(10*time.Minute), "deepseek-v4.1-flash", "6004")
+	h := NewHandler(Config{Pool: p, Upstream: cf.up, GlobalEnabled: true})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"global:deepseek-v4.1-flash","messages":[{"role":"user","content":"hi"}]}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("failover should succeed: code=%d", rec.Code)
+	}
+	cf.mu.Lock()
+	gotAuthz := cf.authz
+	cf.mu.Unlock()
+	if gotAuthz != "Bearer at_cn" {
+		t.Errorf("failover should route to cn account at_cn, got %s", gotAuthz)
+	}
+}
+
+// TestChatDualRealmFailoverCNToGlobal 验证：当 CN 账号对某模型处于限流冷却时，
+// 请求 cn:deepseek-v4.1-flash 自动故障转移到可用的 Global 账号成功响应。
+func TestChatDualRealmFailoverCNToGlobal(t *testing.T) {
+	cf := newRealmFake(t)
+	p := testPoolWith(
+		&auth.Auth{UID: "cn1", AccessToken: "at_cn", Domain: "www.codebuddy.cn", ExpiresAt: 9999999999},
+		&auth.Auth{UID: "gl1", AccessToken: "at_gl", Domain: "www.workbuddy.ai", ExpiresAt: 9999999999},
+	)
+	p.CooldownSoftForModel("cn1", time.Minute, time.Now().Add(10*time.Minute), "deepseek-v4.1-flash", "6004")
+	h := NewHandler(Config{Pool: p, Upstream: cf.up, GlobalEnabled: true})
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"cn:deepseek-v4.1-flash","messages":[{"role":"user","content":"hi"}]}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("failover should succeed: code=%d", rec.Code)
+	}
+	cf.mu.Lock()
+	gotAuthz := cf.authz
+	cf.mu.Unlock()
+	if gotAuthz != "Bearer at_gl" {
+		t.Errorf("failover should route to global account at_gl, got %s", gotAuthz)
 	}
 }
