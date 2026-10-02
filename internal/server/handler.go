@@ -893,6 +893,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			continue // 最后一个名额被并发抢走 → 换号
 		}
 		heldUID = acct.UID
+		log.Printf("INFO: [server] chat dispatch (turn=%d/%d): acct=%s realm=%s model=%s owner=%q",
+			i+1, h.cfg.MaxRotate, logfmt.Label(acct.UID, acct.Nickname), acct.Realm(), bareModel, reqOwner)
 
 		// token 临近过期 → 先 refresh（失败冷却换号）
 		if acct.NeedsRefresh(h.cfg.RefreshSkew) {

@@ -56,6 +56,7 @@ func TestCostExploreSpreadsTrafficAcrossFreeAccounts(t *testing.T) {
 		// 每次成功都写观测（credit=0 免费）：探索→NoteModelCost(0)→毕业自然发生。
 		p.NoteModelCost(a.UID, "m", 0, 1000)
 		counts[a.UID]++
+		time.Sleep(50 * time.Microsecond)
 	}
 	for _, uid := range []string{"free1", "n1", "n2"} {
 		if counts[uid] == 0 {

@@ -63,7 +63,6 @@ func (p *Pool) DiagnosticsForModelRealmAndOwner(reqModel, realm, owner string, t
 
 		if tried != nil && tried[uid] {
 			d.TriedCount++
-			continue
 		}
 
 		if e.disabled || e.manualDisabled {
@@ -117,20 +116,46 @@ func (p *Pool) DiagnosticsForModelRealmAndOwner(reqModel, realm, owner string, t
 		return d
 	}
 
-	coolingTotal := d.SoftCoolingAccount + d.SoftCoolingModel + d.BreakerCooling + d.DegradeCooling + d.HardCoolingCount
-	if coolingTotal >= (d.OwnerMatched - d.DisabledCount) && coolingTotal > 0 {
+	availCount := d.OwnerMatched - d.DisabledCount
+	softCooling := d.SoftCoolingAccount + d.SoftCoolingModel
+	resetStr := "未知"
+	if !earliestReset.IsZero() {
+		resetStr = earliestReset.Format("15:04:05")
+	}
+
+	// 1. 软限流（账号级 429 或模型级 6004）：全部可用账号均处于软限流冷却中，向上层返回 429
+	if softCooling >= availCount && softCooling > 0 {
 		d.IsRateLimited = true
-		resetStr := "未知"
-		if !earliestReset.IsZero() {
-			resetStr = earliestReset.Format("15:04:05")
-		}
-		if d.SoftCoolingModel > 0 && d.SoftCoolingModel >= (d.OwnerMatched-d.DisabledCount) {
+		if d.SoftCoolingModel > 0 && d.SoftCoolingModel >= availCount {
 			d.Summary = fmt.Sprintf("realm=%q 下可用账号(%d个)均处于模型 %q 限流冷却中 (最早恢复: %s)", realm, d.SoftCoolingModel, reqModel, resetStr)
-		} else if d.HardCoolingCount >= (d.OwnerMatched - d.DisabledCount) {
-			d.Summary = fmt.Sprintf("realm=%q 下可用账号(%d个)余额耗尽/硬冷却中 (最早恢复: %s)", realm, d.HardCoolingCount, resetStr)
 		} else {
-			d.Summary = fmt.Sprintf("realm=%q 下全部可用账号(%d个)均处于限流冷却中 (最早恢复: %s)", realm, coolingTotal, resetStr)
+			d.Summary = fmt.Sprintf("realm=%q 下全部可用账号(%d个)均处于限流冷却中 (最早恢复: %s)", realm, softCooling, resetStr)
 		}
+		return d
+	}
+
+	// 2. 余额耗尽（402 HardCooling）：全部可用账号余额耗尽，返回 503（非 429）
+	if d.HardCoolingCount >= availCount && d.HardCoolingCount > 0 {
+		d.Summary = fmt.Sprintf("realm=%q 下可用账号(%d个)余额耗尽/硬冷却中 (最早恢复: %s)", realm, d.HardCoolingCount, resetStr)
+		return d
+	}
+
+	// 3. 熔断冷却（500 熔断）：返回 503
+	if d.BreakerCooling >= availCount && d.BreakerCooling > 0 {
+		d.Summary = fmt.Sprintf("realm=%q 下可用账号(%d个)触发熔断冷却 (最早恢复: %s)", realm, d.BreakerCooling, resetStr)
+		return d
+	}
+
+	// 4. 连续失败降权（网络/传输层连续失败避让）：返回 503
+	if d.DegradeCooling >= availCount && d.DegradeCooling > 0 {
+		d.Summary = fmt.Sprintf("realm=%q 下可用账号(%d个)连续失败降权避让中 (最早恢复: %s)", realm, d.DegradeCooling, resetStr)
+		return d
+	}
+
+	// 5. 混合冷却（部分软限流、部分熔断/降权/余额耗尽）：全部可用账号均处于各类冷却中，返回 503
+	coolingTotal := softCooling + d.BreakerCooling + d.DegradeCooling + d.HardCoolingCount
+	if coolingTotal >= availCount && coolingTotal > 0 {
+		d.Summary = fmt.Sprintf("realm=%q 下全部可用账号(%d个)均处于各类异常冷却中 (最早恢复: %s)", realm, coolingTotal, resetStr)
 		return d
 	}
 

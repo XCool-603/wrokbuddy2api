@@ -20,6 +20,7 @@ import (
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/dshmgr"
+	"workbuddy2api/internal/logfmt"
 	"workbuddy2api/internal/pool"
 	"workbuddy2api/internal/redisstore"
 	"workbuddy2api/internal/scheduler"
@@ -150,6 +151,20 @@ func main() {
 	p.SetStore(store)
 	p.RestoreFromSnapshot() // 择新恢复：Redis 快照比本地新才采用，否则本地优先
 	p.SyncToDir(auths)      // 与 auths 目录对齐：新账号加入、已删除文件账号剔除（状态保留）
+
+	// 打印账号池启动明细与域/归属分布（提升 Docker 环境下排障可观测性）
+	cnCount := 0
+	globalCount := 0
+	for _, a := range auths {
+		if a.Realm() == "global" {
+			globalCount++
+		} else {
+			cnCount++
+		}
+		log.Printf("INFO: [startup] account: uid=%s nick=%s realm=%s owner=%s domain=%s",
+			logfmt.Label(a.UID, a.Nickname), a.Nickname, a.Realm(), a.OwnerValue(), a.Domain)
+	}
+	log.Printf("INFO: [startup] account pool summary: total=%d (cn=%d, global=%d)", len(auths), cnCount, globalCount)
 
 	// auths 目录热加载：新增凭证文件自动进池，免去「加完账号手动重启网关」。
 	// 启动时的 SyncToDir 已建立基线，监听只在后续目录内容变化时触发（见 pool/watch.go）。
