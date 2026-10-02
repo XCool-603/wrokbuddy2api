@@ -857,9 +857,21 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if acct == nil {
-			diag := h.cfg.Pool.DiagnosticsForModelRealmAndOwner(bareModel, realm, reqOwner, tried)
-			log.Printf("WARN: [server] chat pick failed (turn=%d/%d): model=%s (realm=%s bare=%s) owner=%q -> %s",
-				i+1, h.cfg.MaxRotate, peek.Model, realm, bareModel, reqOwner, diag.Summary)
+			diagRealm := realm
+			totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+			if totalInRealm == 0 {
+				otherRealm := "global"
+				if realm == "global" {
+					otherRealm = "cn"
+				}
+				totalOther, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(otherRealm)
+				if totalOther > 0 {
+					diagRealm = otherRealm
+				}
+			}
+			diag := h.cfg.Pool.DiagnosticsForModelRealmAndOwner(bareModel, diagRealm, reqOwner, tried)
+			log.Printf("WARN: [server] chat pick failed (turn=%d/%d): model=%s (realm=%s bare=%s diagRealm=%s) owner=%q -> %s",
+				i+1, h.cfg.MaxRotate, peek.Model, realm, bareModel, diagRealm, reqOwner, diag.Summary)
 			st.errDetail = diag.Summary
 			if diag.IsRateLimited {
 				st.status = http.StatusTooManyRequests

@@ -148,6 +148,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		CoolRemaining     int64                   `json:"cool_remaining_sec,omitempty"`
 		Reason            string                  `json:"reason,omitempty"`
 		RateLimitedModels []pool.RateLimitedModel `json:"rate_limited_models,omitempty"`
+		ModelCosts        []pool.ModelCostStatus  `json:"model_costs,omitempty"`
 		Owner             string                  `json:"owner"`
 		IsMyAccount       bool                    `json:"is_my_account"`
 	}
@@ -195,6 +196,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			item.CoolRemaining = p.CoolRemaining
 			item.Reason = p.Reason
 			item.RateLimitedModels = p.RateLimitedModels
+			item.ModelCosts = p.ModelCosts
 		}
 		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
 		if item.Credits == 0 && a.AccessTokenValue() != "" {
@@ -252,6 +254,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			CoolRemaining:     p.CoolRemaining,
 			Reason:            p.Reason,
 			RateLimitedModels: p.RateLimitedModels,
+			ModelCosts:        p.ModelCosts,
 			Owner:             owner,
 			IsMyAccount:       isMine,
 		}

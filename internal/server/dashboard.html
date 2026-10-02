@@ -1476,8 +1476,10 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           }
         }
 
+        window.cachedAccounts = data.accounts || [];
+        window.cachedModels = data.models || [];
         renderAccounts(data.accounts || []);
-        renderModels(data.models || []);
+        renderModels(data.models || [], data.accounts || []);
         renderRequestLogs(data.recentLogs || []);
         if (data.stats) {
           renderTokenAnalytics(data.stats);
@@ -1799,6 +1801,39 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             ownerTag = '<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-400 font-sans border border-slate-700">公共账号</span>';
           }
 
+          let modelBadges = '';
+          if (a.rate_limited_models && a.rate_limited_models.length > 0) {
+            modelBadges = '<div class="mt-1.5 flex flex-wrap gap-1 max-w-[340px]">';
+            for (const lm of a.rate_limited_models) {
+              const isBlocked = lm.reason && (lm.reason.indexOf('11102') !== -1 || lm.reason.indexOf('not available') !== -1);
+              const untilDate = lm.reset_at ? new Date(lm.reset_at) : (lm.until ? new Date(lm.until) : null);
+              let timeStr = '';
+              if (untilDate) {
+                const diffSec = Math.max(0, Math.floor((untilDate.getTime() - Date.now()) / 1000));
+                if (diffSec > 0) {
+                  const mins = Math.ceil(diffSec / 60);
+                  timeStr = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60}m` : `${mins}m`;
+                }
+              }
+              if (isBlocked) {
+                modelBadges += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono" title="${escapeHtml(lm.reason || '上游该后端无此模型')}">
+                  <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
+                  🚫 ${escapeHtml(lm.model)} (上游不支持 11102)
+                </span>`;
+              } else {
+                const tip = `上游限流冷却中 (预计: ${untilDate ? untilDate.toLocaleTimeString() : '自动'}) [原因: ${lm.reason || '6004'}]`;
+                const suffix = timeStr ? ` (${timeStr}恢复)` : '';
+                modelBadges += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono" title="${escapeHtml(tip)}">
+                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
+                  ⚠️ ${escapeHtml(lm.model)}${suffix}
+                </span>`;
+              }
+            }
+            modelBadges += '</div>';
+          } else if (!a.disabled && !a.manual_disabled) {
+            modelBadges = '<div class="mt-1 flex items-center gap-1 text-[10px] text-emerald-400/70 font-mono"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>全模型正常</div>';
+          }
+
           html += `
             <tr class="hover:bg-slate-800/40 transition">
               <td class="px-6 py-4">${realmBadge}</td>
@@ -1808,6 +1843,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
                   ${ownerTag}
                 </div>
                 <div class="text-[11px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
+                ${modelBadges}
               </td>
               <td class="px-6 py-4">${statusBadge}</td>
               <td class="px-6 py-4 font-mono font-medium text-slate-200">
@@ -1829,7 +1865,8 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       tbody.innerHTML = html;
     }
 
-    function renderModels(models) {
+    function renderModels(models, accounts) {
+      const accountsList = accounts || window.cachedAccounts || [];
       const list = document.getElementById('modelsList');
       const select = document.getElementById('chatModel');
       const previouslySelected = select.value;
@@ -1843,6 +1880,8 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       let hasPrevious = false;
       for (const m of models) {
         const isGlobal = m.id.startsWith('global:');
+        const bareModel = m.id.replace(/^(cn|global):/, '');
+        const targetRealm = isGlobal ? 'global' : 'cn';
         const badge = isGlobal
           ? '<span class="text-[10px] font-mono bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded">Global</span>'
           : '<span class="text-[10px] font-mono bg-blue-500/20 text-blue-400 border border-blue-500/30 px-1.5 py-0.2 rounded">CN</span>';
@@ -1857,12 +1896,57 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           visionBadge = `<span class="text-[10px] font-mono bg-sky-500/20 text-sky-300 border border-sky-500/30 px-1.5 py-0.2 rounded flex items-center gap-0.5" title="支持多模态 / 图片视觉 / 文档推理">✨ 多模态</span>`;
         }
 
+        // 计算该模型在账号池中的实时可用性
+        const activeRealmAccounts = accountsList.filter(a => a.realm === targetRealm && !a.disabled && !a.manual_disabled);
+        const totalRealmCount = activeRealmAccounts.length;
+
+        let coolingCount = 0;
+        let blockedCount = 0;
+        let earliestReset = null;
+
+        for (const ac of activeRealmAccounts) {
+          if (ac.rate_limited_models && ac.rate_limited_models.length > 0) {
+            const hit = ac.rate_limited_models.find(rm => rm.model === bareModel);
+            if (hit) {
+              if (hit.reason && (hit.reason.indexOf('11102') !== -1 || hit.reason.indexOf('not available') !== -1)) {
+                blockedCount++;
+              } else {
+                coolingCount++;
+              }
+              const rTime = hit.reset_at ? new Date(hit.reset_at) : (hit.until ? new Date(hit.until) : null);
+              if (rTime && (!earliestReset || rTime < earliestReset)) {
+                earliestReset = rTime;
+              }
+            }
+          }
+        }
+
+        const unavailableCount = coolingCount + blockedCount;
+        const readyCount = Math.max(0, totalRealmCount - unavailableCount);
+
+        let availabilityBadge = '';
+        if (totalRealmCount === 0) {
+          availabilityBadge = `<span class="text-[10px] font-mono bg-slate-800 text-slate-400 border border-slate-700/80 px-1.5 py-0.2 rounded" title="当前池内无 ${targetRealm.toUpperCase()} 账号">○ 无${targetRealm.toUpperCase()}号</span>`;
+        } else if (readyCount === 0) {
+          if (blockedCount === totalRealmCount) {
+            availabilityBadge = `<span class="text-[10px] font-mono bg-rose-500/15 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-semibold" title="上游所有账号均返回 11102 不支持此模型">✕ 不支持 11102</span>`;
+          } else {
+            let resetHint = earliestReset ? ` (${earliestReset.toLocaleTimeString()}恢复)` : '';
+            availabilityBadge = `<span class="text-[10px] font-mono bg-rose-500/15 text-rose-300 border border-rose-500/30 px-1.5 py-0.2 rounded font-semibold" title="全池账号均处于限流冷却中${resetHint}">✕ 全池限流${resetHint}</span>`;
+          }
+        } else if (unavailableCount > 0) {
+          availabilityBadge = `<span class="text-[10px] font-mono bg-amber-500/15 text-amber-300 border border-amber-500/30 px-1.5 py-0.2 rounded font-semibold" title="${unavailableCount}个账号限流/受限，${readyCount}个账号健康可用">▲ ${readyCount}/${totalRealmCount} 可用</span>`;
+        } else {
+          availabilityBadge = `<span class="text-[10px] font-mono bg-emerald-500/15 text-emerald-400 border border-emerald-500/30 px-1.5 py-0.2 rounded font-semibold" title="全部 ${totalRealmCount} 个账号健康就绪">● ${readyCount}/${totalRealmCount} 就绪</span>`;
+        }
+
         listHtml += `
           <div class="p-3 bg-slate-900/60 rounded-xl border border-slate-800/80 hover:border-slate-700 transition flex items-center justify-between group">
-            <div class="space-y-0.5 max-w-[210px]">
+            <div class="space-y-1 max-w-[210px]">
               <div class="font-mono font-medium text-slate-200 flex items-center gap-1.5 flex-wrap">
-                <span class="truncate max-w-[130px]">${m.id}</span>
+                <span class="truncate max-w-[130px] font-semibold">${m.id}</span>
                 ${badge}
+                ${availabilityBadge}
                 ${visionBadge}
                 ${creditsBadge}
               </div>
@@ -1872,7 +1956,10 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               <span class="text-[11px] font-mono text-slate-400 bg-slate-800/80 px-2 py-0.5 rounded-lg border border-slate-700/50">
                 ${m.context_length ? (m.context_length / 1024) + 'k' : 'auto'}
               </span>
-              <button onclick="copyModelId('${m.id}')" class="text-[11px] text-slate-400 hover:text-indigo-300 p-1 rounded hover:bg-slate-800/80 transition" title="复制模型ID">
+              <button onclick="testModelQuick('${m.id}')" class="text-[11px] text-slate-400 hover:text-emerald-400 p-1 rounded hover:bg-slate-800/80 transition" title="测试该模型连通性 (发送 1-token 探针)">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+              </button>
+              <button onclick="copyModelId('${m.id}')" class="text-[11px] text-slate-400 hover:text-indigo-300 p-1 rounded hover:bg-slate-800/80 transition" title="复制模型ID并填入左侧测试框">
                 <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
               </button>
             </div>
@@ -1881,6 +1968,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         let optionSuffix = '';
         if (m.supports_images) optionSuffix += ' [✨多模态]';
         if (m.credits) optionSuffix += ` (${m.credits})`;
+        if (readyCount === 0 && totalRealmCount > 0) optionSuffix += ' (✕不可用)';
         const optionLabel = `${m.id}${optionSuffix}`;
         if (m.id === previouslySelected) {
           hasPrevious = true;
@@ -2346,6 +2434,51 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       const sel = document.getElementById('chatModel');
       if (sel) sel.value = modelId;
       alert('已复制模型 ID: ' + modelId + '\n已自动填入左侧测试选择框！');
+    }
+
+    async function testModelQuick(modelId) {
+      const sel = document.getElementById('chatModel');
+      if (sel) sel.value = modelId;
+      const btn = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+      let origHtml = '';
+      if (btn) {
+        origHtml = btn.innerHTML;
+        btn.innerHTML = `<svg class="w-3.5 h-3.5 animate-spin text-emerald-400" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8H4z"></path></svg>`;
+        btn.disabled = true;
+      }
+      try {
+        const start = Date.now();
+        const apiKey = document.getElementById('chatApiKey') ? document.getElementById('chatApiKey').value : '';
+        const headers = { 'Content-Type': 'application/json' };
+        if (apiKey) headers['Authorization'] = 'Bearer ' + apiKey;
+        const res = await fetch('/v1/chat/completions', {
+          method: 'POST',
+          headers: headers,
+          body: JSON.stringify({
+            model: modelId,
+            messages: [{ role: 'user', content: 'hi' }],
+            max_tokens: 5,
+            stream: false
+          })
+        });
+        const latency = ((Date.now() - start) / 1000).toFixed(2);
+        const data = await res.json().catch(() => ({}));
+        if (res.ok) {
+          alert(`✅ 模型 [${modelId}] 测试成功！\n耗时: ${latency}s\nHTTP 状态: 200 OK\n响应正常连通！`);
+        } else {
+          const errCode = (data.error && data.error.code) || res.status;
+          const errMsg = (data.error && data.error.message) || res.statusText || '未知错误';
+          alert(`❌ 模型 [${modelId}] 测试未通过！\nHTTP 状态: ${res.status}\n错误代码: ${errCode}\n耗时: ${latency}s\n详细原因:\n${errMsg}`);
+        }
+      } catch (err) {
+        alert(`❌ 网络请求异常: ${err.message}`);
+      } finally {
+        if (btn) {
+          btn.innerHTML = origHtml;
+          btn.disabled = false;
+        }
+        fetchData();
+      }
     }
 
     let currentChatFile = null; // { type: 'image'|'doc', name: '', data: '', text: '' }
