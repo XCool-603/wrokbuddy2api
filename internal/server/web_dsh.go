@@ -173,6 +173,6 @@ func (h *Handler) handleDshExport(w http.ResponseWriter, r *http.Request) {
 		"api_key":     apiKey,
 		"port":        3080,
 		"env_content": fmt.Sprintf("OPENAI_BASE_URL=%s\nOPENAI_API_KEY=%s\nPORT=3080\n", gatewayURL, apiKey),
-		"launch_cmd":  "npx @deepseek-ai/dsh web --port 3080",
+		"launch_cmd":  "node scripts/dsh-bridge.js & npx @deepseek-ai/dsh web --port 3081",
 	})
 }

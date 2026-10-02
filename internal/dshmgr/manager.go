@@ -9,6 +9,8 @@ import (
 	"io"
 	"net"
 	"net/http"
+	"net/http/httputil"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -26,6 +28,7 @@ type Manager struct {
 	running      bool
 	startedAt    time.Time
 	port         int
+	bridgeSrv    *http.Server
 	recentLogs   []string
 	logLimit     int
 	workDir      string
@@ -374,6 +377,14 @@ func (m *Manager) GetStatus() Status {
 		portReachable = true
 	}
 
+	// 若 3080 未通，且内部进程跑在 3081，同样判定连通
+	if !portReachable {
+		if c1, err1 := net.DialTimeout("tcp", fmt.Sprintf("127.0.0.1:%d", m.port+1), 300*time.Millisecond); err1 == nil {
+			_ = c1.Close()
+			portReachable = true
+		}
+	}
+
 	// 尝试探测是否为容器内通过 Docker 网络互通的 dsh 服务（dsh:3080）
 	if !portReachable {
 		if dshConn, dshErr := net.DialTimeout("tcp", fmt.Sprintf("dsh:%d", m.port), 300*time.Millisecond); dshErr == nil {
@@ -444,17 +455,41 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 			break
 		}
 	}
+
+	targetPort := m.port + 1
 	env = append(env,
 		fmt.Sprintf("%s=%s%c%s", pathKey, localBin, os.PathListSeparator, os.Getenv(pathKey)),
 		fmt.Sprintf("OPENAI_BASE_URL=%s", gatewayURL),
 		fmt.Sprintf("OPENAI_API_BASE=%s", gatewayURL),
 		fmt.Sprintf("DEEPSEEK_BASE_URL=%s", gatewayURL),
 		fmt.Sprintf("OPENAI_API_KEY=%s", apiKey),
-		fmt.Sprintf("PORT=%d", m.port),
+		fmt.Sprintf("PORT=%d", targetPort),
 	)
 
+	// DeepSeek Harness 官方出于安全限制强制仅监听 127.0.0.1 并拒绝 --host 0.0.0.0。
+	// 为实现 0.0.0.0 全网卡访问，让 dsh 进程在 127.0.0.1:3081 运行，并在 0.0.0.0:3080 建立反向代理桥接。
+	targetURL, _ := url.Parse(fmt.Sprintf("http://127.0.0.1:%d", targetPort))
+	proxy := httputil.NewSingleHostReverseProxy(targetURL)
+	origDirector := proxy.Director
+	proxy.Director = func(req *http.Request) {
+		origDirector(req)
+		req.Host = fmt.Sprintf("127.0.0.1:%d", targetPort)
+	}
+
+	bridgeLn, err := net.Listen("tcp", fmt.Sprintf("0.0.0.0:%d", m.port))
+	if err == nil {
+		bridgeSrv := &http.Server{Handler: proxy}
+		m.bridgeSrv = bridgeSrv
+		go func() {
+			_ = bridgeSrv.Serve(bridgeLn)
+		}()
+		m.appendLog(fmt.Sprintf("已建立 0.0.0.0:%d 反向代理桥接 -> 127.0.0.1:%d (允许外部 IP/局域网访问)", m.port, targetPort))
+	} else {
+		m.appendLog(fmt.Sprintf("0.0.0.0:%d 端口监听提示: %v", m.port, err))
+	}
+
 	var cmd *exec.Cmd
-	dshArgs := []string{"-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", m.port)}
+	dshArgs := []string{"-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", targetPort)}
 	if strings.HasSuffix(strings.ToLower(npxExe), ".js") {
 		// 如果是 js 脚本入口（如 npx-cli.js），直接使用 node 二进制执行，跨平台稳定且不依赖系统 shebang / symlink
 		fullArgs := append([]string{npxExe}, dshArgs...)
@@ -468,7 +503,7 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	m.cmd = cmd
 	m.running = true
 	m.startedAt = time.Now()
-	m.appendLog(fmt.Sprintf("启动 DeepSeek Harness (端口: %d)...", m.port))
+	m.appendLog(fmt.Sprintf("启动 DeepSeek Harness (内部端口: %d, 对外暴露: %d)...", targetPort, m.port))
 
 	if err := cmd.Start(); err != nil {
 		// 若因 shebang / symlink 断裂报错 no such file or directory，尝试使用 node 寻找 npx-cli.js 保底启动
@@ -494,6 +529,10 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 						_ = fallbackCmd.Wait()
 						m.mu.Lock()
 						defer m.mu.Unlock()
+						if m.bridgeSrv != nil {
+							_ = m.bridgeSrv.Close()
+							m.bridgeSrv = nil
+						}
 						m.running = false
 						m.appendLog("DeepSeek Harness 进程已退出")
 					}()
@@ -502,6 +541,10 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 			}
 		}
 
+		if m.bridgeSrv != nil {
+			_ = m.bridgeSrv.Close()
+			m.bridgeSrv = nil
+		}
 		m.running = false
 		m.cancel = nil
 		m.cmd = nil
@@ -513,6 +556,10 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 		_ = cmd.Wait()
 		m.mu.Lock()
 		defer m.mu.Unlock()
+		if m.bridgeSrv != nil {
+			_ = m.bridgeSrv.Close()
+			m.bridgeSrv = nil
+		}
 		m.running = false
 		m.appendLog("DeepSeek Harness 进程已退出")
 	}()
@@ -526,6 +573,10 @@ func (m *Manager) Stop() error {
 	defer m.mu.Unlock()
 
 	if !m.running || m.cmd == nil {
+		if m.bridgeSrv != nil {
+			_ = m.bridgeSrv.Close()
+			m.bridgeSrv = nil
+		}
 		return nil
 	}
 
@@ -534,6 +585,10 @@ func (m *Manager) Stop() error {
 	}
 	if m.cmd.Process != nil {
 		_ = m.cmd.Process.Kill()
+	}
+	if m.bridgeSrv != nil {
+		_ = m.bridgeSrv.Close()
+		m.bridgeSrv = nil
 	}
 
 	m.running = false

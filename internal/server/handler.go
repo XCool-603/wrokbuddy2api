@@ -1513,8 +1513,20 @@ func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte
 	}
 
 	resp, err := dshProxyClient.Do(req)
+	if err != nil {
+		// 备用 1：尝试直连内部进程端口（st.Port+1，如 3081）
+		targetURLAlt := fmt.Sprintf("http://127.0.0.1:%d/v1/chat/completions", st.Port+1)
+		if reqAlt, errAlt := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURLAlt, bytes.NewReader(body)); errAlt == nil {
+			for k, vv := range r.Header {
+				for _, v := range vv {
+					reqAlt.Header.Add(k, v)
+				}
+			}
+			resp, err = dshProxyClient.Do(reqAlt)
+		}
+	}
 	if err != nil && st.ExternalRunning {
-		// 备用：Docker 网络模式尝试直连 dsh 容器
+		// 备用 2：Docker 网络模式尝试直连 dsh 容器
 		targetURLDocker := fmt.Sprintf("http://dsh:%d/v1/chat/completions", st.Port)
 		if reqDocker, errD := http.NewRequestWithContext(r.Context(), http.MethodPost, targetURLDocker, bytes.NewReader(body)); errD == nil {
 			for k, vv := range r.Header {

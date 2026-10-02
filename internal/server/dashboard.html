@@ -3569,7 +3569,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         const key = data.api_key || 'wb2a-admin-secret';
         const codeEl = document.getElementById('dshEnvCode');
         if (codeEl) {
-          codeEl.innerText = `# 快捷终端执行（跨平台单行命令）\nOPENAI_BASE_URL="${gw}" OPENAI_API_KEY="${key}" npx @deepseek-ai/dsh web --port ${data.port || 3080}`;
+          codeEl.innerText = `# 快捷终端执行（跨平台 0.0.0.0 桥接，支持局域网/公网访问）\nOPENAI_BASE_URL="${gw}" OPENAI_API_KEY="${key}" node scripts/dsh-bridge.js & npx @deepseek-ai/dsh web --port 3081`;
         }
 
         if (manual) {
