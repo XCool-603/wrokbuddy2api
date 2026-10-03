@@ -1,49 +1,63 @@
+# =============================================================================
+# Stage 1: Build stage (Go 1.23)
+# =============================================================================
 FROM golang:1.23-alpine AS build
+
 WORKDIR /src
 ENV GOPROXY=https://goproxy.cn,https://proxy.golang.org,direct
+
+# 1. 优先拷贝依赖定义文件，并利用 BuildKit 缓存挂载加速模块下载
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    go mod download
+
+# 2. 拷贝业务源代码
 COPY . .
-# 一次编译全部二进制（工具进镜像，容器内可直接跑脚本）。全部 -trimpath -s -w。
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wb2api ./cmd/server \
+
+# 3. 编译所有二进制产物（开启编译器缓存挂载，实现秒级增量重构）
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/wb2api ./cmd/server \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/signin_bin ./cmd/signin \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/login ./cmd/login \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/credit ./cmd/credit \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/trial_bin ./cmd/trial \
  && CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/activity_bin ./cmd/activity
 
+# =============================================================================
+# Stage 2: Runtime stage (Alpine 3.20)
+# =============================================================================
 FROM alpine:3.20
-# 国内加速：替换 Alpine 官方海外源为阿里云 CDN 源，彻底解决 apk 下载 nodejs/npm/python3 耗时 120s+ 及卡死超时问题
-# python3：login.sh 的 JSON 解析 / 签到 / 落盘；bash：shell 脚本体；nodejs & npm：内嵌支持 dsh Agent 运行。
+
+# 1. 参数化非 root 用户 UID 与 GID（默认 10001，便于和宿主机权限对齐）
+ARG UID=10001
+ARG GID=10001
+
+# 2. 国内源镜像加速，安装系统必要依赖并建立固定 UID/GID 的非 root 运行期用户与 HOME
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories \
  && apk add --no-cache wget ca-certificates tzdata python3 bash nodejs npm su-exec \
- && adduser -D -u 10001 app \
- && mkdir -p /app/auths /app/data /app/scripts \
- && chown -R app:app /app
+ && addgroup -g "${GID}" -S app \
+ && adduser -u "${UID}" -S -G app -h /home/app -s /sbin/nologin app \
+ && install -d -o app -g app -m 755 /app /app/auths /app/data /app/scripts /home/app
+
 WORKDIR /app
-# 脚本置入 + 去 CRLF（Windows 检出可能性）在切到 app 之前以 root 完成——
-# app 对 root 所有文件无写权限，sed -i 需要写权限。
-COPY --from=build /out/wb2api /app/wb2api
-COPY --from=build /out/signin_bin /app/signin_bin
-COPY --from=build /out/login /app/login
-COPY --from=build /out/credit /app/credit
-COPY --from=build /out/trial_bin /app/trial_bin
-COPY --from=build /out/activity_bin /app/activity_bin
-COPY login.sh signin.sh credit.sh trial.sh /app/
-# 国际版注册地区自动完善模块（login.sh global 分支 import；scripts/ 无测试/缓存）
-COPY scripts/global_region.py /app/scripts/global_region.py
-COPY scripts/task_common.py /app/scripts/task_common.py
-COPY scripts/task_runner.py /app/scripts/task_runner.py
-COPY scripts/school_open_day_2026.py /app/scripts/school_open_day_2026.py
-COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-RUN sed -i 's/\r$//' /app/*.sh && chmod 755 /app/*.sh
-RUN sed -i 's/\r$//' /app/scripts/*.py && chmod 755 /app/scripts/*.py
-RUN sed -i 's/\r$//' /app/docker-entrypoint.sh && chmod 755 /app/docker-entrypoint.sh
-# 镜像不带真实配置：落 example 作为默认（生产由挂载卷 /app/config.json 覆盖）
-COPY config.example.json /app/config.json
-RUN chown -R app:app /app
+ENV HOME=/home/app \
+    TZ=Asia/Shanghai
+
+# 3. 产物与脚本置入：统一在 COPY 时以 --chown 与 --chmod 固化属主与权限，避免生成多余的数据修改层
+COPY --from=build --chown=app:app --chmod=755 /out/ /app/
+COPY --chown=app:app --chmod=755 login.sh signin.sh credit.sh trial.sh /app/
+COPY --chown=app:app --chmod=755 scripts/global_region.py scripts/task_common.py scripts/task_runner.py scripts/school_open_day_2026.py /app/scripts/
+COPY --chown=app:app --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY --chown=app:app config.example.json /app/config.json
+
+# 4. 网络端口与健康检查（监听 7863 > 1024，天然安全兼容非 root）
 EXPOSE 7863
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s \
   CMD wget -qO- http://127.0.0.1:7863/healthz || exit 1
-ENTRYPOINT ["/app/docker-entrypoint.sh"]
+
+# 5. USER 只出现一次，且放在最后（满足 docker-skill 最小正确规范）
+USER app
+
+ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["-config", "/app/config.json"]

@@ -1,21 +1,35 @@
+# Version Control System & Metadata
+.git/
+.github/
+.gitignore
+.gitattributes
+
+# Dynamic Data and Credentials (mounted via volumes)
 auths/
 data/
+
+# Cache, Temporary, and Log Files
 *.tmp
-.git/
-.gitignore
-docs/
-scripts/__pycache__/
-# 根目录已提交/未提交的二进制产物不进构建上下文（与 .gitignore 对齐）
-/login
-/credit
+*.log
+**/__pycache__/
+*.py[cod]
+.agents/
+.dsh/
+.gemini/
+node_modules/
+
+# Local/Host compiled binaries (prevent host OS binaries polluting container context)
 /wb2api
 /signin_bin
+/login
+/credit
+/trial_bin
+/activity_bin
 /workbuddy2api
 /workbuddy2api.exe
 *.exe
-# 真实配置不进镜像（镜像默认用 config.example.json，生产以挂载卷覆盖）
+
+# Configuration & Documentation files not needed during image build
 config.json
-PLAN.md
-SPEC.md
-LOOP.md
-README.md
+docs/
+*.md

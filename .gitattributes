@@ -1,0 +1,7 @@
+# Ensure shell scripts, Python scripts, and Docker configuration files always use LF line endings
+# Prevents Windows CRLF "/bin/sh^M: bad interpreter" errors inside Linux containers
+*.sh text eol=lf
+*.py text eol=lf
+Dockerfile text eol=lf
+.dockerignore text eol=lf
+docker-compose.yml text eol=lf

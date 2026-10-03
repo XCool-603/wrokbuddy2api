@@ -4,6 +4,7 @@ services:
     build: .
     container_name: workbuddy2api
     restart: unless-stopped
+    init: true
     environment:
       - TZ=Asia/Shanghai
     ports:
@@ -21,11 +22,12 @@ services:
     image: node:22-alpine
     container_name: workbuddy2api-dsh
     restart: unless-stopped
+    init: true
     working_dir: /workspace
     # 自动以桥接模式拉起：0.0.0.0:3080 监听并自动捕获 Token，彻底解决 127.0.0.1 阻断、401 认证与 /api 403 跨域安全拦截
     command: >
       sh -c "npm config set registry https://registry.npmmirror.com &&
-      node /app/scripts/dsh-bridge.js --spawn"
+      exec node /app/scripts/dsh-bridge.js --spawn"
     environment:
       - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
       - OPENAI_BASE_URL=http://wb2api:7863/v1
