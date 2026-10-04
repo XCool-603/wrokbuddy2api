@@ -17,32 +17,25 @@ services:
       - ./config.json:/app/config.json:ro
 
   # DeepSeek Harness (dsh) AI Agent 运行环境
-  # 容器自动集成，docker compose up -d 默认一并启动
+  # 使用开箱即用的专业 DSH 容器镜像（预编译 node-pty 原生模块，集成反代桥接与前端安全补丁）；
+  # 彻底解决 Alpine 环境下因缺少构建工具导致 node-pty 崩溃及启动时 npx 耗时卡死 ECONNREFUSED 问题。
+  # （若机器无法拉取 Docker Hub，也可切为 build: { context: ., dockerfile: Dockerfile.dsh } 本地构建）
   dsh:
-    image: node:22-alpine
+    image: smanx/deepseek-harness:latest
     container_name: workbuddy2api-dsh
     restart: unless-stopped
-    init: true
-    working_dir: /workspace
-    # 自动以桥接模式拉起：0.0.0.0:3080 监听并自动捕获 Token，彻底解决 127.0.0.1 阻断、401 认证与 /api 403 跨域安全拦截
-    command: >
-      sh -c "npm config set registry https://registry.npmmirror.com &&
-      exec node /app/scripts/dsh-bridge.js --spawn"
-    environment:
-      - NPM_CONFIG_REGISTRY=https://registry.npmmirror.com
-      - OPENAI_BASE_URL=http://wb2api:7863/v1
-      - OPENAI_API_BASE=http://wb2api:7863/v1
-      - DEEPSEEK_BASE_URL=http://wb2api:7863/v1
-      - OPENAI_API_KEY=wb2a-admin-secret
-      - PORT=3080
-      - DSH_HOME=/workspace/.dsh
-      - DSH_BRIDGE_REVISION=20261003-v4
     ports:
       - "3080:3080"
+    environment:
+      - TZ=Asia/Shanghai
+      - DSH_PORT=3079
+      - PROXY_PORT=3080
+      - WORKBODDY_API_KEY=wb2a-admin-secret
+      - OPENAI_API_KEY=wb2a-admin-secret
+      - OPENAI_BASE_URL=http://wb2api:7863/v1
     volumes:
-      - ./data/dsh:/workspace
-      - ./scripts:/app/scripts:ro
-      - ./scripts/dsh-bridge.js:/workspace/dsh-bridge.js:ro
+      # 持久化会话、凭证与配置文件（已预置 workbuddy2api 转发模型补丁）
+      - ./data/dsh:/root/.dsh
     depends_on:
       - wb2api
 

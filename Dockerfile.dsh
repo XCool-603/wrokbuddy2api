@@ -1,0 +1,38 @@
+# =============================================================================
+# Stage 1: Builder (Debian glibc + Node 22 + Python3/Make/G++ 构建环境)
+# =============================================================================
+FROM node:22-bookworm-slim AS builder
+
+WORKDIR /build
+
+# 国内加速并安装编译 node-pty 原生模块所需的 C++ 构建链
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || true \
+ && apt-get update \
+ && apt-get install -y --no-install-recommends python3 make g++ ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# 全局安装 DSH（利用 npmmirror 加速，并在构建期直接编译好 node-pty 原生二进制）
+RUN npm config set registry https://registry.npmmirror.com \
+ && npm install -g --no-audit --no-fund @deepseek-ai/dsh
+
+# =============================================================================
+# Stage 2: Runtime (极简运行环境，消除构建工具冗余)
+# =============================================================================
+FROM node:22-bookworm-slim
+
+WORKDIR /workspace
+
+ENV DSH_HOME=/root/.dsh \
+    BRIDGE_PORT=3080 \
+    TARGET_PORT=3081 \
+    TZ=Asia/Shanghai
+
+# 从 builder 复制已编译好的 node 全局模块（含 dsh 及已编译的 pty.node）
+COPY --from=builder /usr/local/ /usr/local/
+
+# 拷贝局域网反向代理与鉴权自愈桥接器脚本
+COPY scripts/dsh-bridge.js /app/scripts/dsh-bridge.js
+
+EXPOSE 3080
+
+ENTRYPOINT ["node", "/app/scripts/dsh-bridge.js", "--spawn"]

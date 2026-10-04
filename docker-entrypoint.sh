@@ -13,13 +13,18 @@ if [ "$1" = "wb2api" ]; then
 fi
 
 # 确保数据卷目录存在
-mkdir -p /app/auths /app/data /app/scripts
+mkdir -p /app/auths /app/data /app/scripts /app/data/dsh/profiles/web
+
+# 若 DSH 模型配置尚未初始化，自动释放预置的 wb2api 调度补丁
+if [ ! -f /app/data/dsh/profiles/web/cordis.patch.yml ] && [ -f /app/config/dsh-cordis.patch.example.yml ]; then
+    cp /app/config/dsh-cordis.patch.example.yml /app/data/dsh/profiles/web/cordis.patch.yml
+fi
 
 # 如果容器以 root (UID 0) 身份启动（常见于 bind mount 挂载宿主机目录）：
 # 自动矫正挂载卷属主为 app:app 并放行权限，然后通过 su-exec 降权至非 root app 用户执行
 if [ "$(id -u)" = "0" ]; then
     chown -R app:app /app/auths /app/data 2>/dev/null || true
-    chmod 775 /app/auths /app/data 2>/dev/null || true
+    chmod -R 775 /app/auths /app/data 2>/dev/null || true
     exec su-exec app:app "$@"
 fi
 

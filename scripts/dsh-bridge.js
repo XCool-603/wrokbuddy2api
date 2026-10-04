@@ -120,11 +120,31 @@ function checkLogForToken(chunk) {
 const shouldSpawn = process.argv.includes('--spawn') || process.env.SPAWN_DSH === 'true';
 if (shouldSpawn) {
   console.log(`[dsh-bridge] 启动 DeepSeek Harness 子进程 (监听 ${TARGET_AUTHORITY})...`);
-  const npxCmd = process.platform === 'win32' ? 'npx.cmd' : 'npx';
-  const child = spawn(npxCmd, ['-y', '@deepseek-ai/dsh', 'web', '--port', String(TARGET_PORT), '--no-open'], {
+  const childEnv = { ...process.env, DSH_HOME: CREDENTIALS_DIR };
+  delete childEnv.PORT; // 关键：移除 PORT 变量，防止 DSH 内部把 3080 当作源端口与桥接器冲突
+
+  // 检查 dsh 是否已安装在系统 PATH 中
+  const isDshInstalled = (() => {
+    try {
+      const cp = require('child_process');
+      cp.execSync(process.platform === 'win32' ? 'where dsh' : 'which dsh', { stdio: 'ignore' });
+      return true;
+    } catch {
+      return false;
+    }
+  })();
+
+  const bin = isDshInstalled
+    ? (process.platform === 'win32' ? 'dsh.cmd' : 'dsh')
+    : (process.platform === 'win32' ? 'npx.cmd' : 'npx');
+  const args = isDshInstalled
+    ? ['--profile', 'web', '--port', String(TARGET_PORT), '--no-open']
+    : ['-y', '@deepseek-ai/dsh', '--profile', 'web', '--port', String(TARGET_PORT), '--no-open'];
+
+  const child = spawn(bin, args, {
     stdio: ['inherit', 'pipe', 'pipe'],
     shell: process.platform === 'win32',
-    env: { ...process.env, DSH_HOME: CREDENTIALS_DIR },
+    env: childEnv,
   });
 
   child.stdout.on('data', (data) => {
@@ -182,6 +202,12 @@ const server = http.createServer((req, res) => {
     }
   }
 
+  // 局域网/非 HTTPS 访问时自动取消 upstream 压缩，便于注入 crypto.randomUUID polyfill
+  const isIndexRequest = req.method === 'GET' && (parsedUrl.pathname === '/' || parsedUrl.pathname === '/index.html');
+  if (isIndexRequest) {
+    delete headers['accept-encoding'];
+  }
+
   const options = {
     hostname: TARGET_HOST,
     port: TARGET_PORT,
@@ -192,7 +218,7 @@ const server = http.createServer((req, res) => {
 
   const proxy = http.request(options, (upstreamRes) => {
     // 3. 兜底保护：若 upstream DSH 仍返回 401，且当前访问根路径且捕获了 Launch Token，自动 302 补全 Token 重定向换取 Cookie
-    if (upstreamRes.statusCode === 401 && currentLaunchToken && req.method === 'GET' && (parsedUrl.pathname === '/' || parsedUrl.pathname === '/index.html') && !hasTokenParam) {
+    if (upstreamRes.statusCode === 401 && currentLaunchToken && isIndexRequest && !hasTokenParam) {
       parsedUrl.searchParams.set('token', currentLaunchToken);
       res.writeHead(302, {
         'Location': parsedUrl.pathname + parsedUrl.search,
@@ -204,7 +230,7 @@ const server = http.createServer((req, res) => {
 
     // 4. 同步下发 Session Cookie 给浏览器客户端（SameSite=Lax），确保后续静态资源及 API 保持会话
     const resHeaders = { ...upstreamRes.headers };
-    if (validUpstreamCookie && req.method === 'GET' && (parsedUrl.pathname === '/' || parsedUrl.pathname === '/index.html')) {
+    if (validUpstreamCookie && isIndexRequest) {
       const clientCookie = `${validUpstreamCookie}; Max-Age=2500000; Path=/; HttpOnly; SameSite=Lax`;
       if (resHeaders['set-cookie']) {
         if (Array.isArray(resHeaders['set-cookie'])) {
@@ -215,6 +241,29 @@ const server = http.createServer((req, res) => {
       } else {
         resHeaders['set-cookie'] = [clientCookie];
       }
+    }
+
+    // 5. 核心兼容：为局域网非 HTTPS 上下文自动注入 crypto.randomUUID polyfill（彻底解决前端 WS 挂死）
+    const isHtml = (resHeaders['content-type'] || '').includes('text/html');
+    if (isHtml) {
+      const chunks = [];
+      upstreamRes.on('data', (c) => chunks.push(c));
+      upstreamRes.on('end', () => {
+        let body = Buffer.concat(chunks).toString('utf8');
+        const polyfill = '<script>if(!window.crypto||!window.crypto.randomUUID){if(!window.crypto)window.crypto={};window.crypto.randomUUID=function(){return ([1e7]+-1e3+-4e3+-8e3+-1e11).replace(/[018]/g,function(c){return (c^(crypto.getRandomValues(new Uint8Array(1))[0]&(15>>(c/4)))).toString(16);});};}</script>';
+        if (body.includes('<head>')) {
+          body = body.replace('<head>', '<head>' + polyfill);
+        } else if (/<head[^>]*>/i.test(body)) {
+          body = body.replace(/(<head[^>]*>)/i, '$1' + polyfill);
+        } else {
+          body = polyfill + body;
+        }
+        resHeaders['content-type'] = 'text/html; charset=utf-8';
+        resHeaders['content-length'] = Buffer.byteLength(body, 'utf8');
+        res.writeHead(upstreamRes.statusCode, resHeaders);
+        res.end(body);
+      });
+      return;
     }
 
     res.writeHead(upstreamRes.statusCode, resHeaders);

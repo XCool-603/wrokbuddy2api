@@ -50,6 +50,7 @@ COPY --chown=app:app --chmod=755 login.sh signin.sh credit.sh trial.sh /app/
 COPY --chown=app:app --chmod=755 scripts/global_region.py scripts/task_common.py scripts/task_runner.py scripts/school_open_day_2026.py /app/scripts/
 COPY --chown=app:app --chmod=755 docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
 COPY --chown=app:app config.example.json /app/config.json
+COPY --chown=app:app config/ /app/config/
 
 # 4. 网络端口与健康检查（监听 7863 > 1024，天然安全兼容非 root）
 EXPOSE 7863
