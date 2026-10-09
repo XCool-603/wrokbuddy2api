@@ -105,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.14"
+const CurrentVersion = "v1.2.15"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -192,6 +192,13 @@ func NewHandler(cfg Config) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	// 安全防护响应头 (Security Headers)
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("X-Frame-Options", "SAMEORIGIN")
+	w.Header().Set("X-XSS-Protection", "1; mode=block")
+	w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
+	w.Header().Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+
 	h.mux.ServeHTTP(w, r)
 }
 
@@ -416,6 +423,11 @@ func applyModelInfoFields(entry map[string]any, mi upstream.ModelInfo) map[strin
 // 纯动态：动态拉取失败/无号 → 该域空列表，无静态兜底；
 // global.enabled=false（显式逃生门）时只列 CN（global 名单不出现）。
 func (h *Handler) modelList(includeBare ...bool) []map[string]any {
+	var clientHTTP *http.Client
+	if h.cfg.Upstream != nil {
+		clientHTTP = h.cfg.Upstream.HTTP
+	}
+
 	out := make([]map[string]any, 0)
 	for _, mi := range h.fetchDynamicModels() {
 		entry := map[string]any{
@@ -430,8 +442,8 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 		// 拉到后写 model.json 供下次命中）→ 1M 兜底 / max_output_tokens 省略。
 		// 上游零值不再透出假 131072（误导 Codex/ZCode 等按 context_length 提前
 		// 截断、白白丢上下文）。
-		entry["context_length"] = upstream.ContextWindowListingV4(mi.ID, mi.ContextWindow, h.cfg.Upstream.HTTP)
-		if mo, ok := upstream.MaxOutputTokensListingV4(mi.ID, mi.MaxTokens, h.cfg.Upstream.HTTP); ok {
+		entry["context_length"] = upstream.ContextWindowListingV4(mi.ID, mi.ContextWindow, clientHTTP)
+		if mo, ok := upstream.MaxOutputTokensListingV4(mi.ID, mi.MaxTokens, clientHTTP); ok {
 			entry["max_output_tokens"] = mo
 		}
 		// 上游模型对象全字段透出（name/描述/标签/倍率/能力旗标等，空值省略）。
@@ -477,8 +489,8 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 				entry = applyModelInfoFields(entry, mi)
 				remoteCtx, remoteOut = mi.ContextWindow, mi.MaxTokens
 			}
-			entry["context_length"] = upstream.ContextWindowListingV4(id, remoteCtx, h.cfg.Upstream.HTTP)
-			if mo, ok := upstream.MaxOutputTokensListingV4(id, remoteOut, h.cfg.Upstream.HTTP); ok {
+			entry["context_length"] = upstream.ContextWindowListingV4(id, remoteCtx, clientHTTP)
+			if mo, ok := upstream.MaxOutputTokensListingV4(id, remoteOut, clientHTTP); ok {
 				entry["max_output_tokens"] = mo
 			}
 			if efforts, def := upstream.EffortListing("global", id, globalEfforts[id], globalDefaults[id]); efforts != nil {

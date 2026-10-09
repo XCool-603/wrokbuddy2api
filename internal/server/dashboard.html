@@ -119,7 +119,7 @@
               PRO
             </span>
             <button id="versionBadgeBtn" onclick="checkAppUpdate(true)" title="点击检查更新" class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-slate-800 text-slate-400 border border-slate-700 hover:border-indigo-500 transition flex items-center gap-1">
-              <span id="appVersionText">v1.1.5</span>
+              <span id="appVersionText">v1.2.15</span>
               <span id="updateAvailableDot" class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping hidden"></span>
             </button>
           </div>
@@ -129,6 +129,20 @@
 
       <!-- Right: Compact Clean Action Bar -->
       <div class="flex items-center gap-2 sm:gap-3">
+        <!-- Link to Public Portal -->
+        <a href="/" target="_self" title="访问前台门户展示页" class="px-2.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-cyan-500/50 rounded-xl text-slate-300 hover:text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 group">
+          <svg class="w-3.5 h-3.5 text-cyan-400 group-hover:scale-110 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6"/></svg>
+          <span class="hidden sm:inline">前台门户</span>
+        </a>
+
+        <!-- Link to GitHub Repo -->
+        <a href="https://github.com/XCool-603/wrokbuddy2api" target="_blank" rel="noopener noreferrer" title="访问 GitHub 官方仓库" class="px-2.5 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-slate-700 rounded-xl text-slate-300 hover:text-white text-xs font-semibold shadow-sm transition flex items-center gap-1.5 group">
+          <svg class="w-3.5 h-3.5 fill-current text-slate-400 group-hover:text-white transition" viewBox="0 0 24 24">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span class="hidden sm:inline">GitHub</span>
+        </a>
+
         <!-- Quick OAuth Dropdown / Group -->
         <div class="relative">
           <button id="btnHeaderAuthMenu" onclick="toggleHeaderAuthMenu()" class="px-3 py-1.5 bg-gradient-to-r from-indigo-600 to-purple-600 hover:from-indigo-500 hover:to-purple-500 text-white text-xs font-semibold rounded-xl shadow-md shadow-indigo-600/20 transition flex items-center gap-1.5">
@@ -178,6 +192,22 @@
   <!-- Main Container -->
   <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
     
+    <!-- Unprotected Security Warning Banner -->
+    <div id="unprotectedWarningBanner" class="hidden p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+      <div class="flex items-start sm:items-center gap-3">
+        <div class="w-9 h-9 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center shrink-0 mt-0.5 sm:mt-0">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+        </div>
+        <div>
+          <div class="text-sm font-semibold text-amber-300">安全风险警示：当前控制台尚未配置管理访问密码</div>
+          <div class="text-xs text-amber-200/80 mt-0.5">任何可访问此服务端口的人员均可查看账号凭证与操作控制台。强烈建议立即配置管理密码，以激活全局鉴权与安全防护！</div>
+        </div>
+      </div>
+      <button onclick="openChangePasswordModal()" class="px-3.5 py-1.5 text-xs font-semibold bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl transition shrink-0 shadow-sm self-start sm:self-auto">
+        立即配置密码
+      </button>
+    </div>
+
     <!-- Modern Top Nav Tabs (New API / SaaS Dashboard Style) -->
     <div class="flex items-center justify-between border-b border-slate-800 pb-3">
       <div class="flex items-center gap-1.5 p-1 bg-slate-900/90 rounded-2xl border border-slate-800 overflow-x-auto custom-scroll max-w-full">
@@ -1210,7 +1240,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
   <!-- Fullscreen Login & Register Overlay -->
   <div id="loginOverlay" onclick="if(event.target===this) showLoginModal(false)" class="fixed inset-0 bg-slate-950/90 backdrop-blur-2xl flex items-center justify-center p-4 z-50 hidden">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-sm w-full p-8 shadow-2xl relative overflow-hidden text-center space-y-6">
-      <button type="button" onclick="showLoginModal(false)" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer z-10" title="关闭 (Esc)">
+      <button id="loginCloseBtn" type="button" onclick="showLoginModal(false)" class="absolute top-4 right-4 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer z-10" title="关闭 (Esc)">
         <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
       </button>
       <div class="absolute -right-8 -top-8 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl"></div>
@@ -1398,7 +1428,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           const errData = await res.json().catch(() => ({}));
           if (errData.need_login) {
             hasWebPassword = true;
-            showLoginModal(true);
+            showLoginModal(true, true);
             return;
           }
         }
@@ -2744,6 +2774,14 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           logoutBtn.classList.add('hidden');
         }
       }
+      const warnBanner = document.getElementById('unprotectedWarningBanner');
+      if (warnBanner) {
+        if (hasPw) {
+          warnBanner.classList.add('hidden');
+        } else {
+          warnBanner.classList.remove('hidden');
+        }
+      }
     }
 
     let currentUser = null;
@@ -2773,13 +2811,30 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       }
     }
 
-    function showLoginModal(show) {
+    let loginEnforced = false;
+
+    function showLoginModal(show, enforced) {
+      if (typeof enforced === 'boolean') {
+        loginEnforced = enforced;
+      }
       const overlay = document.getElementById('loginOverlay');
+      const closeBtn = document.getElementById('loginCloseBtn');
       if (!overlay) return;
       if (show) {
         overlay.classList.remove('hidden');
         switchAuthTab('login');
+        if (closeBtn) {
+          if (loginEnforced) {
+            closeBtn.classList.add('hidden');
+          } else {
+            closeBtn.classList.remove('hidden');
+          }
+        }
       } else {
+        if (loginEnforced && !currentUser) {
+          window.location.href = '/';
+          return;
+        }
         overlay.classList.add('hidden');
       }
     }
@@ -2810,6 +2865,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         });
         const data = await res.json();
         if (res.ok && data.success) {
+          loginEnforced = false;
           showLoginModal(false);
           refreshData();
         } else {
@@ -2860,6 +2916,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         });
         const data = await res.json();
         if (res.ok && data.success) {
+          loginEnforced = false;
           showLoginModal(false);
           refreshData();
         } else {
@@ -3277,13 +3334,19 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
     async function submitChangePassword() {
       const oldPw = document.getElementById('inputOldPassword').value;
-      const newPw = document.getElementById('inputNewPassword').value;
+      const newPw = document.getElementById('inputNewPassword').value.trim();
       const btn = document.getElementById('btnSubmitPassword');
       const errEl = document.getElementById('changePasswordError');
       const succEl = document.getElementById('changePasswordSuccess');
 
       errEl.classList.add('hidden');
       succEl.classList.add('hidden');
+
+      if (newPw !== '' && newPw.length < 6) {
+        errEl.innerText = '新密码长度至少 6 位（若需清除密码恢复免密，请直接留空）';
+        errEl.classList.remove('hidden');
+        return;
+      }
 
       btn.disabled = true;
       btn.innerText = '保存中...';
@@ -3301,6 +3364,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         if (res.ok && data.success) {
           hasWebPassword = !!data.has_password;
           updatePasswordBadge(hasWebPassword);
+          succEl.innerText = hasWebPassword ? '✅ 管理密码设置成功！已激活访问密码保护。' : '✅ 管理密码已清除！已恢复为单机免密模式。';
           succEl.classList.remove('hidden');
           setTimeout(() => {
             closeChangePasswordModal();

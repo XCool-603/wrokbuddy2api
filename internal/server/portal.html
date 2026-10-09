@@ -1,0 +1,966 @@
+<!DOCTYPE html>
+<html lang="zh-CN" class="dark scroll-smooth">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WorkBuddy 2API · 双域融合智能大模型网关</title>
+  <meta name="description" content="新一代企业级双域融合大模型智能网关，100% 兼容 OpenAI 协议，CN / Global 双轨无缝容灾调度与账号池智能均衡。">
+  <!-- Tailwind CSS 双源容灾加载 -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    if (!window.tailwind) {
+      document.write('<script src="https://registry.npmmirror.com/tailwindcss-cdn/3.4.1/files/dist/tailwind.min.js"><\/script>');
+    }
+  </script>
+  <script>
+    if (!window.tailwind) {
+      document.write('<script src="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.js"><\/script>');
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['"Plus Jakarta Sans"', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['"JetBrains Mono"', 'monospace'],
+          },
+          colors: {
+            brand: {
+              50: '#eef2ff',
+              100: '#e0e7ff',
+              500: '#6366f1',
+              600: '#4f46e5',
+              700: '#4338ca',
+            },
+            cyber: {
+              cyan: '#00f0ff',
+              purple: '#a855f7',
+              pink: '#ec4899',
+              emerald: '#10b981',
+              dark: '#030712',
+              card: '#0b1120',
+              border: 'rgba(255, 255, 255, 0.08)'
+            }
+          },
+          boxShadow: {
+            'glow-cyan': '0 0 30px -5px rgba(0, 240, 255, 0.35)',
+            'glow-indigo': '0 0 30px -5px rgba(99, 102, 241, 0.35)',
+            'glow-purple': '0 0 30px -5px rgba(168, 85, 247, 0.35)',
+            'glow-emerald': '0 0 25px -5px rgba(16, 185, 129, 0.35)',
+            'glass': '0 8px 32px 0 rgba(0, 0, 0, 0.45)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body {
+      background-color: #030712;
+      color: #f1f5f9;
+      overflow-x: hidden;
+    }
+    /* Cyber grid overlay */
+    .cyber-grid {
+      background-size: 50px 50px;
+      background-image: 
+        linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+        linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+    }
+    .glass-panel {
+      background: rgba(11, 17, 32, 0.65);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+    }
+    .glass-panel-hover:hover {
+      border-color: rgba(0, 240, 255, 0.3);
+      box-shadow: 0 0 25px -5px rgba(0, 240, 255, 0.2);
+    }
+    .text-gradient {
+      background: linear-gradient(135deg, #00f0ff 0%, #818cf8 50%, #c084fc 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .text-gradient-cyan {
+      background: linear-gradient(135deg, #00f0ff 0%, #38bdf8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .code-terminal {
+      background: #060a12;
+      border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+    /* Custom scrollbar */
+    ::-webkit-scrollbar {
+      width: 6px;
+      height: 6px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #030712;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #1e293b;
+      border-radius: 9999px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #334155;
+    }
+  </style>
+</head>
+<body class="selection:bg-cyan-500 selection:text-black relative antialiased">
+
+  <!-- Interactive Canvas Background -->
+  <canvas id="bgCanvas" class="fixed inset-0 pointer-events-none z-0 opacity-40"></canvas>
+
+  <!-- Ambient Radiant Lights -->
+  <div class="fixed top-[-10%] left-[-10%] w-[500px] h-[500px] bg-indigo-600/15 rounded-full blur-[140px] pointer-events-none z-0"></div>
+  <div class="fixed top-[20%] right-[-10%] w-[550px] h-[550px] bg-cyan-500/10 rounded-full blur-[160px] pointer-events-none z-0"></div>
+  <div class="fixed bottom-[-10%] left-[20%] w-[600px] h-[600px] bg-purple-600/10 rounded-full blur-[180px] pointer-events-none z-0"></div>
+
+  <!-- Cyber Grid Background -->
+  <div class="fixed inset-0 cyber-grid pointer-events-none z-0"></div>
+
+  <!-- Content Wrapper -->
+  <div class="relative z-10 flex flex-col min-h-screen">
+
+    <!-- Header Navigation -->
+    <header class="sticky top-0 z-50 border-b border-slate-800/80 bg-slate-950/80 backdrop-blur-xl transition-all">
+      <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+        <!-- Logo -->
+        <a href="/" class="flex items-center gap-3.5 group">
+          <div class="relative flex items-center justify-center">
+            <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-cyan-500 via-indigo-500 to-purple-600 flex items-center justify-center shadow-lg shadow-indigo-500/25 group-hover:scale-105 transition-transform">
+              <svg class="w-5 h-5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/>
+              </svg>
+            </div>
+            <span class="absolute -bottom-1 -right-1 flex h-2.5 w-2.5">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-cyan-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-2.5 w-2.5 bg-cyan-400"></span>
+            </span>
+          </div>
+          <div>
+            <div class="flex items-center gap-2">
+              <span class="text-lg font-bold tracking-tight text-white font-mono">WorkBuddy<span class="text-cyan-400">2API</span></span>
+              <span id="gatewayVersionBadge" class="px-2 py-0.5 text-[10px] font-mono font-semibold rounded-full bg-slate-800 text-cyan-300 border border-slate-700">v1.2.15</span>
+            </div>
+            <p class="text-[10px] text-slate-400 font-mono hidden sm:block">双域融合智能网关 · Dual-Realm Matrix</p>
+          </div>
+        </a>
+
+        <!-- Desktop Nav Links -->
+        <nav class="hidden md:flex items-center gap-7 text-xs font-semibold text-slate-300">
+          <a href="#features" class="hover:text-cyan-400 transition">核心特性</a>
+          <a href="#models" class="hover:text-cyan-400 transition">模型矩阵</a>
+          <a href="#quickstart" class="hover:text-cyan-400 transition">极速接入</a>
+          <a href="#architecture" class="hover:text-cyan-400 transition">架构拓扑</a>
+          <a href="#ecosystem" class="hover:text-cyan-400 transition">生态客户端</a>
+        </nav>
+
+        <!-- Right Action Items -->
+        <div class="flex items-center gap-2.5 sm:gap-3">
+          <!-- Gateway Live Status Pill -->
+          <div id="navLiveStatus" class="hidden sm:flex items-center gap-2 px-3 py-1.5 rounded-full bg-slate-900/90 border border-slate-800 text-xs font-mono text-slate-300">
+            <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+            <span id="navLiveStatusText">网关运行中</span>
+          </div>
+
+          <!-- GitHub Repo Link -->
+          <a href="https://github.com/XCool-603/wrokbuddy2api" target="_blank" rel="noopener noreferrer" title="访问 GitHub 开源仓库" class="px-3 py-1.5 rounded-xl text-xs font-medium text-slate-300 hover:text-white glass-panel hover:bg-slate-800/80 border border-slate-800 hover:border-slate-700 transition-all flex items-center gap-1.5 group shadow-sm">
+            <svg class="w-4 h-4 fill-current text-slate-400 group-hover:text-white transition" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <span class="font-mono">GitHub</span>
+          </a>
+
+          <!-- Enter Console Button -->
+          <a href="/console" class="relative group px-4 py-2 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 shadow-md shadow-indigo-500/20 hover:shadow-cyan-500/30 transition-all flex items-center gap-2">
+            <span>进入控制台</span>
+            <svg class="w-3.5 h-3.5 group-hover:translate-x-0.5 transition-transform" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/>
+            </svg>
+          </a>
+        </div>
+      </div>
+    </header>
+
+    <!-- Hero Section -->
+    <section class="relative pt-16 pb-20 sm:pt-24 sm:pb-32 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto flex flex-col items-center text-center">
+      <!-- Glow Tag Pill -->
+      <div class="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full glass-panel border border-cyan-500/30 text-xs font-medium text-cyan-300 mb-8 shadow-glow-cyan animate-pulse">
+        <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+        <span>新一代企业级双域融合架构 · 100% 兼容 OpenAI 协议</span>
+      </div>
+
+      <!-- Main Heading -->
+      <h1 class="text-4xl sm:text-6xl lg:text-7xl font-extrabold tracking-tight text-white leading-[1.15] max-w-5xl">
+        打破边界 · 智联双域<br>
+        <span class="text-gradient">下一代高可用 AI 智能路由网关</span>
+      </h1>
+
+      <!-- Subtitle Description -->
+      <p class="mt-6 text-sm sm:text-lg text-slate-400 max-w-3xl leading-relaxed">
+        独创国内企微 (CN) 与海外国际版 (Global) 双轨无缝容灾调度机制，毫秒级故障自愈，智能会话粘性保障，多租户令牌池负载均衡与纵深安全防御。为各大主流大模型生态客户端提供坚不可摧的底层算力驱动。
+      </p>
+
+      <!-- Hero Buttons -->
+      <div class="mt-10 flex flex-wrap items-center justify-center gap-4">
+        <a href="#quickstart" class="px-6 py-3.5 rounded-xl text-sm font-semibold text-slate-950 bg-cyan-400 hover:bg-cyan-300 shadow-glow-cyan transition-all flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-slate-950" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          <span>立即体验接入</span>
+        </a>
+        <a href="/console" class="px-6 py-3.5 rounded-xl text-sm font-semibold text-white glass-panel hover:bg-slate-800/80 border border-slate-700 hover:border-cyan-400/50 transition-all flex items-center gap-2.5">
+          <svg class="w-4 h-4 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"/></svg>
+          <span>管理控制台</span>
+        </a>
+        <a href="https://github.com/XCool-603/wrokbuddy2api" target="_blank" rel="noopener noreferrer" class="px-5 py-3.5 rounded-xl text-sm font-semibold text-slate-200 glass-panel hover:bg-slate-800/80 border border-slate-700/80 hover:border-slate-500 hover:text-white transition-all flex items-center gap-2.5 group">
+          <svg class="w-4 h-4 fill-current text-slate-300 group-hover:text-white transition" viewBox="0 0 24 24">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          <span>GitHub 开源项目</span>
+        </a>
+        <button onclick="copyGatewayBaseURL()" class="px-4 py-3.5 rounded-xl text-xs font-mono font-medium text-slate-400 hover:text-white glass-panel hover:bg-slate-800/50 border border-slate-800 transition flex items-center gap-2">
+          <svg class="w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+          <span id="copyEndpointText">复制 API 基础端点</span>
+        </button>
+      </div>
+
+      <!-- Real-time Live Metrics Bar -->
+      <div class="mt-16 w-full max-w-5xl grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div class="glass-panel p-5 rounded-2xl text-left border border-slate-800/80 relative overflow-hidden group hover:border-cyan-500/30 transition">
+          <div class="absolute -right-3 -bottom-3 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">服务高可用率</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-2xl sm:text-3xl font-extrabold font-mono text-cyan-400">99.99%</span>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">双域秒级容灾自愈机制</p>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl text-left border border-slate-800/80 relative overflow-hidden group hover:border-indigo-500/30 transition">
+          <div class="absolute -right-3 -bottom-3 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">智能调度延迟</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-2xl sm:text-3xl font-extrabold font-mono text-indigo-400">&lt; 15ms</span>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">轻量流式零缓冲转发</p>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl text-left border border-slate-800/80 relative overflow-hidden group hover:border-purple-500/30 transition">
+          <div class="absolute -right-3 -bottom-3 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">生态协议兼容</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span class="text-2xl sm:text-3xl font-extrabold font-mono text-purple-400">100%</span>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">标准 OpenAI REST / SSE</p>
+        </div>
+
+        <div class="glass-panel p-5 rounded-2xl text-left border border-slate-800/80 relative overflow-hidden group hover:border-emerald-500/30 transition">
+          <div class="absolute -right-3 -bottom-3 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
+          <p class="text-xs font-medium text-slate-400">支持旗舰模型</p>
+          <div class="flex items-baseline gap-2 mt-1">
+            <span id="heroModelCount" class="text-2xl sm:text-3xl font-extrabold font-mono text-emerald-400">15+</span>
+          </div>
+          <p class="mt-2 text-[11px] text-slate-400">推理 · 长文本 · 智能体</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Quickstart / Interactive Code Terminal -->
+    <section id="quickstart" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <h2 class="text-xs font-bold font-mono tracking-widest text-cyan-400 uppercase">Seamless Integration</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">一行代码 · 极速接入全生态</h3>
+        <p class="mt-3 text-sm text-slate-400">
+          无需改造代码，直接使用标准 OpenAI SDK 或 cURL，替换 Base URL 与 API Key 即可畅享双域聚合大模型能力。
+        </p>
+      </div>
+
+      <!-- Playground Window -->
+      <div class="code-terminal rounded-2xl shadow-2xl overflow-hidden max-w-4xl mx-auto border border-slate-800">
+        <!-- Terminal Header -->
+        <div class="px-4 py-3 bg-slate-900/90 border-b border-slate-800 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
+            <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
+            <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
+            <span class="ml-2 text-xs font-mono text-slate-400 hidden sm:inline">workbuddy-gateway · /v1/chat/completions</span>
+          </div>
+
+          <!-- Language Selector Tabs -->
+          <div class="flex items-center gap-1 bg-slate-950 p-1 rounded-xl border border-slate-800 text-xs font-mono">
+            <button onclick="switchCodeLang('curl')" id="btnLang-curl" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-semibold transition">cURL</button>
+            <button onclick="switchCodeLang('python')" id="btnLang-python" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Python</button>
+            <button onclick="switchCodeLang('nodejs')" id="btnLang-nodejs" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Node.js</button>
+            <button onclick="switchCodeLang('go')" id="btnLang-go" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Go</button>
+          </div>
+        </div>
+
+        <!-- Terminal Body -->
+        <div class="relative p-6 bg-[#040812] font-mono text-xs sm:text-sm text-slate-300 leading-relaxed overflow-x-auto">
+          <button onclick="copyActiveCodeSnippet()" class="absolute top-4 right-4 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 text-xs font-mono transition flex items-center gap-1.5">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
+            <span id="copySnippetBtnText">复制代码</span>
+          </button>
+          <pre id="codeSnippetBox" class="text-slate-300 whitespace-pre"></pre>
+        </div>
+
+        <!-- Client Tips Footer -->
+        <div class="px-6 py-4 bg-slate-900/60 border-t border-slate-800/80 flex flex-col sm:flex-row sm:items-center justify-between text-xs text-slate-400 gap-3">
+          <div class="flex items-center gap-2">
+            <span class="w-2 h-2 rounded-full bg-cyan-400"></span>
+            <span>适配客户端：Cherry Studio、Chatbox、NextChat、Cursor、Continue、Roo Code 等</span>
+          </div>
+          <div class="flex items-center gap-3 font-mono">
+            <span>端点 Base URL: <span id="hintBaseUrl" class="text-cyan-400 font-semibold">http://localhost:7863/v1</span></span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Supported Models Matrix -->
+    <section id="models" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <h2 class="text-xs font-bold font-mono tracking-widest text-indigo-400 uppercase">Model Matrix</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">全系主流旗舰大模型矩阵</h3>
+        <p class="mt-3 text-sm text-slate-400">
+          汇聚国内外顶尖长上下文与推理大模型，自动负载挑号轮转，支持模型名称别名重映射与自适应调度。
+        </p>
+
+        <!-- Category Filters -->
+        <div class="mt-8 flex flex-wrap justify-center gap-2">
+          <button onclick="filterModelCategory('all')" class="model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-cyan-500 text-slate-950 transition" data-cat="all">全部模型</button>
+          <button onclick="filterModelCategory('reasoning')" class="model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition" data-cat="reasoning">深度推理 (Reasoning)</button>
+          <button onclick="filterModelCategory('context')" class="model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition" data-cat="context">超长上下文 (Long Context)</button>
+          <button onclick="filterModelCategory('code')" class="model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition" data-cat="code">代码与工程架构 (Coding)</button>
+          <button onclick="filterModelCategory('agent')" class="model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition" data-cat="agent">自主智能体 (Agent)</button>
+        </div>
+      </div>
+
+      <!-- Models Grid -->
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <!-- DeepSeek V4.1 -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="reasoning context">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-blue-500/20 text-blue-400 flex items-center justify-center font-bold text-xs">DS</div>
+                <h4 class="text-base font-bold text-white">DeepSeek-V4.1 / R1</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-blue-500/20 text-blue-300 border border-blue-500/30">推荐</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              超强深度思维链长逻辑推理，满血数学与代码综合能力，顶尖性价比与高可用智能路由。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">64K/128K 上下文</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-cyan-400">思维链 (CoT)</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-indigo-400">满血直连</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">模型 ID:</span>
+            <span class="text-cyan-400 font-semibold cursor-pointer hover:underline" onclick="copyText('workbuddy-deepseek-v4.1')">workbuddy-deepseek-v4.1</span>
+          </div>
+        </div>
+
+        <!-- Kimi K2.8 -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="context">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 flex items-center justify-center font-bold text-xs">KM</div>
+                <h4 class="text-base font-bold text-white">Kimi-K2.8</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">长文旗舰</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              200万字超长上下文长文档精研，全网实时多源搜索交叉核验，企业级研报与海量文献分析神器。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">200万字超长视界</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-purple-400">联网搜索增强</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-emerald-400">深度解读</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">模型 ID:</span>
+            <span class="text-cyan-400 font-semibold cursor-pointer hover:underline" onclick="copyText('workbuddy-kimi-k2.8')">workbuddy-kimi-k2.8</span>
+          </div>
+        </div>
+
+        <!-- GLM 5.3 -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="context reasoning">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center font-bold text-xs">GL</div>
+                <h4 class="text-base font-bold text-white">GLM-5.3</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-cyan-500/20 text-cyan-300 border border-cyan-500/30">综合全能</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              综合全场景旗舰基座，视觉图文深度解析，精准复杂指令遵循与高质量中文文本创作生成。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">128K 上下文</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-cyan-400">多模态图文</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-amber-400">指令遵循</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">模型 ID:</span>
+            <span class="text-cyan-400 font-semibold cursor-pointer hover:underline" onclick="copyText('workbuddy-glm-5.3')">workbuddy-glm-5.3</span>
+          </div>
+        </div>
+
+        <!-- Claude 3.7 Sonnet -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="code reasoning">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-amber-500/20 text-amber-400 flex items-center justify-center font-bold text-xs">CL</div>
+                <h4 class="text-base font-bold text-white">Claude 3.7 Sonnet</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">代码标杆</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              全球公认顶尖软件工程与代码架构模型，复杂算法重构、精准语法分析与超高逻辑智商。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">200K 上下文</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-amber-400">工程级架构</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-purple-400">代码生成</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">模型 ID:</span>
+            <span class="text-cyan-400 font-semibold cursor-pointer hover:underline" onclick="copyText('workbuddy-claude-3.7-sonnet')">workbuddy-claude-3.7-sonnet</span>
+          </div>
+        </div>
+
+        <!-- GPT-4o / GPT-6 Matrix -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="reasoning context">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-emerald-500/20 text-emerald-400 flex items-center justify-center font-bold text-xs">GP</div>
+                <h4 class="text-base font-bold text-white">GPT-4o / Matrix</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">通识基座</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              企业级全能通用大语言模型，成熟问答与严密通识逻辑推理，支持多模态输入与结构化输出。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">128K 上下文</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-emerald-400">多模态交互</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-indigo-400">结构化 JSON</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">模型 ID:</span>
+            <span class="text-cyan-400 font-semibold cursor-pointer hover:underline" onclick="copyText('workbuddy-gpt-4o')">workbuddy-gpt-4o</span>
+          </div>
+        </div>
+
+        <!-- DeepSeek Harness (dsh) Agent -->
+        <div class="model-card glass-panel glass-panel-hover p-6 rounded-2xl flex flex-col justify-between transition-all" data-category="agent code">
+          <div>
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-2.5">
+                <div class="w-8 h-8 rounded-xl bg-rose-500/20 text-rose-400 flex items-center justify-center font-bold text-xs">AG</div>
+                <h4 class="text-base font-bold text-white">DeepSeek Harness (dsh)</h4>
+              </div>
+              <span class="px-2 py-0.5 text-[10px] font-mono rounded-full bg-rose-500/20 text-rose-300 border border-rose-500/30">智能体进程</span>
+            </div>
+            <p class="mt-3 text-xs text-slate-400 leading-relaxed">
+              本地集成自主智能体运行时，零延时执行代码工程任务、终端调用与闭环任务编排。
+            </p>
+            <div class="mt-4 flex flex-wrap gap-1.5 font-mono text-[10px]">
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-slate-300">自主 Agent 循环</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-rose-400">终端工具调用</span>
+              <span class="px-2 py-0.5 rounded bg-slate-800/80 text-cyan-400">本地常驻</span>
+            </div>
+          </div>
+          <div class="mt-6 pt-4 border-t border-slate-800/80 flex items-center justify-between text-xs font-mono">
+            <span class="text-slate-400">接入控制:</span>
+            <a href="/console" class="text-cyan-400 font-semibold hover:underline">在控制台开启管理</a>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Features Matrix -->
+    <section id="features" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs font-bold font-mono tracking-widest text-cyan-400 uppercase">Core Advantages</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">企业级智能网关四大核心护城河</h3>
+        <p class="mt-3 text-sm text-slate-400">
+          深耕大模型并发调度底层，解决上游限流、账号中断与多会话上下文漂移痛点。
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <!-- Feature 1 -->
+        <div class="glass-panel p-8 rounded-2xl border border-slate-800 hover:border-cyan-500/30 transition-all flex gap-5">
+          <div class="w-12 h-12 rounded-xl bg-cyan-500/10 text-cyan-400 flex items-center justify-center shrink-0 border border-cyan-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+          </div>
+          <div>
+            <h4 class="text-lg font-bold text-white">双域秒级容灾与无感自愈</h4>
+            <p class="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed">
+              独创国内专线 (CN) 与海外集群 (Global) 双轨热备探测。一旦遇到上游频控 429、网络抖动或偶发故障，秒级自动退避并切换健康通道无缝重试，业务层完全零感知。
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 2 -->
+        <div class="glass-panel p-8 rounded-2xl border border-slate-800 hover:border-indigo-500/30 transition-all flex gap-5">
+          <div class="w-12 h-12 rounded-xl bg-indigo-500/10 text-indigo-400 flex items-center justify-center shrink-0 border border-indigo-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+          </div>
+          <div>
+            <h4 class="text-lg font-bold text-white">自适应配额与会话粘性保障</h4>
+            <p class="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed">
+              动态追踪各账号积分与并发消耗，智能加权调度。独家 Session Affinity 粘性算法将多轮复杂长文本对话稳定锚定同一节点，最大化复用服务端 Prompt 缓存并降低开销。
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 3 -->
+        <div class="glass-panel p-8 rounded-2xl border border-slate-800 hover:border-purple-500/30 transition-all flex gap-5">
+          <div class="w-12 h-12 rounded-xl bg-purple-500/10 text-purple-400 flex items-center justify-center shrink-0 border border-purple-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"/></svg>
+          </div>
+          <div>
+            <h4 class="text-lg font-bold text-white">军工级多租户与纵深安全加固</h4>
+            <p class="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed">
+              严格多租户 API Key 隔离与权限管控，防爆破登录动态频控锁，敏感凭证在传输和展示中深度脱敏，并预置 XSS / Clickjacking 等全套标准 HTTP 安全响应头。
+            </p>
+          </div>
+        </div>
+
+        <!-- Feature 4 -->
+        <div class="glass-panel p-8 rounded-2xl border border-slate-800 hover:border-emerald-500/30 transition-all flex gap-5">
+          <div class="w-12 h-12 rounded-xl bg-emerald-500/10 text-emerald-400 flex items-center justify-center shrink-0 border border-emerald-500/20">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          </div>
+          <div>
+            <h4 class="text-lg font-bold text-white">全生态 100% 零成本无缝平替</h4>
+            <p class="mt-2 text-xs sm:text-sm text-slate-400 leading-relaxed">
+              严格对标 OpenAI 官方 REST API 标准，完全支持 Stream SSE 逐字打字机流式传输、Function Calling 工具调用。即插即用 Cherry Studio、Cursor、NextChat，开箱即用。
+            </p>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Architecture Flowchart -->
+    <section id="architecture" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-3xl mx-auto mb-16">
+        <h2 class="text-xs font-bold font-mono tracking-widest text-indigo-400 uppercase">Architecture Topology</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">高可用网关动态路由拓扑</h3>
+        <p class="mt-3 text-sm text-slate-400">
+          客户端请求如何经由智能网关毫秒级分发至健康的国内与国际算力节点。
+        </p>
+      </div>
+
+      <!-- Architecture SVG Pipeline -->
+      <div class="glass-panel p-8 rounded-3xl border border-slate-800 shadow-glass overflow-hidden max-w-5xl mx-auto">
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-6 relative">
+          <!-- Step 1: Clients -->
+          <div class="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
+            <div class="w-12 h-12 rounded-2xl bg-cyan-500/20 text-cyan-400 flex items-center justify-center mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9.75 17L9 20l-1 1h8l-1-1-.75-3M3 13h18M5 17h14a2 2 0 002-2V5a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"/></svg>
+            </div>
+            <h5 class="text-base font-bold text-white">客户端应用集群</h5>
+            <p class="text-xs text-slate-400 mt-2">Cherry Studio / Cursor / NextChat / CLI / dsh Agent</p>
+            <div class="mt-4 px-3 py-1 rounded-full bg-slate-800 text-[11px] font-mono text-cyan-300">
+              POST /v1/chat/completions
+            </div>
+          </div>
+
+          <!-- Step 2: Gateway Core -->
+          <div class="bg-gradient-to-b from-indigo-950/60 to-slate-900/90 p-6 rounded-2xl border border-indigo-500/40 shadow-glow-indigo flex flex-col items-center text-center relative">
+            <div class="w-12 h-12 rounded-2xl bg-indigo-500/20 text-indigo-300 flex items-center justify-center mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"/></svg>
+            </div>
+            <h5 class="text-base font-bold text-white">WorkBuddy 2API 网关核心</h5>
+            <p class="text-xs text-slate-300 mt-2">多租户认证 · 频控防护 · 会话粘性分析 · 自适应挑选健康号</p>
+            <div class="mt-4 px-3 py-1 rounded-full bg-indigo-500/20 text-[11px] font-mono text-indigo-300 border border-indigo-500/30">
+              毫秒级自愈 & 动态负载均衡
+            </div>
+          </div>
+
+          <!-- Step 3: Dual Realms Upstream -->
+          <div class="bg-slate-900/80 p-6 rounded-2xl border border-slate-800 flex flex-col items-center text-center">
+            <div class="w-12 h-12 rounded-2xl bg-purple-500/20 text-purple-400 flex items-center justify-center mb-4">
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 01-9 9m9-9a9 9 0 00-9-9m9 9H3m9 9a9 9 0 01-9-9m9 9c1.657 0 3-4.03 3-9s-1.343-9-3-9m0 18c-1.657 0-3-4.03-3-9s1.343-9 3-9m-9 9a9 9 0 019-9"/></svg>
+            </div>
+            <h5 class="text-base font-bold text-white">双域大模型算力矩阵</h5>
+            <p class="text-xs text-slate-400 mt-2">CN 国内企微通道 + Global 国际版通道并行热备</p>
+            <div class="mt-4 flex gap-2 text-[11px] font-mono">
+              <span class="px-2.5 py-1 rounded-full bg-blue-500/20 text-blue-300">CN Realm</span>
+              <span class="px-2.5 py-1 rounded-full bg-emerald-500/20 text-emerald-300">Global Realm</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Section: Ecosystem Client Setup -->
+    <section id="ecosystem" class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="text-center max-w-3xl mx-auto mb-12">
+        <h2 class="text-xs font-bold font-mono tracking-widest text-cyan-400 uppercase">Ecosystem Ready</h2>
+        <h3 class="text-3xl sm:text-4xl font-extrabold text-white mt-2">只需三步 · 连接你的常用软件</h3>
+        <p class="mt-3 text-sm text-slate-400">
+          一分钟内完成 Cherry Studio、Chatbox 或 Cursor 的对接配置。
+        </p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+          <div class="w-8 h-8 rounded-xl bg-cyan-500/20 text-cyan-400 font-mono font-bold text-sm flex items-center justify-center mb-4">1</div>
+          <h4 class="text-base font-bold text-white">获取 API 密钥</h4>
+          <p class="mt-2 text-xs text-slate-400 leading-relaxed">
+            登录控制台，在【客户端接入】面板中一键查看或重置专属 API Key。支持多用户租户独立秘钥。
+          </p>
+        </div>
+
+        <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+          <div class="w-8 h-8 rounded-xl bg-indigo-500/20 text-indigo-400 font-mono font-bold text-sm flex items-center justify-center mb-4">2</div>
+          <h4 class="text-base font-bold text-white">配置 API 地址</h4>
+          <p class="mt-2 text-xs text-slate-400 leading-relaxed">
+            在客户端将服务商类型选为 <span class="font-mono text-cyan-400">OpenAI</span>，将 API 域名设置为当前服务的 Base URL：
+            <code class="block mt-2 p-2 rounded bg-slate-900 font-mono text-[11px] text-cyan-300 break-all" id="stepBaseUrl">http://localhost:7863/v1</code>
+          </p>
+        </div>
+
+        <div class="glass-panel p-6 rounded-2xl border border-slate-800">
+          <div class="w-8 h-8 rounded-xl bg-purple-500/20 text-purple-400 font-mono font-bold text-sm flex items-center justify-center mb-4">3</div>
+          <h4 class="text-base font-bold text-white">选择模型畅享</h4>
+          <p class="mt-2 text-xs text-slate-400 leading-relaxed">
+            在模型列表中填入 <span class="font-mono text-purple-300">workbuddy-deepseek-v4.1</span> 或 <span class="font-mono text-purple-300">workbuddy-kimi-k2.8</span>，即刻开启极致流畅的对话体验！
+          </p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Console Gateway Call to Action -->
+    <section class="py-20 px-4 sm:px-6 lg:px-8 max-w-7xl mx-auto w-full">
+      <div class="glass-panel p-8 sm:p-12 rounded-3xl border border-indigo-500/30 bg-gradient-to-tr from-slate-950 via-indigo-950/40 to-slate-950 text-center relative overflow-hidden shadow-2xl">
+        <div class="absolute -top-24 -left-24 w-64 h-64 bg-cyan-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+        <div class="absolute -bottom-24 -right-24 w-64 h-64 bg-purple-500/20 rounded-full blur-[100px] pointer-events-none"></div>
+
+        <h3 class="text-3xl sm:text-5xl font-extrabold text-white tracking-tight">准备好接管集群了吗？</h3>
+        <p class="mt-4 text-sm sm:text-base text-slate-300 max-w-2xl mx-auto">
+          进入企业级管理控制台，实时查看双域账号健康度、积分余额、一键签到领取试用，并实时编排 DeepSeek Harness 智能体。
+        </p>
+        <div class="mt-8 flex flex-wrap justify-center gap-4">
+          <a href="/console" class="px-8 py-4 rounded-xl text-base font-bold text-white bg-gradient-to-r from-cyan-500 via-indigo-600 to-purple-600 hover:from-cyan-400 hover:to-purple-500 shadow-glow-cyan transition-all flex items-center gap-3">
+            <span>进入管理控制台 (Console)</span>
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg>
+          </a>
+          <a href="https://github.com/XCool-603/wrokbuddy2api" target="_blank" rel="noopener noreferrer" class="px-6 py-4 rounded-xl text-base font-semibold text-slate-200 glass-panel hover:bg-slate-800/80 border border-slate-700 hover:border-slate-500 hover:text-white transition-all flex items-center gap-2.5 group shadow-sm">
+            <svg class="w-5 h-5 fill-current text-slate-300 group-hover:text-white transition" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <span>Star on GitHub</span>
+          </a>
+        </div>
+      </div>
+    </section>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-900 bg-slate-950/80 py-10 px-4 sm:px-6 lg:px-8">
+      <div class="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-4 text-xs text-slate-500">
+        <div class="flex items-center gap-2">
+          <span class="font-bold text-slate-300 font-mono">WorkBuddy 2API</span>
+          <span>· 双域融合大模型智能网关</span>
+        </div>
+        <div class="flex items-center gap-6">
+          <a href="/console" class="hover:text-cyan-400 transition font-medium">管理控制台</a>
+          <a href="https://github.com/XCool-603/wrokbuddy2api" target="_blank" rel="noopener noreferrer" class="hover:text-cyan-400 transition flex items-center gap-1.5 font-medium">
+            <svg class="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+              <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0024 12c0-6.63-5.37-12-12-12z"/>
+            </svg>
+            <span>GitHub 仓库</span>
+          </a>
+          <a href="https://github.com/XCool-603/wrokbuddy2api/releases" target="_blank" rel="noopener noreferrer" class="hover:text-cyan-400 transition">最新发行版</a>
+          <a href="/healthz" target="_blank" class="hover:text-cyan-400 transition font-mono">/healthz 探活</a>
+          <a href="#quickstart" class="hover:text-cyan-400 transition">快速接入</a>
+        </div>
+        <div class="text-slate-400 font-mono flex items-center gap-2">
+          <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+          <span>集群服务状态就绪</span>
+        </div>
+      </div>
+    </footer>
+  </div>
+
+  <!-- Interactive Background Canvas & Page Logic -->
+  <script>
+    // 1. Dynamic Canvas Animation (Synaptic Network Particles)
+    (function initCanvas() {
+      const canvas = document.getElementById('bgCanvas');
+      if (!canvas) return;
+      const ctx = canvas.getContext('2d');
+      let w = canvas.width = window.innerWidth;
+      let h = canvas.height = window.innerHeight;
+
+      window.addEventListener('resize', () => {
+        w = canvas.width = window.innerWidth;
+        h = canvas.height = window.innerHeight;
+      });
+
+      const numParticles = Math.min(Math.floor((w * h) / 18000), 75);
+      const particles = [];
+
+      for (let i = 0; i < numParticles; i++) {
+        particles.push({
+          x: Math.random() * w,
+          y: Math.random() * h,
+          vx: (Math.random() - 0.5) * 0.45,
+          vy: (Math.random() - 0.5) * 0.45,
+          radius: Math.random() * 1.8 + 0.8,
+          color: i % 2 === 0 ? 'rgba(0, 240, 255, 0.7)' : 'rgba(168, 85, 247, 0.7)'
+        });
+      }
+
+      function draw() {
+        ctx.clearRect(0, 0, w, h);
+        
+        // Update & draw particles
+        for (let i = 0; i < particles.length; i++) {
+          const p = particles[i];
+          p.x += p.vx;
+          p.y += p.vy;
+
+          if (p.x < 0) p.x = w;
+          if (p.x > w) p.x = 0;
+          if (p.y < 0) p.y = h;
+          if (p.y > h) p.y = 0;
+
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+          ctx.fillStyle = p.color;
+          ctx.fill();
+
+          // Connect adjacent particles
+          for (let j = i + 1; j < particles.length; j++) {
+            const p2 = particles[j];
+            const dx = p.x - p2.x;
+            const dy = p.y - p2.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist < 110) {
+              ctx.beginPath();
+              ctx.moveTo(p.x, p.y);
+              ctx.lineTo(p2.x, p2.y);
+              ctx.strokeStyle = `rgba(99, 102, 241, ${0.18 * (1 - dist / 110)})`;
+              ctx.lineWidth = 0.8;
+              ctx.stroke();
+            }
+          }
+        }
+        requestAnimationFrame(draw);
+      }
+      draw();
+    })();
+
+    // 2. Dynamic Hostname Detection
+    const currentOrigin = window.location.origin || 'http://localhost:7863';
+    const currentBaseURL = currentOrigin + '/v1';
+    
+    const hintEl = document.getElementById('hintBaseUrl');
+    if (hintEl) hintEl.innerText = currentBaseURL;
+    const stepEl = document.getElementById('stepBaseUrl');
+    if (stepEl) stepEl.innerText = currentBaseURL;
+
+    // 3. Code Playground Snippets
+    let currentCodeLang = 'curl';
+    const snippets = {
+      curl: `curl ${currentBaseURL}/chat/completions \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer sk-your-api-key" \\
+  -d '{
+    "model": "workbuddy-deepseek-v4.1",
+    "messages": [
+      {"role": "user", "content": "你好，请介绍一下你自己"}
+    ],
+    "stream": true
+  }'`,
+      python: `from openai import OpenAI
+
+client = OpenAI(
+    base_url="${currentBaseURL}",
+    api_key="sk-your-api-key",
+)
+
+response = client.chat.completions.create(
+    model="workbuddy-deepseek-v4.1",
+    messages=[
+        {"role": "user", "content": "写一段关于双域智能调度的解析"}
+    ],
+    stream=True,
+)
+
+for chunk in response:
+    print(chunk.choices[0].delta.content or "", end="", flush=True)`,
+      nodejs: `import OpenAI from "openai";
+
+const openai = new OpenAI({
+  baseURL: "${currentBaseURL}",
+  apiKey: "sk-your-api-key",
+});
+
+const stream = await openai.chat.completions.create({
+  model: "workbuddy-deepseek-v4.1",
+  messages: [{ role: "user", content: "你好！" }],
+  stream: true,
+});
+
+for await (const chunk of stream) {
+  process.stdout.write(chunk.choices[0]?.delta?.content || "");
+}`,
+      go: `package main
+
+import (
+	"context"
+	"fmt"
+	"io"
+	"github.com/sashabaranov/go-openai"
+)
+
+func main() {
+	cfg := openai.DefaultConfig("sk-your-api-key")
+	cfg.BaseURL = "${currentBaseURL}"
+	client := openai.NewClientWithConfig(cfg)
+
+	stream, err := client.CreateChatCompletionStream(
+		context.Background(),
+		openai.ChatCompletionRequest{
+			Model: "workbuddy-deepseek-v4.1",
+			Messages: []openai.ChatCompletionMessage{
+				{Role: openai.ChatMessageRoleUser, Content: "Hello!"},
+			},
+			Stream: true,
+		},
+	)
+	if err != nil { panic(err) }
+	defer stream.Close()
+
+	for {
+		resp, err := stream.Recv()
+		if err == io.EOF { break }
+		fmt.Print(resp.Choices[0].Delta.Content)
+	}
+}`
+    };
+
+    function renderActiveCode() {
+      const box = document.getElementById('codeSnippetBox');
+      if (box) box.innerText = snippets[currentCodeLang] || snippets.curl;
+    }
+
+    function switchCodeLang(lang) {
+      currentCodeLang = lang;
+      ['curl', 'python', 'nodejs', 'go'].forEach(l => {
+        const btn = document.getElementById('btnLang-' + l);
+        if (btn) {
+          if (l === lang) {
+            btn.className = 'px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-semibold transition';
+          } else {
+            btn.className = 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition';
+          }
+        }
+      });
+      renderActiveCode();
+    }
+    renderActiveCode();
+
+    function copyActiveCodeSnippet() {
+      const code = snippets[currentCodeLang] || snippets.curl;
+      navigator.clipboard.writeText(code).then(() => {
+        const btnText = document.getElementById('copySnippetBtnText');
+        if (btnText) {
+          btnText.innerText = '已复制！';
+          setTimeout(() => { btnText.innerText = '复制代码'; }, 2000);
+        }
+      });
+    }
+
+    function copyGatewayBaseURL() {
+      navigator.clipboard.writeText(currentBaseURL).then(() => {
+        const textEl = document.getElementById('copyEndpointText');
+        if (textEl) {
+          textEl.innerText = '已复制端点地址！';
+          setTimeout(() => { textEl.innerText = '复制 API 基础端点'; }, 2000);
+        }
+      });
+    }
+
+    function copyText(str) {
+      navigator.clipboard.writeText(str).then(() => {
+        alert('已复制模型 ID: ' + str);
+      });
+    }
+
+    // 4. Model Category Filtering
+    function filterModelCategory(cat) {
+      const cards = document.querySelectorAll('.model-card');
+      const buttons = document.querySelectorAll('.model-cat-btn');
+
+      buttons.forEach(btn => {
+        if (btn.getAttribute('data-cat') === cat) {
+          btn.className = 'model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-cyan-500 text-slate-950 transition';
+        } else {
+          btn.className = 'model-cat-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 border border-slate-800 text-slate-400 hover:text-white transition';
+        }
+      });
+
+      cards.forEach(card => {
+        if (cat === 'all') {
+          card.classList.remove('hidden');
+        } else {
+          const itemCat = card.getAttribute('data-category') || '';
+          if (itemCat.includes(cat)) {
+            card.classList.remove('hidden');
+          } else {
+            card.classList.add('hidden');
+          }
+        }
+      });
+    }
+
+    // 5. Fetch Public Gateway Status
+    (async function fetchPublicStatus() {
+      try {
+        const res = await fetch('/ui/public/status');
+        if (res.ok) {
+          const data = await res.json();
+          if (data.version) {
+            const verBadge = document.getElementById('gatewayVersionBadge');
+            if (verBadge) verBadge.innerText = data.version;
+          }
+          if (data.models_count) {
+            const mc = document.getElementById('heroModelCount');
+            if (mc) mc.innerText = data.models_count + '+';
+          }
+          const navText = document.getElementById('navLiveStatusText');
+          if (navText && data.status === 'online') {
+            navText.innerText = '双域节点正常';
+          }
+        }
+      } catch (e) {
+        // Fallback gracefully
+      }
+    })();
+  </script>
+</body>
+</html>

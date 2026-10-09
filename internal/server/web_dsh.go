@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+
+	"workbuddy2api/internal/usermgr"
 )
 
 // DeepSeek Harness (dsh) 管理处理器
@@ -75,6 +77,12 @@ func (h *Handler) handleDshInstall(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可执行 DSH 安装操作"})
+		return
+	}
+
 	if err := h.cfg.DshMgr.AutoInstall(); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
@@ -89,6 +97,12 @@ func (h *Handler) handleDshInstall(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleDshReset(w http.ResponseWriter, r *http.Request) {
 	if h.cfg.DshMgr == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可重置 DSH 环境"})
 		return
 	}
 
@@ -110,6 +124,11 @@ func (h *Handler) handleDshStart(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可启动 DSH 进程"})
+		return
+	}
+
 	apiKey := h.GetAPIKey()
 	if user != nil && user.APIKey != "" {
 		apiKey = user.APIKey
@@ -138,6 +157,12 @@ func (h *Handler) handleDshStart(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleDshStop(w http.ResponseWriter, r *http.Request) {
 	if h.cfg.DshMgr == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "DSH 管理器未启用"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可停止 DSH 进程"})
 		return
 	}
 

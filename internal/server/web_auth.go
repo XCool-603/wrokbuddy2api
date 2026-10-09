@@ -5,6 +5,7 @@ import (
 	"crypto/subtle"
 	"encoding/hex"
 	"encoding/json"
+	"net"
 	"net/http"
 	"strings"
 	"sync"
@@ -15,6 +16,109 @@ import (
 
 // webSessionCookieName Web 控制台会话 Cookie 名
 const webSessionCookieName = "wb2a_session"
+
+type authRateLimiter struct {
+	mu           sync.Mutex
+	failedLogins map[string][]time.Time
+	registers    map[string][]time.Time
+}
+
+var globalAuthLimiter = &authRateLimiter{
+	failedLogins: make(map[string][]time.Time),
+	registers:    make(map[string][]time.Time),
+}
+
+func getClientIP(r *http.Request) string {
+	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+		parts := strings.Split(xff, ",")
+		if len(parts) > 0 {
+			ip := strings.TrimSpace(parts[0])
+			if ip != "" {
+				return ip
+			}
+		}
+	}
+	if xrip := strings.TrimSpace(r.Header.Get("X-Real-IP")); xrip != "" {
+		return xrip
+	}
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err == nil && host != "" {
+		return host
+	}
+	return r.RemoteAddr
+}
+
+func (l *authRateLimiter) isLoginLocked(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	times, ok := l.failedLogins[ip]
+	if !ok {
+		return false
+	}
+	cutoff := time.Now().Add(-5 * time.Minute)
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	l.failedLogins[ip] = valid
+	return len(valid) >= 5
+}
+
+func (l *authRateLimiter) recordFailedLogin(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-5 * time.Minute)
+	times := l.failedLogins[ip]
+	valid := make([]time.Time, 0, len(times)+1)
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	valid = append(valid, time.Now())
+	l.failedLogins[ip] = valid
+}
+
+func (l *authRateLimiter) resetLogin(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.failedLogins, ip)
+}
+
+func (l *authRateLimiter) isRegisterLimited(ip string) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	times, ok := l.registers[ip]
+	if !ok {
+		return false
+	}
+	cutoff := time.Now().Add(-10 * time.Minute)
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	l.registers[ip] = valid
+	return len(valid) >= 5
+}
+
+func (l *authRateLimiter) recordRegister(ip string) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-10 * time.Minute)
+	times := l.registers[ip]
+	valid := make([]time.Time, 0, len(times)+1)
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	valid = append(valid, time.Now())
+	l.registers[ip] = valid
+}
 
 type webSessionInfo struct {
 	User      *usermgr.User
@@ -161,6 +265,14 @@ func (h *Handler) withWebAuth(next http.HandlerFunc) http.HandlerFunc {
 func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 	cleanExpiredSessions()
 
+	ip := getClientIP(r)
+	if globalAuthLimiter.isLoginLocked(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error": "登录失败次数过多，为保障账户安全已暂时锁定，请 5 分钟后再试",
+		})
+		return
+	}
+
 	var req struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -190,6 +302,7 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if loggedUser == nil {
+				globalAuthLimiter.recordFailedLogin(ip)
 				writeJSON(w, http.StatusUnauthorized, map[string]any{"error": err.Error()})
 				return
 			}
@@ -200,6 +313,7 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		// 传统单机模式：核验 WebPassword
 		pw := h.GetWebPassword()
 		if pw != "" && subtle.ConstantTimeCompare([]byte(req.Password), []byte(pw)) != 1 {
+			globalAuthLimiter.recordFailedLogin(ip)
 			writeJSON(w, http.StatusUnauthorized, map[string]any{"error": "控制台访问密码错误"})
 			return
 		}
@@ -224,6 +338,8 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
+
+	globalAuthLimiter.resetLogin(ip)
 
 	token := generateSessionToken()
 	exp := time.Now().Add(7 * 24 * time.Hour) // 7 天有效期
@@ -250,6 +366,14 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 	cleanExpiredSessions()
 
+	ip := getClientIP(r)
+	if globalAuthLimiter.isRegisterLimited(ip) {
+		writeJSON(w, http.StatusTooManyRequests, map[string]any{
+			"error": "注册请求过于频繁，请稍后再试",
+		})
+		return
+	}
+
 	if h.cfg.UserMgr == nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "未启用用户系统"})
 		return
@@ -269,6 +393,9 @@ func (h *Handler) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
 		return
 	}
+
+	globalAuthLimiter.recordRegister(ip)
+	globalAuthLimiter.resetLogin(ip)
 
 	// 注册成功自动创建会话登录
 	token := generateSessionToken()
@@ -350,28 +477,15 @@ func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	user := h.getWebSessionUser(r)
-	if user != nil && h.cfg.UserMgr != nil {
-		// 用户中心修改个人密码
-		if err := h.cfg.UserMgr.ChangePassword(user.Username, req.OldPassword, req.NewPassword, false); err != nil {
-			writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error()})
-			return
-		}
-		// 如果是 admin，同步更新 web_password
-		if user.Role == usermgr.RoleAdmin || user.Username == "admin" {
-			newPw := strings.TrimSpace(req.NewPassword)
-			h.SetWebPassword(newPw)
-			h.savePersistentSetting("web_password", newPw)
-		}
-		writeJSON(w, http.StatusOK, map[string]any{
-			"success":      true,
-			"has_password": true,
-		})
+	newPw := strings.TrimSpace(req.NewPassword)
+	// 如果新密码非空，检查长度至少 6 位；如果为空，表示清空密码恢复免密模式
+	if newPw != "" && len(newPw) < 6 {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "新密码长度至少 6 位（若需清除密码恢复免密请留空）"})
 		return
 	}
 
 	currentPw := h.GetWebPassword()
-	// 如果当前已设置了密码，修改时需要核验旧密码
+	// 如果当前已设置了管理密码，修改或清空时均需核验旧密码
 	if currentPw != "" {
 		if subtle.ConstantTimeCompare([]byte(req.OldPassword), []byte(currentPw)) != 1 {
 			writeJSON(w, http.StatusForbidden, map[string]any{"error": "原管理密码不正确"})
@@ -379,7 +493,35 @@ func (h *Handler) handleConfigPassword(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	newPw := strings.TrimSpace(req.NewPassword)
+	user := h.getWebSessionUser(r)
+	if user != nil && h.cfg.UserMgr != nil {
+		isAdmin := user.Role == usermgr.RoleAdmin || user.Username == "admin" || user.ID == "u_admin"
+
+		// 普通租户不能清空密码（普通租户必须有密码）
+		if newPw == "" && !isAdmin {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"error": "普通租户密码不可为空，长度至少 6 位"})
+			return
+		}
+
+		// 用户中心修改个人密码（若当前 currentPw != ""，上方已核验原密码，此处 bypassOld 设为 true；若 currentPw == ""，免密首次设密也 bypassOld = true）
+		if err := h.cfg.UserMgr.ChangePassword(user.Username, req.OldPassword, newPw, true); err != nil {
+			writeJSON(w, http.StatusForbidden, map[string]any{"error": err.Error()})
+			return
+		}
+
+		// 如果是 admin，同步更新并持久化 web_password
+		if isAdmin {
+			h.SetWebPassword(newPw)
+			h.savePersistentSetting("web_password", newPw)
+		}
+
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":      true,
+			"has_password": h.GetWebPassword() != "",
+		})
+		return
+	}
+
 	h.SetWebPassword(newPw)
 	h.savePersistentSetting("web_password", newPw)
 

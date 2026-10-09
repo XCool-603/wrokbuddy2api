@@ -39,11 +39,24 @@ func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string) {
 	}()
 }
 
+//go:embed portal.html
+var portalHTML string
+
 //go:embed dashboard.html
 var dashboardHTML string
 
 func (h *Handler) RegisterWebUI() {
-	h.mux.HandleFunc("GET /{$}", h.handleDashboardHTML)
+	// 前台炫酷门户展示页 (公开展示，拿得出手给别人看)
+	h.mux.HandleFunc("GET /{$}", h.handlePortalHTML)
+	// 公共网关健康与模型状态 (无需鉴权，脱敏安全)
+	h.mux.HandleFunc("GET /ui/public/status", h.handlePublicStatus)
+
+	// 管理控制台入口 (原控制台移至 /console 及 /dashboard)
+	h.mux.HandleFunc("GET /console", h.handleDashboardHTML)
+	h.mux.HandleFunc("GET /console/", h.handleDashboardHTML)
+	h.mux.HandleFunc("GET /dashboard", h.handleDashboardHTML)
+	h.mux.HandleFunc("GET /dashboard/", h.handleDashboardHTML)
+
 	h.mux.HandleFunc("POST /ui/auth/login", h.handleWebLogin)
 	h.mux.HandleFunc("POST /ui/auth/logout", h.handleWebLogout)
 	h.mux.HandleFunc("POST /ui/auth/register", h.handleWebRegister)
@@ -83,13 +96,52 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/dsh/export", h.withWebAuth(h.handleDshExport))
 }
 
-func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
+func (h *Handler) handlePortalHTML(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path != "/" {
 		http.NotFound(w, r)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Write([]byte(portalHTML))
+}
+
+func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(dashboardHTML))
+}
+
+func (h *Handler) handlePublicStatus(w http.ResponseWriter, r *http.Request) {
+	total, healthy := 0, 0
+	if h.cfg.Pool != nil {
+		total, healthy, _, _, _ = h.cfg.Pool.CountsDetailed()
+	}
+	modelsCount := 15
+	if h.cfg.Upstream != nil {
+		modelsCount = len(h.modelList())
+	}
+
+	cnServable := false
+	globalServable := false
+	if h.cfg.Pool != nil {
+		cnServable = h.cfg.Pool.ServableForRealm("cn")
+		globalServable = h.cfg.Pool.ServableForRealm("global")
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"service":      ServiceName,
+		"version":      CurrentVersion,
+		"status":       "online",
+		"models_count": modelsCount,
+		"dual_realm": map[string]bool{
+			"cn":     cnServable,
+			"global": globalServable,
+		},
+		"capacity": map[string]any{
+			"ready":   healthy > 0,
+			"healthy": healthy,
+			"total":   total,
+		},
+	})
 }
 
 // isAccountOwnedBy 判定账号是否归属于当前用户（是否具有管理和删除权限）。

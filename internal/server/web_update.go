@@ -12,6 +12,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"workbuddy2api/internal/usermgr"
 )
 
 func isDockerEnvironment() bool {
@@ -142,6 +144,12 @@ func (h *Handler) handleSystemUpdateCheck(w http.ResponseWriter, r *http.Request
 var updateLock sync.Mutex
 
 func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足，仅管理员可执行系统升级"})
+		return
+	}
+
 	if !updateLock.TryLock() {
 		writeJSON(w, http.StatusConflict, map[string]any{
 			"error": "已有升级任务正在进行中，请勿重复操作",

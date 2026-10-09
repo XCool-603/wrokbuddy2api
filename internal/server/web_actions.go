@@ -12,6 +12,7 @@ import (
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/logfmt"
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
 
 func (h *Handler) handleAccountAdmin(w http.ResponseWriter, r *http.Request) {
@@ -339,6 +340,12 @@ func (h *Handler) savePersistentSetting(key, val string) {
 }
 
 func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足：仅管理员可修改全局主 API Key"})
+		return
+	}
+
 	var req struct {
 		APIKey string `json:"api_key"`
 	}

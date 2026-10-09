@@ -138,6 +138,12 @@ func (m *Manager) Authenticate(username, password string) (*User, error) {
 		return nil, errors.New("账号已被管理员禁用")
 	}
 
+	// 如果管理员密码为空（单机免密模式），且用户名为 admin，免密放行
+	if u.PasswordHash == "" && (u.Role == RoleAdmin || u.Username == "admin" || u.ID == "u_admin") {
+		copied := *u
+		return &copied, nil
+	}
+
 	expectedHash := hashPassword(password, u.Salt)
 	if subtle.ConstantTimeCompare([]byte(u.PasswordHash), []byte(expectedHash)) != 1 {
 		return nil, errors.New("用户不存在或密码错误")
@@ -290,10 +296,10 @@ func (m *Manager) ResetUserAPIKey(username string) (string, error) {
 }
 
 // ChangePassword 修改用户密码。
+// 若管理员 (RoleAdmin / admin) 传入 newPassword 为空字符串，则清空密码（恢复免密模式）。
+// 普通用户或设置新密码时，密码长度须至少 6 位。
 func (m *Manager) ChangePassword(username, oldPassword, newPassword string, bypassOld bool) error {
-	if len(newPassword) < 6 {
-		return errors.New("新密码长度至少 6 位")
-	}
+	newPassword = strings.TrimSpace(newPassword)
 
 	m.mu.Lock()
 	defer m.mu.Unlock()
@@ -303,16 +309,32 @@ func (m *Manager) ChangePassword(username, oldPassword, newPassword string, bypa
 		return errors.New("用户不存在")
 	}
 
-	if !bypassOld {
+	isAdmin := u.Role == RoleAdmin || u.Username == "admin" || u.ID == "u_admin"
+
+	if newPassword == "" {
+		if !isAdmin {
+			return errors.New("普通用户密码不可为空，长度至少 6 位")
+		}
+		// 管理员允许留空以清除密码并恢复免密模式
+	} else if len(newPassword) < 6 {
+		return errors.New("新密码长度至少 6 位（若需清除密码恢复免密请留空）")
+	}
+
+	if !bypassOld && u.PasswordHash != "" {
 		expectedHash := hashPassword(oldPassword, u.Salt)
 		if subtle.ConstantTimeCompare([]byte(u.PasswordHash), []byte(expectedHash)) != 1 {
 			return errors.New("原密码错误")
 		}
 	}
 
-	salt := generateRandomHex(16)
-	u.Salt = salt
-	u.PasswordHash = hashPassword(newPassword, salt)
+	if newPassword == "" {
+		u.PasswordHash = ""
+		u.Salt = ""
+	} else {
+		salt := generateRandomHex(16)
+		u.Salt = salt
+		u.PasswordHash = hashPassword(newPassword, salt)
+	}
 
 	if err := m.saveLocked(); err != nil {
 		log.Printf("WARN: [usermgr] 用户 %s 密码修改已在内存中生效，但落盘异常: %v", username, err)

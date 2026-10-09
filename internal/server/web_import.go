@@ -231,6 +231,10 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := h.getWebSessionUser(r)
+	if user == nil {
+		http.Error(w, "未登录", http.StatusUnauthorized)
+		return
+	}
 
 	w.Header().Set("Content-Type", "application/zip")
 	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=workbuddy2api_auths_backup_%s.zip", time.Now().Format("20060102_150405")))
