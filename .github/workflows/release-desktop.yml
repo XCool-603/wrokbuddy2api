@@ -34,21 +34,31 @@ jobs:
         run: |
           go build -trimpath -ldflags "-H windowsgui -s -w" -o workbuddy2api.exe ./cmd/server
           go build -trimpath -ldflags "-s -w" -o workbuddy2api-console.exe ./cmd/server
+          $env:CGO_ENABLED="0"; $env:GOOS="windows"; $env:GOARCH="arm64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-windows-arm64.exe ./cmd/server
 
       - name: Build Standalone Linux amd64 Binary
         run: |
           $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="amd64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-linux-amd64 ./cmd/server
-
-      - name: Build Standalone Linux arm64 Binary
-        run: |
           $env:CGO_ENABLED="0"; $env:GOOS="linux"; $env:GOARCH="arm64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-linux-arm64 ./cmd/server
+
+      - name: Build Standalone macOS (Darwin) Binaries
+        run: |
+          $env:CGO_ENABLED="0"; $env:GOOS="darwin"; $env:GOARCH="amd64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-darwin-amd64 ./cmd/server
+          $env:CGO_ENABLED="0"; $env:GOOS="darwin"; $env:GOARCH="arm64"; go build -trimpath -ldflags "-s -w" -o workbuddy2api-darwin-arm64 ./cmd/server
 
       # 1. 始终生成 GitHub Actions Artifact 下载产物 (在运行详情页最下方)
       - name: Upload Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: workbuddy2api-windows-amd64
-          path: workbuddy2api.exe
+          name: workbuddy2api-binaries
+          path: |
+            workbuddy2api.exe
+            workbuddy2api-console.exe
+            workbuddy2api-windows-arm64.exe
+            workbuddy2api-linux-amd64
+            workbuddy2api-linux-arm64
+            workbuddy2api-darwin-amd64
+            workbuddy2api-darwin-arm64
           if-no-files-found: error
 
       # 2. 无论手动点击还是推送 tag，都直接创建/更新 GitHub Releases 供任何人随时直接下载
@@ -56,13 +66,16 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || (inputs.release_tag != '' && inputs.release_tag || 'nightly') }}
-          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'WorkBuddy 2API 桌面最新构建 (Nightly)' }}
+          name: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || 'WorkBuddy 2API 全平台最新构建 (Nightly)' }}
           draft: false
           prerelease: ${{ !startsWith(github.ref, 'refs/tags/') }}
           files: |
             workbuddy2api.exe
             workbuddy2api-console.exe
+            workbuddy2api-windows-arm64.exe
             workbuddy2api-linux-amd64
             workbuddy2api-linux-arm64
+            workbuddy2api-darwin-amd64
+            workbuddy2api-darwin-arm64
             config.example.json
           generate_release_notes: true

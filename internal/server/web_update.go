@@ -26,17 +26,58 @@ func isDockerEnvironment() bool {
 	return false
 }
 
+type releaseAsset struct {
+	Name               string `json:"name"`
+	BrowserDownloadURL string `json:"browser_download_url"`
+	Size               int64  `json:"size"`
+}
+
 type githubReleaseResp struct {
-	TagName     string `json:"tag_name"`
-	Name        string `json:"name"`
-	Body        string `json:"body"`
-	PublishedAt string `json:"published_at"`
-	HTMLURL     string `json:"html_url"`
-	Assets      []struct {
-		Name               string `json:"name"`
-		BrowserDownloadURL string `json:"browser_download_url"`
-		Size               int64  `json:"size"`
-	} `json:"assets"`
+	TagName     string         `json:"tag_name"`
+	Name        string         `json:"name"`
+	Body        string         `json:"body"`
+	PublishedAt string         `json:"published_at"`
+	HTMLURL     string         `json:"html_url"`
+	Assets      []releaseAsset `json:"assets"`
+}
+
+// findMatchingAsset 跨平台精准匹配最新发行版二进制产物（支持 Windows x64/arm64、Linux amd64/arm64、macOS darwin amd64/arm64）
+func findMatchingAsset(assets []releaseAsset, goos, goarch string) (string, int64) {
+	var fallbackURL string
+	var fallbackSize int64
+
+	for _, a := range assets {
+		name := strings.ToLower(a.Name)
+		switch goos {
+		case "windows":
+			if goarch == "arm64" {
+				if strings.Contains(name, "windows-arm64") || strings.Contains(name, "win-arm64") {
+					return a.BrowserDownloadURL, a.Size
+				}
+			} else {
+				if name == "workbuddy2api.exe" {
+					return a.BrowserDownloadURL, a.Size
+				}
+			}
+			if strings.HasSuffix(name, ".exe") && fallbackURL == "" {
+				fallbackURL = a.BrowserDownloadURL
+				fallbackSize = a.Size
+			}
+		case "linux":
+			if goarch == "arm64" && strings.Contains(name, "linux-arm64") {
+				return a.BrowserDownloadURL, a.Size
+			} else if (goarch == "amd64" || goarch == "386") && strings.Contains(name, "linux-amd64") {
+				return a.BrowserDownloadURL, a.Size
+			}
+		case "darwin":
+			if goarch == "arm64" && strings.Contains(name, "darwin-arm64") {
+				return a.BrowserDownloadURL, a.Size
+			} else if (goarch == "amd64" || goarch == "386") && strings.Contains(name, "darwin-amd64") {
+				return a.BrowserDownloadURL, a.Size
+			}
+		}
+	}
+	return fallbackURL, fallbackSize
 }
 
 func fetchLatestRelease() (*githubReleaseResp, error) {
@@ -82,29 +123,7 @@ func (h *Handler) handleSystemUpdateCheck(w http.ResponseWriter, r *http.Request
 		hasUpdate = true
 	}
 
-	var downloadURL string
-	var assetSize int64
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
-
-	for _, a := range rel.Assets {
-		name := strings.ToLower(a.Name)
-		if goos == "windows" && strings.HasSuffix(name, ".exe") {
-			downloadURL = a.BrowserDownloadURL
-			assetSize = a.Size
-			break
-		} else if goos == "linux" {
-			if goarch == "arm64" && strings.Contains(name, "linux-arm64") {
-				downloadURL = a.BrowserDownloadURL
-				assetSize = a.Size
-				break
-			} else if goarch == "amd64" && strings.Contains(name, "linux-amd64") {
-				downloadURL = a.BrowserDownloadURL
-				assetSize = a.Size
-				break
-			}
-		}
-	}
+	downloadURL, assetSize := findMatchingAsset(rel.Assets, runtime.GOOS, runtime.GOARCH)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":         true,
@@ -139,29 +158,10 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var targetAssetURL string
-	goos := runtime.GOOS
-	goarch := runtime.GOARCH
-
-	for _, a := range rel.Assets {
-		name := strings.ToLower(a.Name)
-		if goos == "windows" && strings.HasSuffix(name, ".exe") {
-			targetAssetURL = a.BrowserDownloadURL
-			break
-		} else if goos == "linux" {
-			if goarch == "arm64" && strings.Contains(name, "linux-arm64") {
-				targetAssetURL = a.BrowserDownloadURL
-				break
-			} else if goarch == "amd64" && strings.Contains(name, "linux-amd64") {
-				targetAssetURL = a.BrowserDownloadURL
-				break
-			}
-		}
-	}
-
+	targetAssetURL, _ := findMatchingAsset(rel.Assets, runtime.GOOS, runtime.GOARCH)
 	if targetAssetURL == "" {
 		writeJSON(w, http.StatusNotFound, map[string]any{
-			"error": fmt.Sprintf("最新 Release 中未找到适用于当前系统平台 (%s/%s) 的安装包", goos, goarch),
+			"error": fmt.Sprintf("最新 Release 中未找到适用于当前系统平台 (%s/%s) 的安装包", runtime.GOOS, runtime.GOARCH),
 		})
 		return
 	}
