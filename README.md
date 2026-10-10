@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.18-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.19-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">

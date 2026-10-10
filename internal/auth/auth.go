@@ -363,23 +363,15 @@ func (a *Auth) RawUIDLocked() string {
 	return a.rawUIDLocked()
 }
 
-func (a *Auth) rawUIDLocked() string {
-	uid := a.UID
+// CleanRawUID 清理 UID 字符串上的域前缀、提供商前缀及 # 序号后缀，提取出纯净的原始 UID/Email。
+func CleanRawUID(uid string) string {
 	if uid == "" {
 		return ""
 	}
-	realm := a.realmLocked()
-	if strings.HasPrefix(uid, realm+"-") {
-		uid = strings.TrimPrefix(uid, realm+"-")
-	} else if strings.HasPrefix(uid, realm+":") {
-		uid = strings.TrimPrefix(uid, realm+":")
-	} else if strings.HasPrefix(uid, "cn-") || strings.HasPrefix(uid, "global-") {
-		if idx := strings.IndexByte(uid, '-'); idx != -1 {
-			uid = uid[idx+1:]
-		}
-	} else if strings.HasPrefix(uid, "cn:") || strings.HasPrefix(uid, "global:") {
-		if idx := strings.IndexByte(uid, ':'); idx != -1 {
-			uid = uid[idx+1:]
+	for _, p := range []string{"cn-", "global-", "cn:", "global:"} {
+		if strings.HasPrefix(strings.ToLower(uid), p) {
+			uid = uid[len(p):]
+			break
 		}
 	}
 	// 如果带有 provider 前缀（例如 "google-" 或 "twitter-"），去掉 provider 前缀
@@ -395,6 +387,21 @@ func (a *Auth) rawUIDLocked() string {
 	}
 	return uid
 }
+
+func (a *Auth) rawUIDLocked() string {
+	uid := a.UID
+	if uid == "" {
+		return ""
+	}
+	realm := a.realmLocked()
+	if strings.HasPrefix(uid, realm+"-") {
+		uid = strings.TrimPrefix(uid, realm+"-")
+	} else if strings.HasPrefix(uid, realm+":") {
+		uid = strings.TrimPrefix(uid, realm+":")
+	}
+	return CleanRawUID(uid)
+}
+
 
 // ParseJWTClaims 解析并提取 JWT Payload 中的 claims 字典。
 func ParseJWTClaims(token string) map[string]any {

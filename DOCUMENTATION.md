@@ -1,13 +1,13 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.18)
+# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.19)
 
 <p align="center">
   <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
-  双域容灾调度 · 多渠道同邮箱智能共存 · 赛博前台门户 · 原生桌面窗口 · 账号池多维轮询 · 熔断冷却自愈 · 视觉全模态 · DeepSeek Harness 智能体内嵌
+  双域容灾调度 · 多渠道同邮箱智能共存与严格去重 · 赛博前台门户 · 原生桌面窗口 · 账号池多维轮询 · 熔断冷却自愈 · 视觉全模态 · DeepSeek Harness 智能体内嵌
 </p>
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.18-blue?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.19-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -19,7 +19,7 @@
 ## 目录 (Table of Contents)
 
 - [1. 项目简介与核心定位](#1-项目简介与核心定位)
-- [2. 核心特性全览 (v1.2.18)](#2-核心特性全览-v1218)
+- [2. 核心特性全览 (v1.2.19)](#2-核心特性全览-v1219)
 - [3. 快速安装与多环境部署](#3-快速安装与多环境部署)
   - [3.1 方式一：Windows 原生桌面客户端（双击即用）](#31-方式一windows-原生桌面客户端双击即用)
   - [3.2 方式二：Docker / Docker Compose 一键部署（推荐服务器/NAS）](#32-方式二docker--docker-compose-一键部署推荐服务器nas)
@@ -74,7 +74,7 @@
 
 ---
 
-## 2. 核心特性全览 (v1.2.17)
+## 2. 核心特性全览 (v1.2.19)
 
 ```mermaid
 flowchart TD

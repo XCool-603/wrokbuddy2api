@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -217,6 +218,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	}
 
 	seenKey := make(map[string]bool)
+	seenAccount := make(map[string]bool)
 	accounts := make([]AccountItem, 0, len(files)+len(poolList))
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
@@ -227,10 +229,30 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		if err != nil {
 			continue
 		}
+		a.FilePath = f
+		if a.Provider() == "" {
+			base := strings.ToLower(filepath.Base(f))
+			if strings.Contains(base, "twitter") || strings.Contains(base, "-x-") {
+				a.SetProvider("twitter")
+			} else if strings.Contains(base, "google") {
+				a.SetProvider("google")
+			} else if strings.Contains(base, "github") {
+				a.SetProvider("github")
+			}
+		}
 
 		if !h.isAccountVisibleTo(a, user) {
 			continue
 		}
+
+		// 账号唯一身份指纹：realm + provider + rawUID
+		acctFingerprint := fmt.Sprintf("%s:%s:%s", a.Realm(), a.Provider(), strings.ToLower(a.RawUID()))
+		if seenAccount[acctFingerprint] {
+			// 磁盘上存在同一账号的历史冗余副本（如 -2.json），控制台去重绝不展示重复卡片
+			continue
+		}
+		seenAccount[acctFingerprint] = true
+
 		isMine := h.isAccountOwnedBy(a, user)
 
 		key := fmt.Sprintf("%s:%s", a.Realm(), a.UID)
@@ -282,6 +304,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			if matched.FilePath != "" {
 				seenKey[filepath.Base(matched.FilePath)] = true
 			}
+			matchedFP := fmt.Sprintf("%s:%s:%s", matched.Realm, matched.Provider, strings.ToLower(auth.CleanRawUID(matched.UID)))
+			seenAccount[matchedFP] = true
 		}
 		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
 		if item.Credits == 0 && a.AccessTokenValue() != "" {
@@ -301,6 +325,16 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		if authObj != nil {
 			rawKey := fmt.Sprintf("%s:%s", authObj.Realm(), authObj.RawUID())
 			if seenKey[rawKey] || seenKey[authObj.RawUID()] {
+				continue
+			}
+			fp := fmt.Sprintf("%s:%s:%s", authObj.Realm(), authObj.Provider(), strings.ToLower(authObj.RawUID()))
+			if seenAccount[fp] {
+				continue
+			}
+		} else {
+			clean := auth.CleanRawUID(p.UID)
+			fp := fmt.Sprintf("%s:%s:%s", p.Realm, p.Provider, strings.ToLower(clean))
+			if seenAccount[fp] {
 				continue
 			}
 		}
@@ -361,6 +395,24 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 		accounts = append(accounts, item)
 	}
+
+	// 最终全局防重保障：确保相同 UID 或相同 (realm, provider, rawUID) 的账号卡片绝不重复出现
+	dedupedAccounts := make([]AccountItem, 0, len(accounts))
+	finalSeenUID := make(map[string]bool)
+	finalSeenFP := make(map[string]bool)
+	for _, item := range accounts {
+		fp := fmt.Sprintf("%s:%s:%s", item.Realm, item.Provider, strings.ToLower(auth.CleanRawUID(item.UID)))
+		if finalSeenUID[item.UID] || (item.Provider != "" && finalSeenFP[fp]) {
+			continue
+		}
+		finalSeenUID[item.UID] = true
+		if item.Provider != "" {
+			finalSeenFP[fp] = true
+		}
+		dedupedAccounts = append(dedupedAccounts, item)
+	}
+	accounts = dedupedAccounts
+
 
 	// 状态统计：普通用户只统计属于自己的账号状态，管理员统计全局
 	statTotal, statHealthy, statCooling, statDisabled, statInFlight := total, healthy, cooling, disabled, inFlightFull

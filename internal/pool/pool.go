@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -318,8 +319,60 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 
+	// 0. 同账号归一去重：
+
+	// 若扫描结果中存在多个指向同一 (realm, provider, rawUID) 的冗余凭证文件（例如历史遗留的 -2.json 副本），
+	// 优先选取无序号后缀的主规范文件或最新凭证，剔除冗余项，绝不向账号池引入重复账号卡片！
+	dedupedAuths := make([]*auth.Auth, 0, len(auths))
+	bestMap := make(map[string]*auth.Auth)
+	for _, a := range auths {
+		if a.Provider() == "" {
+			dedupedAuths = append(dedupedAuths, a)
+			continue
+		}
+		fp := fmt.Sprintf("%s:%s:%s", a.Realm(), a.Provider(), strings.ToLower(a.RawUID()))
+		prev, exists := bestMap[fp]
+		if !exists {
+			bestMap[fp] = a
+			dedupedAuths = append(dedupedAuths, a)
+			continue
+		}
+		// 已存在同账号文件：判断哪个更佳
+		prevBase := filepath.Base(prev.FilePath)
+		curBase := filepath.Base(a.FilePath)
+		curIsDup := strings.Contains(curBase, "-2.") || strings.Contains(curBase, "-3.") || strings.Contains(curBase, "#")
+		prevIsDup := strings.Contains(prevBase, "-2.") || strings.Contains(prevBase, "-3.") || strings.Contains(prevBase, "#")
+
+		if prevIsDup && !curIsDup {
+			bestMap[fp] = a
+			for idx, it := range dedupedAuths {
+				if it == prev {
+					dedupedAuths[idx] = a
+					break
+				}
+			}
+			if prev.FilePath != "" && prev.FilePath != a.FilePath {
+				_ = os.Remove(prev.FilePath)
+			}
+		} else if curIsDup && !prevIsDup {
+			if a.FilePath != "" && a.FilePath != prev.FilePath {
+				_ = os.Remove(a.FilePath)
+			}
+		} else if a.ExpiresAt > prev.ExpiresAt {
+			bestMap[fp] = a
+			for idx, it := range dedupedAuths {
+				if it == prev {
+					dedupedAuths[idx] = a
+					break
+				}
+			}
+		}
+	}
+	auths = dedupedAuths
+
 	// 检测并隔离跨域同名 UID（防止同一个邮箱/UID 的国内版和国际版账号在池中相互覆盖）
 	rawRealmCounts := make(map[string]map[string]int, len(auths))
+
 	for _, a := range auths {
 		raw := a.RawUID()
 		r := a.Realm()
@@ -405,82 +458,105 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	}
 }
 
+// findEntryLocked 智能匹配池内已有的同账号条目：
+// 1. 精确匹配 UID (需同域且同 provider)
+// 2. 规范化前缀 UID 匹配（例如 realm-provider-rawUID）
+// 3. 全表比对：同域 + 相同 FilePath，或同域 + 同 provider + 同 RawUID
+func (p *Pool) findEntryLocked(a *auth.Auth) (*entry, string) {
+	if a == nil {
+		return nil, ""
+	}
+	// 1. 精确匹配
+	if e, ok := p.byUID[a.UID]; ok {
+		if e.a == nil || (e.a.Realm() == a.Realm() && (e.a.Provider() == "" || a.Provider() == "" || e.a.Provider() == a.Provider())) {
+			return e, a.UID
+		}
+	}
+	// 2. 规范前缀匹配
+	if a.Provider() != "" {
+		prefKey := a.Realm() + "-" + a.Provider() + "-" + a.RawUID()
+		if e, ok := p.byUID[prefKey]; ok {
+			return e, prefKey
+		}
+	}
+	// 3. 全表比对
+	cleanRaw := strings.ToLower(a.RawUID())
+	for k, e := range p.byUID {
+		if e.a == nil {
+			continue
+		}
+		if e.a.Realm() != a.Realm() {
+			continue
+		}
+		if a.FilePath != "" && e.a.FilePath != "" && a.FilePath == e.a.FilePath {
+			return e, k
+		}
+		eProv := e.a.Provider()
+		if a.Provider() != "" && eProv != "" && a.Provider() == eProv && cleanRaw != "" && strings.ToLower(e.a.RawUID()) == cleanRaw {
+			return e, k
+		}
+	}
+	return nil, ""
+}
+
 // upsertLocked 更新或插入单个账号；已存在则只换凭证、保留 credits/cooling 状态。
 // 调用方必须已持有 p.mu；Add 与 SyncToDir 共用此 upsert 逻辑。
 func (p *Pool) upsertLocked(a *auth.Auth) {
-	if e, ok := p.byUID[a.UID]; ok {
-		if e.a != nil && e.a.Realm() != a.Realm() {
-			// 跨域同名冲突：将旧条目与新条目按各自 realm 前缀独立隔离，绝不互相覆盖
-			oldRealm := e.a.Realm()
-			newRealm := a.Realm()
-			oldRaw := e.a.RawUID()
-			newRaw := a.RawUID()
+	if a == nil {
+		return
+	}
 
-			oldUID := e.a.UID
-			if !strings.HasPrefix(oldUID, oldRealm+"-") {
-				e.a.UID = oldRealm + "-" + oldRaw
-			}
-			delete(p.byUID, oldUID)
-			p.byUID[e.a.UID] = e
+	// 检查是否存在同名跨域条目（如国内版与国际版共用 alice@example.com）
+	if e, ok := p.byUID[a.UID]; ok && e.a != nil && e.a.Realm() != a.Realm() {
+		oldRealm := e.a.Realm()
+		newRealm := a.Realm()
+		oldRaw := e.a.RawUID()
+		newRaw := a.RawUID()
 
-			if !strings.HasPrefix(a.UID, newRealm+"-") {
-				a.UID = newRealm + "-" + newRaw
-			}
-			p.byUID[a.UID] = &entry{a: a}
-			return
+		oldUID := e.a.UID
+		if !strings.HasPrefix(oldUID, oldRealm+"-") {
+			e.a.UID = oldRealm + "-" + oldRaw
 		}
+		delete(p.byUID, oldUID)
+		p.byUID[e.a.UID] = e
 
-		// 同域判断：是否是同一个账号更新凭证或占位绑定？
-		isSame := false
-		if e.a == nil || e.a == a {
-			isSame = true
-		} else if (e.a.RefreshTokenValue() == "" && e.a.AccessTokenValue() == "") || (a.RefreshTokenValue() == "" && a.AccessTokenValue() == "") {
-			isSame = true
-		} else if e.a.RefreshTokenValue() != "" && a.RefreshTokenValue() != "" && e.a.RefreshTokenValue() == a.RefreshTokenValue() {
-			isSame = true
-		} else if e.a.AccessTokenValue() != "" && a.AccessTokenValue() != "" && e.a.AccessTokenValue() == a.AccessTokenValue() {
-			isSame = true
-		} else if e.a.FilePath != "" && a.FilePath != "" && e.a.FilePath == a.FilePath {
-			isSame = true
+		if !strings.HasPrefix(a.UID, newRealm+"-") {
+			a.UID = newRealm + "-" + newRaw
 		}
-
-		if isSame {
-			e.a = a // 相同账号或绑定凭证：更新凭证，保留 credits/cooling 等状态
-			return
-		}
-
-		// 同域同名但不同凭证（例如相同邮箱的 Google 与 Twitter 账号）：
-		// 隔离旧条目与新条目，绝不互相覆盖！
-		if e.a != nil && e.a.Provider() != "" {
-			oldPref := e.a.Realm() + "-" + e.a.Provider() + "-"
-			if !strings.HasPrefix(e.a.UID, oldPref) {
-				delete(p.byUID, e.a.UID)
-				e.a.UID = oldPref + e.a.RawUID()
-				p.byUID[e.a.UID] = e
-			}
-		}
-
-		if a.Provider() != "" {
-			newPref := a.Realm() + "-" + a.Provider() + "-"
-			if !strings.HasPrefix(a.UID, newPref) {
-				a.UID = newPref + a.RawUID()
-			}
-		}
-
-		if _, exists := p.byUID[a.UID]; exists {
-			idx := 2
-			for {
-				cand := fmt.Sprintf("%s#%d", a.UID, idx)
-				if _, exists := p.byUID[cand]; !exists {
-					a.UID = cand
-					break
-				}
-				idx++
-			}
-		}
-
 		p.byUID[a.UID] = &entry{a: a}
 		return
 	}
+
+	// 优先查找已有账号条目进行就地更新（保留 credits/cooling 状态）
+	if e, matchedKey := p.findEntryLocked(a); e != nil {
+		a.UID = matchedKey
+		if a.FilePath == "" && e.a != nil && e.a.FilePath != "" {
+			a.FilePath = e.a.FilePath
+		}
+		e.a = a
+		return
+	}
+
+	// 新账号加入：若具备提供商，分配规范化的唯一前缀 UID (例如 global-google-xxx)
+	if a.Provider() != "" {
+		pref := a.Realm() + "-" + a.Provider() + "-"
+		if !strings.HasPrefix(a.UID, pref) {
+			a.UID = pref + a.RawUID()
+		}
+	}
+
+	if _, exists := p.byUID[a.UID]; exists {
+		idx := 2
+		for {
+			cand := fmt.Sprintf("%s#%d", a.UID, idx)
+			if _, exists := p.byUID[cand]; !exists {
+				a.UID = cand
+				break
+			}
+			idx++
+		}
+	}
+
 	p.byUID[a.UID] = &entry{a: a}
 }
+
