@@ -7,11 +7,16 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.17-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
-  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-blue?style=flat-square">
-  <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-emerald?style=flat-square">
+  <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
+  <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=flat-square">
+</p>
+
+<p align="center">
+  👉 <b><a href="DOCUMENTATION.md">【点击查看：完整官方开发与用户手册 (DOCUMENTATION.md)】</a></b> 👈
 </p>
 
 ---
@@ -23,23 +28,23 @@
    - 所有逻辑（OAuth 登录授权、批量日常签到、领取国际版试用额度、账号管理）全部**在进程内（In-Process）原生实现**。
    - 单文件体积仅 ~9.5MB，随下随用，无任何外部环境依赖。
 
-2. **现代化原生桌面 GUI 视窗 & Web 管理中枢**
-   - Windows 下基于原生 Edge WebView2 驱动，采用 Windows GUI 模式编译（`-H windowsgui`）。
-   - **双击运行即直接弹出 1280x820 桌面客户端窗口**，完全没有黑框命令行控制台干扰。
-   - 内嵌重构升级的现代深色管理控制台：
-     - **实时可观测性**：账号健康度、在途并发、积分实时消耗、近 14 日历史请求分析与分模型耗时/命中率透视。
-     - **一键全功能运维**：一键授权登录、批量签到、国际版试用额度领取、手动导入/删除/停用。
-     - **智能冷却与一键解除**：倒计时透明展示（如 `限流冷却中 (45s)`、限流模型透视），支持**一键「解除冷却」**秒级重回选号池。
-     - **友好授权流程**：OAuth 授权弹窗增设底部取消/关闭按钮与精准错误透出，防止超时假死。
+2. **赛博炫酷前台门户 & 现代化原生桌面 GUI / Web 管理中枢**
+   - **全新前台极客门户 (`/`)**：琉璃毛玻璃设计，实时透出服务脱敏健康指标、就绪账号容量、双域可达性与模型清单，优雅对外展示并支持一键复制代码。
+   - **运维控制中枢 (`/console` 或 `/dashboard`)**：全功能深色控制台收拢于独立路径，提供全维度流量分析与账号运维。
+   - **Windows 原生 Edge WebView2 驱动**：Windows GUI 模式编译（`-H windowsgui`），**双击直接弹出 1280x820 桌面窗口**，无黑框命令行干扰。
+   - **一键全功能运维**：一键授权登录、批量日常签到、国际版试用加速包领取、手动导入/删除/停用。
+   - **智能冷却与一键解除**：倒计时透明展示（如 `限流冷却中 (45s)`、限流模型透视），支持**一键「解除冷却」**秒级重回选号池。
+   - **友好授权流程**：OAuth 授权弹窗增设底部取消/关闭按钮与精准错误透出，防止超时假死。
    - 关闭桌面窗口即自动优雅停机并持久化保存数据状态。
 
-3. **用户角色与 API Key 资源隔离权限系统 (Multi-Tenant & RBAC)**
-   - **多用户全生命周期**：支持管理员后台增删改查用户、重置用户专属 API Key、修改密码与角色权限。
+3. **安全防御体系与多租户权限系统 (Security & Multi-Tenant RBAC)**
+   - **单机免密 vs 密码保护模式**：支持一键设置管理密码保护控制台；新密码至少 6 位，留空自动恢复单机免密，改密严格核验原密码。
+   - **防暴力破解与网络安全加固**：单 IP 5 分钟内连续 5 次输错密码自动锁定 5 分钟；全站注入标准安全响应头（`nosniff`、`SAMEORIGIN` 等）。
+   - **多用户全生命周期**：支持管理员后台增删改查租户、重置用户专属 API Key、修改密码与角色权限。
    - **双重角色权限（Admin / User）**：
      - **管理员（Admin）**：全权调度全局所有账号池，查看全站流量流水与全部账号状态。
      - **普通用户（User）**：拥有独立专属的 API Key 凭证与账号池隔离，仅可查看和调度属于自己的私有账号或系统公共账号，不同用户会话互不串扰。
-   - **内存优先与磁盘容错自愈 (Memory-First)**：即使在容器卷或宿主机遭遇文件系统权限限制（如 `open data/users.json.tmp: permission denied`），新创建/注册的用户与 API Key 依然保证在内存中即时激活生效，外部 API 调用与控制台操作绝不受阻！
-   - **全站 Web 密码保护**：支持一键设置管理密码保护控制台，保障公网部署绝对安全。
+   - **内存优先与磁盘容错自愈 (Memory-First)**：即使在容器卷或宿主机遭遇文件系统权限限制，新创建/注册的用户与 API Key 依然保证在内存中即时激活生效，外部 API 调用与控制台操作绝不受阻！
 
 4. **全格式一键导入与凭证容错备份 (Batch & Multi-Format Import & Export)**
    - **全格式多文件导入**：支持同时拖拽或选中多个 `.json`、`.txt` 文本文件批量导入。
@@ -63,9 +68,9 @@
 6. **模型积分倍率透明化展示**
    - 模型目录、模型下拉选择器、API 请求列表及统计报表中，全链路透明展示各模型官方计费倍率（如 `x0.05`、`x0.29`、`x1.00`），助您精准把控账号积分开销。
 
-7. **双域自动适配（国内版 CN & 国际版 Global）**
-   - 完美适配国内版（`copilot.tencent.com` / `www.codebuddy.cn`）与国际版（`www.workbuddy.ai`）。
-   - 智能识别账号 Realm 域，自动按前缀路由或共享调度池，支持一键领取国际版试用加速包。
+7. **双域自动适配与同邮箱跨渠道隔离体系 (CN & Global / Google & Twitter)**
+   - 完美适配国内版（`copilot.tencent.com` / `www.codebuddy.cn`）与国际版（`www.workbuddy.ai`），支持自动前缀路由、跨域容灾与一键领取国际版试用。
+   - **同邮箱跨渠道彻底防覆盖 (v1.2.17)**：在国际版中，同一邮箱分别使用 Google 与 Twitter / X 等不同渠道登录时，系统自动识别渠道并分流保存（如 `workbuddy-global-google-xxx.json` 与 `workbuddy-global-twitter-xxx.json`），在内存调度池中分配独立实例、独立积分与并发计数，发包时向上游还原纯净原始邮箱，彻底消灭账号相互覆盖问题！
 
 8. **生产级流式中继与流量治理**
    - **全兼容 OpenAI 接口**：标准 `/v1/chat/completions` 与 `/v1/models`，支持流式 SSE 输出与思维链（DeepSeek Reasoning Content）自动注入。
@@ -355,6 +360,18 @@ curl -N http://127.0.0.1:7863/v1/chat/completions \
 - 若刚导入账号希望立即获得每日积分，可在 Web 管理控制台中点击 **「一键签到」** 手动即时触发。
 
 ---
+
+### Q6: 国际版（Global）同一邮箱登录 Google 和 Twitter 账号，会发生相互覆盖吗？
+- **完全不会发生覆盖 (v1.2.17 突破)**：
+  - 系统内置 `resolveAuthFilePath` 与登录提供商识别逻辑，为 Google 渠道自动生成 `workbuddy-global-google-xxx.json`，为 Twitter 渠道生成 `workbuddy-global-twitter-xxx.json`（无渠道时自动递增 `-2.json` 序号）；
+  - 内存调度池为同邮箱不同凭证分配独立槽位，各自独立计算在途并发与额度，转发请求时向官方发包纯净原始邮箱，两者稳定并行。
+
+---
+
+### Q7: 控制台设置或清除管理密码的规则是什么？
+- **新密码长度**：若设置新密码，长度**至少 6 位**；
+- **恢复免密模式**：若需清除密码恢复为单机免密模式，直接将**新密码输入框留空**并提交即可；
+- **旧密码核验**：若当前已有密码保护，修改或清除密码时必须输入正确的原管理密码。
 
 ## 🔒 隐私与安全性
 
