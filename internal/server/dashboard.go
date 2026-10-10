@@ -34,8 +34,8 @@ func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string) {
 	creditFetchMu.Unlock()
 
 	go func() {
-		if remain, _, _, _, err := h.cfg.Upstream.ResourceSummary(a); err == nil {
-			h.cfg.Pool.SetCredits(uid, remain)
+		if remain, expiring, _, _, err := h.cfg.Upstream.ResourceSummary(a); err == nil {
+			h.cfg.Pool.SetCreditsDetailed(uid, remain, expiring)
 		}
 	}()
 }
@@ -309,7 +309,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
 		if item.Credits == 0 && a.AccessTokenValue() != "" {
-			h.triggerAsyncCreditFetch(a, a.UID)
+			h.triggerAsyncCreditFetch(a, item.UID)
 		}
 		accounts = append(accounts, item)
 	}

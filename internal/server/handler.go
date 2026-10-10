@@ -105,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.19"
+const CurrentVersion = "v1.2.20"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -605,8 +605,13 @@ func (h *Handler) fetchDynamicModels() []upstream.ModelInfo {
 		dynamicModelsCache.RUnlock()
 		return out
 	}
-	// 失败负缓存：冷却期内不再请求上游。
+	// 失败负缓存：冷却期内不再请求上游，但若此前有成功拉取过的缓存，则优先返回陈旧缓存保底
 	if !dynamicModelsCache.lastFail.IsZero() && time.Since(dynamicModelsCache.lastFail) < modelsFetchFailCooldown {
+		if len(dynamicModelsCache.ids) > 0 {
+			out := dynamicModelsCache.ids
+			dynamicModelsCache.RUnlock()
+			return out
+		}
 		dynamicModelsCache.RUnlock()
 		return nil
 	}
@@ -617,7 +622,22 @@ func (h *Handler) fetchDynamicModels() []upstream.ModelInfo {
 	}
 	acct := h.cfg.Pool.PickExcludingForRealm(nil, "", "cn")
 	if acct == nil {
-		return nil
+		// 容错兜底：即使 CN 账号处于冷却期或被手动停用（不参与选号聊天），
+		// 查询模型元数据不消耗积分，依然可借用其凭证拉取模型列表，防止前台模型全部蒸发
+		for _, st := range h.cfg.Pool.List() {
+			if st.Realm == "cn" && !st.Disabled {
+				if a := h.cfg.Pool.AuthByUID(st.UID); a != nil && a.AccessTokenValue() != "" {
+					acct = a
+					break
+				}
+			}
+		}
+	}
+	if acct == nil {
+		dynamicModelsCache.RLock()
+		stale := dynamicModelsCache.ids
+		dynamicModelsCache.RUnlock()
+		return stale
 	}
 	infos, err := h.cfg.Upstream.FetchModels(acct)
 	if err != nil || len(infos) == 0 {
@@ -626,7 +646,11 @@ func (h *Handler) fetchDynamicModels() []upstream.ModelInfo {
 		// 健康的账号；models 拉取失败 ≠ 账号 chat 不可用。
 		dynamicModelsCache.Lock()
 		dynamicModelsCache.lastFail = time.Now()
+		stale := dynamicModelsCache.ids
 		dynamicModelsCache.Unlock()
+		if len(stale) > 0 {
+			return stale
+		}
 		return nil
 	}
 	dynamicModelsCache.Lock()

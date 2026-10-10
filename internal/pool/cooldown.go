@@ -18,7 +18,7 @@ import (
 func (p *Pool) SetCredits(uid string, credits int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		e.credits = credits
 		p.dirty.Store(true)
 	}
@@ -29,7 +29,7 @@ func (p *Pool) SetCredits(uid string, credits int64) {
 func (p *Pool) SetCreditsDetailed(uid string, credits, expiring int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		if expiring < 0 {
 			expiring = 0
 		}
@@ -53,7 +53,7 @@ func (p *Pool) SetCreditsDetailed(uid string, credits, expiring int64) {
 func (p *Pool) Cooldown(uid string, kind CoolKind, d time.Duration, reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		e.until = time.Now().Add(d)
 		e.coolKind = kind
 		e.reason = reason
@@ -81,7 +81,7 @@ func (p *Pool) Cooldown(uid string, kind CoolKind, d time.Duration, reason strin
 func (p *Pool) CooldownSoftForModel(uid string, base time.Duration, resetAt time.Time, model, reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		now := time.Now()
 		if !resetAt.IsZero() {
 			// 有上游重置时间：冷却截止 = min(resetAt, now+softRateMax)，不做指数放大。
@@ -129,8 +129,8 @@ func (p *Pool) BlockModelBackoff(uid, model, reason string) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return
 	}
 	now := time.Now()
@@ -166,8 +166,8 @@ func (p *Pool) BlockModelClear(uid, model string) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok || len(e.modelCooldowns) == 0 {
+	e := p.entryLocked(uid)
+	if e == nil || len(e.modelCooldowns) == 0 {
 		return
 	}
 	mc, exists := e.modelCooldowns[model]
@@ -198,7 +198,7 @@ func (p *Pool) BlockModelClear(uid, model string) {
 func (p *Pool) CooldownSoftRate(uid string, base time.Duration, resetAt time.Time, reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		now := time.Now()
 		if !resetAt.IsZero() {
 			e.until = p.cappedSoftUntilLocked(now, resetAt)

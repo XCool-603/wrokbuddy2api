@@ -225,9 +225,15 @@ func (p *Pool) entryLocked(uid string) *entry {
 	if e, ok := p.byUID[uid]; ok {
 		return e
 	}
-	for _, e := range p.byUID {
-		if e.a != nil && e.a.RawUID() == uid {
+	clean := strings.ToLower(auth.CleanRawUID(uid))
+	for k, e := range p.byUID {
+		if strings.ToLower(k) == strings.ToLower(uid) || strings.ToLower(auth.CleanRawUID(k)) == clean {
 			return e
+		}
+		if e.a != nil {
+			if strings.ToLower(e.a.RawUID()) == clean || strings.ToLower(auth.CleanRawUID(e.a.UID)) == clean {
+				return e
+			}
 		}
 	}
 	return nil
@@ -299,13 +305,9 @@ func (p *Pool) Add(a *auth.Auth) {
 func (p *Pool) Remove(uid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if _, ok := p.byUID[uid]; ok {
-		delete(p.byUID, uid)
-		p.saveLocked()
-		return
-	}
+	clean := strings.ToLower(auth.CleanRawUID(uid))
 	for k, e := range p.byUID {
-		if e.a != nil && e.a.RawUID() == uid {
+		if k == uid || strings.ToLower(k) == strings.ToLower(uid) || strings.ToLower(auth.CleanRawUID(k)) == clean || (e.a != nil && (strings.ToLower(e.a.RawUID()) == clean || strings.ToLower(auth.CleanRawUID(e.a.UID)) == clean)) {
 			delete(p.byUID, k)
 			p.saveLocked()
 			return
@@ -427,10 +429,18 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 		seenUIDMap[a.UID] = a
 	}
 
-	seen := make(map[string]bool, len(auths))
+	seen := make(map[string]bool, len(auths)*3)
+	cleanRawSet := make(map[string]bool, len(auths))
 	for _, a := range auths {
 		seen[a.UID] = true
+		seen[a.RawUID()] = true
+		seen[a.Realm()+"-"+a.RawUID()] = true
+		if a.Provider() != "" {
+			seen[a.Realm()+"-"+a.Provider()+"-"+a.RawUID()] = true
+		}
+		cleanRawSet[strings.ToLower(auth.CleanRawUID(a.UID))] = true
 		p.upsertLocked(a)
+		seen[a.UID] = true
 	}
 
 	// 防御性保护：若扫描结果为空且池中已有账号，避免因目录暂未就绪或挂载卷偶发延迟将全池误清空
@@ -440,10 +450,11 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	}
 
 	changed := false
-	for uid := range p.byUID {
-		if !seen[uid] {
+	for uid, e := range p.byUID {
+		clean := strings.ToLower(auth.CleanRawUID(uid))
+		if !seen[uid] && !cleanRawSet[clean] {
 			// 若该账号关联的凭证文件仍在磁盘上，不误删
-			if e := p.byUID[uid]; e != nil && e.a != nil && e.a.FilePath != "" {
+			if e != nil && e.a != nil && e.a.FilePath != "" {
 				if _, err := os.Stat(e.a.FilePath); err == nil {
 					continue
 				}
@@ -459,40 +470,66 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 }
 
 // findEntryLocked 智能匹配池内已有的同账号条目：
-// 1. 精确匹配 UID (需同域且同 provider)
-// 2. 规范化前缀 UID 匹配（例如 realm-provider-rawUID）
-// 3. 全表比对：同域 + 相同 FilePath，或同域 + 同 provider + 同 RawUID
+// 1. 精确匹配 UID (需同域且同 provider，或占位条目)
+// 2. 规范化前缀 UID 匹配（例如 realm-provider-rawUID 或 realm-rawUID）
+// 3. 全表比对：同域 + 相同 FilePath，或同域 + 同 provider + 同 RawUID，或占位条目同 RawUID
 func (p *Pool) findEntryLocked(a *auth.Auth) (*entry, string) {
 	if a == nil {
 		return nil, ""
 	}
+	cleanRaw := strings.ToLower(a.RawUID())
+
 	// 1. 精确匹配
 	if e, ok := p.byUID[a.UID]; ok {
-		if e.a == nil || (e.a.Realm() == a.Realm() && (e.a.Provider() == "" || a.Provider() == "" || e.a.Provider() == a.Provider())) {
+		if e.a == nil || e.a.AccessTokenValue() == "" || (e.a.Realm() == a.Realm() && (e.a.Provider() == "" || a.Provider() == "" || e.a.Provider() == a.Provider())) {
 			return e, a.UID
 		}
 	}
-	// 2. 规范前缀匹配
+	// 2. 规范前缀候选匹配
+	candidates := []string{
+		a.Realm() + "-" + a.RawUID(),
+		a.Realm() + ":" + a.RawUID(),
+	}
 	if a.Provider() != "" {
-		prefKey := a.Realm() + "-" + a.Provider() + "-" + a.RawUID()
-		if e, ok := p.byUID[prefKey]; ok {
-			return e, prefKey
+		candidates = append([]string{a.Realm() + "-" + a.Provider() + "-" + a.RawUID()}, candidates...)
+	}
+	for _, cand := range candidates {
+		if e, ok := p.byUID[cand]; ok {
+			if e.a == nil || e.a.AccessTokenValue() == "" || e.a.Realm() == a.Realm() {
+				return e, cand
+			}
 		}
 	}
 	// 3. 全表比对
-	cleanRaw := strings.ToLower(a.RawUID())
 	for k, e := range p.byUID {
 		if e.a == nil {
 			continue
 		}
+		// 若为从 state.json 恢复出的占位条目（尚未绑定实际 Token），优先认领绑定！
+		if e.a.AccessTokenValue() == "" {
+			if strings.ToLower(k) == strings.ToLower(a.UID) ||
+				strings.ToLower(auth.CleanRawUID(k)) == cleanRaw ||
+				strings.ToLower(e.a.RawUID()) == cleanRaw {
+				return e, k
+			}
+		}
 		if e.a.Realm() != a.Realm() {
 			continue
 		}
-		if a.FilePath != "" && e.a.FilePath != "" && a.FilePath == e.a.FilePath {
-			return e, k
+		if a.FilePath != "" && e.a.FilePath != "" {
+			if a.FilePath == e.a.FilePath {
+				return e, k
+			}
+			continue
+		}
+		if a.AccessTokenValue() != "" && e.a.AccessTokenValue() != "" && a.AccessTokenValue() != e.a.AccessTokenValue() {
+			continue
 		}
 		eProv := e.a.Provider()
 		if a.Provider() != "" && eProv != "" && a.Provider() == eProv && cleanRaw != "" && strings.ToLower(e.a.RawUID()) == cleanRaw {
+			return e, k
+		}
+		if (a.Provider() == "" || eProv == "") && cleanRaw != "" && strings.ToLower(e.a.RawUID()) == cleanRaw {
 			return e, k
 		}
 	}
@@ -507,7 +544,8 @@ func (p *Pool) upsertLocked(a *auth.Auth) {
 	}
 
 	// 检查是否存在同名跨域条目（如国内版与国际版共用 alice@example.com）
-	if e, ok := p.byUID[a.UID]; ok && e.a != nil && e.a.Realm() != a.Realm() {
+	// 注意：仅当已存在条目拥有真实有效凭证（AccessTokenValue() != ""）且域确实不同时，才视为跨域冲突进行拆分！
+	if e, ok := p.byUID[a.UID]; ok && e.a != nil && e.a.AccessTokenValue() != "" && e.a.Realm() != a.Realm() {
 		oldRealm := e.a.Realm()
 		newRealm := a.Realm()
 		oldRaw := e.a.RawUID()
@@ -529,7 +567,10 @@ func (p *Pool) upsertLocked(a *auth.Auth) {
 
 	// 优先查找已有账号条目进行就地更新（保留 credits/cooling 状态）
 	if e, matchedKey := p.findEntryLocked(a); e != nil {
-		a.UID = matchedKey
+		if matchedKey != a.UID {
+			delete(p.byUID, matchedKey)
+			p.byUID[a.UID] = e
+		}
 		if a.FilePath == "" && e.a != nil && e.a.FilePath != "" {
 			a.FilePath = e.a.FilePath
 		}

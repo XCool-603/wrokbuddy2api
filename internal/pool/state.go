@@ -17,7 +17,7 @@ import (
 func (p *Pool) Disable(uid, reason string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		p.disableLocked(e, reason)
 	}
 }
@@ -34,8 +34,8 @@ func (p *Pool) Disable(uid, reason string) {
 func (p *Pool) NoteSessionDead(uid string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return false
 	}
 	e.sessionDeadFails++
@@ -53,7 +53,7 @@ func (p *Pool) NoteSessionDead(uid string) bool {
 func (p *Pool) ClearSessionDead(uid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok && e.sessionDeadFails != 0 {
+	if e := p.entryLocked(uid); e != nil && e.sessionDeadFails != 0 {
 		e.sessionDeadFails = 0
 		p.dirty.Store(true)
 	}
@@ -69,8 +69,8 @@ func (p *Pool) ClearSessionDead(uid string) {
 func (p *Pool) ReviveDisabled(uid string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok || !e.disabled {
+	e := p.entryLocked(uid)
+	if e == nil || !e.disabled {
 		return false
 	}
 	e.disabled = false
@@ -89,8 +89,8 @@ func (p *Pool) ReviveDisabled(uid string) bool {
 func (p *Pool) SetManualDisabled(uid string, disabled bool, reason string) (found, changed bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return false, false
 	}
 	if e.manualDisabled == disabled && (!disabled || e.manualReason == reason) {
@@ -104,8 +104,8 @@ func (p *Pool) SetManualDisabled(uid string, disabled bool, reason string) (foun
 func (p *Pool) ManualDisabledState(uid string) (disabled bool, reason string, ok bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	e, found := p.byUID[uid]
-	if !found {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return false, "", false
 	}
 	return e.manualDisabled, e.manualReason, true
@@ -119,7 +119,7 @@ func (p *Pool) ManualDisabledState(uid string) (disabled bool, reason string, ok
 func (p *Pool) ReenableIfCredits(uid string, remain int64) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		if remain > 0 && !e.disabled {
 			p.reviveCoolingLocked(e, remain)
 		} else {
@@ -135,7 +135,7 @@ func (p *Pool) ReenableIfCredits(uid string, remain int64) {
 func (p *Pool) NoteError(uid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		e.errTotal++
 		e.lastErr = time.Now()
 		p.recordBreakerFailureLocked(e)
@@ -152,8 +152,8 @@ func (p *Pool) NoteError(uid string) {
 func (p *Pool) ModelCost(uid, model string) (per1k float64, ok bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	e, exists := p.byUID[uid]
-	if !exists {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return 0, false
 	}
 	mc, ok := e.modelCostOf(model, time.Now())
@@ -186,8 +186,8 @@ func (p *Pool) NoteModelCost(uid, model string, credit float64, tokens int) {
 	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return
 	}
 	// P1-A credits 签到外回写：credit 是本次请求的**消耗量**（上游 usage.credit，
@@ -246,7 +246,7 @@ func (p *Pool) NoteModelCost(uid, model string, credit float64, tokens int) {
 func (p *Pool) NoteSuccess(uid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		e.successCount++
 		e.lastSuccess = time.Now()
 		e.fails = 0
@@ -264,11 +264,11 @@ func (p *Pool) NoteSuccess(uid string) {
 func (p *Pool) Status(uid string) (Status, bool) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return Status{}, false
 	}
-	return p.statusOf(uid, e), true
+	return p.statusOf(e.a.UID, e), true
 }
 
 // AuthByUID 返回账号的完整凭证（给调度器/运维接口用）。

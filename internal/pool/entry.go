@@ -437,6 +437,10 @@ type stateAccount struct {
 	// 陈旧价格不复活）；恢复侧剔除非法值（负 per1k/零 LastSeen 的结构破损条目）。
 	// 与运行态 modelCostEntry 字段一一对应（单一表示，内存与落盘同构不搞两套）。
 	ModelCosts map[string]stateModelCost `json:"model_costs,omitempty"`
+	// Realm 账号所属域（"cn" 或 "global"），持久化供重启占位条目正确还原 Realm。
+	Realm string `json:"realm,omitempty"`
+	// RawUID 原始用户 ID（无域/提供商修饰），供重启对齐。
+	RawUID string `json:"raw_uid,omitempty"`
 }
 
 // stateModelCooldown 单个 (账号, 模型) 的 6004 独立冷却持久化记录，与运行态

@@ -165,9 +165,16 @@ func (p *Pool) applyAccountsLocked(accounts map[string]stateAccount) {
 			expiring = s.Credits
 		}
 		// （旧文件的 success_ema/error_ema 字段在 stateAccount 已删除，读取时被
-		// JSON 解码自然忽略——无害遗留，不反推不迁移；成功率 EMA 因子已删。）
+		placeholder := &auth.Auth{UID: uid}
+		if s.Realm != "" {
+			placeholder.SetRealm(s.Realm)
+		} else if strings.HasPrefix(strings.ToLower(uid), "global-") || strings.HasPrefix(strings.ToLower(uid), "global:") {
+			placeholder.SetRealm("global")
+		} else if strings.HasPrefix(strings.ToLower(uid), "cn-") || strings.HasPrefix(strings.ToLower(uid), "cn:") {
+			placeholder.SetRealm("cn")
+		}
 		e := &entry{
-			a:                &auth.Auth{UID: uid}, // placeholder，Add 时会换成完整凭证
+			a:                placeholder, // placeholder，Add 时会换成完整凭证
 			credits:          s.Credits,
 			disabled:         s.Disabled,
 			reason:           s.Reason,
@@ -432,6 +439,8 @@ func (p *Pool) stateOverviewLocked() stateFile {
 			CreditsExpiring:  e.creditsExpiring,
 			ModelCooldowns:   mcs,
 			ModelCosts:       mcosts,
+			Realm:            e.a.Realm(),
+			RawUID:           e.a.RawUID(),
 		}
 	}
 	return sf
