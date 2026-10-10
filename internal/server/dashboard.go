@@ -189,6 +189,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		UID               string                  `json:"uid"`
 		Realm             string                  `json:"realm"`
 		Nickname          string                  `json:"nickname"`
+		Provider          string                  `json:"provider,omitempty"`
 		Filename          string                  `json:"filename"`
 		Credits           int64                   `json:"credits"`
 		Disabled          bool                    `json:"disabled"`
@@ -210,6 +211,9 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	for _, p := range poolList {
 		poolMap[p.UID] = p
 		poolMap[p.Realm+":"+p.UID] = p
+		if p.FilePath != "" {
+			poolMap[filepath.Base(p.FilePath)] = p
+		}
 	}
 
 	seenKey := make(map[string]bool)
@@ -234,17 +238,21 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		seenKey[key] = true
 		seenKey[rawKey] = true
 		seenKey[a.UID] = true
+		seenKey[filepath.Base(f)] = true
 
 		item := AccountItem{
 			UID:         a.UID,
 			Realm:       a.Realm(),
 			Nickname:    a.Nickname,
+			Provider:    a.Provider(),
 			Filename:    filepath.Base(f),
 			Owner:       a.Owner,
 			IsMyAccount: isMine,
 		}
 		var matched *pool.Status
-		if p, ok := poolMap[a.UID]; ok {
+		if p, ok := poolMap[filepath.Base(f)]; ok {
+			matched = &p
+		} else if p, ok := poolMap[a.UID]; ok {
 			matched = &p
 		} else if p, ok := poolMap[key]; ok {
 			matched = &p
@@ -254,6 +262,9 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 
 		if matched != nil {
 			item.UID = matched.UID
+			if matched.Provider != "" {
+				item.Provider = matched.Provider
+			}
 			item.Credits = matched.Credits
 			item.Disabled = matched.Disabled
 			item.DisabledReason = matched.DisabledReason
@@ -268,6 +279,9 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 
 			seenKey[matched.UID] = true
 			seenKey[matched.Realm+":"+matched.UID] = true
+			if matched.FilePath != "" {
+				seenKey[filepath.Base(matched.FilePath)] = true
+			}
 		}
 		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
 		if item.Credits == 0 && a.AccessTokenValue() != "" {
@@ -318,10 +332,15 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 
 		seenKey[poolKey] = true
 		seenKey[p.UID] = true
+		prov := p.Provider
+		if prov == "" && authObj != nil {
+			prov = authObj.Provider()
+		}
 		item := AccountItem{
 			UID:               p.UID,
 			Realm:             realm,
 			Nickname:          nickname,
+			Provider:          prov,
 			Filename:          filename,
 			Credits:           p.Credits,
 			Disabled:          p.Disabled,

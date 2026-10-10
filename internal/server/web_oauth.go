@@ -214,6 +214,10 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		UID          string `json:"uid"`
 		EnterpriseID string `json:"enterpriseId"`
 		Nickname     string `json:"nickname"`
+		Provider     string `json:"provider"`
+		IDP          string `json:"idp"`
+		LoginType    string `json:"loginType"`
+		Type         string `json:"type"`
 	}
 	acctHeaders := func(req *http.Request) {
 		headers(req)
@@ -226,8 +230,18 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	uid := strings.TrimSpace(acct.UID)
 	nickname := strings.TrimSpace(acct.Nickname)
 	entID := strings.TrimSpace(acct.EnterpriseID)
+	provider := auth.NormalizeProvider(acct.Provider)
+	if provider == "" {
+		provider = auth.NormalizeProvider(acct.IDP)
+	}
+	if provider == "" {
+		provider = auth.NormalizeProvider(acct.LoginType)
+	}
+	if provider == "" {
+		provider = auth.NormalizeProvider(acct.Type)
+	}
 
-	// 若未从 account 接口获取到 uid/nickname，尝试从 JWT claims 中解析补充
+	// 若未从 account 接口获取到 uid/nickname/provider，尝试从 JWT claims 中解析补充
 	if claims := auth.ParseJWTClaims(tok.AccessToken); claims != nil {
 		if uid == "" {
 			if sub, ok := claims["sub"].(string); ok && sub != "" {
@@ -241,6 +255,14 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 				nickname = name
 			} else if nick, ok := claims["nickname"].(string); ok && nick != "" {
 				nickname = nick
+			}
+		}
+		if provider == "" {
+			for _, k := range []string{"identity_provider", "idp", "federated_identity_provider", "auth_provider", "provider"} {
+				if p, ok := claims[k].(string); ok && p != "" {
+					provider = auth.NormalizeProvider(p)
+					break
+				}
 			}
 		}
 	}
@@ -260,31 +282,35 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		ownerID = user.ID
 	}
 
+	docAccount := map[string]any{
+		"uid":          uid,
+		"enterpriseId": entID,
+		"nickname":     nickname,
+	}
+	if provider != "" {
+		docAccount["provider"] = provider
+	}
+	docAuth := map[string]any{
+		"accessToken":  tok.AccessToken,
+		"refreshToken": tok.RefreshToken,
+		"expiresAt":    expiresAt,
+		"domain":       tok.Domain,
+		"realm":        req.Realm,
+	}
+	if provider != "" {
+		docAuth["provider"] = provider
+	}
+
 	doc := map[string]any{
-		"account": map[string]any{
-			"uid":          uid,
-			"enterpriseId": entID,
-			"nickname":     nickname,
-		},
-		"auth": map[string]any{
-			"accessToken":  tok.AccessToken,
-			"refreshToken": tok.RefreshToken,
-			"expiresAt":    expiresAt,
-			"domain":       tok.Domain,
-			"realm":        req.Realm,
-		},
-		"owner": ownerID,
+		"account": docAccount,
+		"auth":    docAuth,
+		"owner":   ownerID,
 	}
 	docBytes, _ := json.MarshalIndent(doc, "", "  ")
 
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
-	safeUID := auth.SanitizeFilename(uid)
-	filename := fmt.Sprintf("workbuddy-%s-%s.json", req.Realm, safeUID)
-	if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(req.Realm)+"-") {
-		filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
-	}
-	targetFile := filepath.Join(authDir, filename)
+	targetFile := resolveAuthFilePath(authDir, req.Realm, uid, provider, tok.AccessToken, tok.RefreshToken)
 	if err := os.WriteFile(targetFile, docBytes, 0644); err != nil {
 		log.Printf("WARN: [oauth] 保存授权文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
 	}
@@ -292,6 +318,9 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	// 立即将新账号同步入账号池，清除历史冷却与禁用状态
 	if newAuth, err := auth.Parse(docBytes); err == nil {
 		newAuth.FilePath = targetFile
+		if provider != "" && newAuth.Provider() == "" {
+			newAuth.SetProvider(provider)
+		}
 		if h.cfg.Pool != nil {
 			h.cfg.Pool.Add(newAuth)
 			h.cfg.Pool.ReviveDisabled(newAuth.UID)
@@ -306,8 +335,8 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	log.Printf("INFO: [oauth] successfully authenticated account: uid=%s, nickname=%s, realm=%s, owner=%s, file=%s",
-		uid, nickname, req.Realm, ownerID, filepath.Base(targetFile))
+	log.Printf("INFO: [oauth] successfully authenticated account: uid=%s, nickname=%s, provider=%s, realm=%s, owner=%s, file=%s",
+		uid, nickname, provider, req.Realm, ownerID, filepath.Base(targetFile))
 
 	// 清理当前状态
 	oauthSessionMu.Lock()
@@ -323,5 +352,6 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		"filename": filepath.Base(targetFile),
 		"nickname": nickname,
 		"realm":    req.Realm,
+		"provider": provider,
 	})
 }

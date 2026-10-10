@@ -295,16 +295,18 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 
 	_ = os.Remove(target)
 	if h.cfg.Pool != nil {
-		if deletedUID != "" {
-			h.cfg.Pool.Remove(deletedUID)
-		}
+		removed := false
 		for _, st := range h.cfg.Pool.List() {
 			if a := h.cfg.Pool.AuthByUID(st.UID); a != nil {
 				if a.FilePath == target || filepath.Base(a.FilePath) == req.Filename {
 					h.cfg.Pool.Remove(st.UID)
+					removed = true
 					break
 				}
 			}
+		}
+		if !removed && deletedUID != "" {
+			h.cfg.Pool.Remove(deletedUID)
 		}
 	}
 

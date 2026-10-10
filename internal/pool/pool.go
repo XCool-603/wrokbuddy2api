@@ -3,6 +3,7 @@
 package pool
 
 import (
+	"fmt"
 	"log"
 	"os"
 	"strings"
@@ -337,6 +338,42 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 		}
 	}
 
+	// 进一步隔离同域同名 UID（例如国际版下相同邮箱的 Google 与 Twitter 账号）：
+	// 为同一域下共享相同 rawUID 的不同账号分配唯一且稳定的 UID 键，绝不相互覆盖
+	rawRealmSeq := make(map[string]int)
+	seenUIDMap := make(map[string]*auth.Auth)
+	for _, a := range auths {
+		rawKey := fmt.Sprintf("%s:%s", a.Realm(), a.RawUID())
+		if rawRealmCounts[a.RawUID()][a.Realm()] > 1 {
+			rawRealmSeq[rawKey]++
+			seq := rawRealmSeq[rawKey]
+			provider := a.Provider()
+			if provider != "" {
+				prefix := a.Realm() + "-" + provider + "-"
+				if !strings.HasPrefix(a.UID, prefix) {
+					a.UID = prefix + a.RawUID()
+				}
+			} else if seq > 1 {
+				suffix := fmt.Sprintf("#%d", seq)
+				if !strings.HasSuffix(a.UID, suffix) {
+					a.UID = a.UID + suffix
+				}
+			}
+		}
+		if existing, dup := seenUIDMap[a.UID]; dup && existing != a {
+			idx := 2
+			for {
+				cand := fmt.Sprintf("%s#%d", a.UID, idx)
+				if _, exists := seenUIDMap[cand]; !exists {
+					a.UID = cand
+					break
+				}
+				idx++
+			}
+		}
+		seenUIDMap[a.UID] = a
+	}
+
 	seen := make(map[string]bool, len(auths))
 	for _, a := range auths {
 		seen[a.UID] = true
@@ -392,7 +429,57 @@ func (p *Pool) upsertLocked(a *auth.Auth) {
 			p.byUID[a.UID] = &entry{a: a}
 			return
 		}
-		e.a = a // 相同 realm：保留 credits/cooling 状态
+
+		// 同域判断：是否是同一个账号更新凭证或占位绑定？
+		isSame := false
+		if e.a == nil || e.a == a {
+			isSame = true
+		} else if (e.a.RefreshTokenValue() == "" && e.a.AccessTokenValue() == "") || (a.RefreshTokenValue() == "" && a.AccessTokenValue() == "") {
+			isSame = true
+		} else if e.a.RefreshTokenValue() != "" && a.RefreshTokenValue() != "" && e.a.RefreshTokenValue() == a.RefreshTokenValue() {
+			isSame = true
+		} else if e.a.AccessTokenValue() != "" && a.AccessTokenValue() != "" && e.a.AccessTokenValue() == a.AccessTokenValue() {
+			isSame = true
+		} else if e.a.FilePath != "" && a.FilePath != "" && e.a.FilePath == a.FilePath {
+			isSame = true
+		}
+
+		if isSame {
+			e.a = a // 相同账号或绑定凭证：更新凭证，保留 credits/cooling 等状态
+			return
+		}
+
+		// 同域同名但不同凭证（例如相同邮箱的 Google 与 Twitter 账号）：
+		// 隔离旧条目与新条目，绝不互相覆盖！
+		if e.a != nil && e.a.Provider() != "" {
+			oldPref := e.a.Realm() + "-" + e.a.Provider() + "-"
+			if !strings.HasPrefix(e.a.UID, oldPref) {
+				delete(p.byUID, e.a.UID)
+				e.a.UID = oldPref + e.a.RawUID()
+				p.byUID[e.a.UID] = e
+			}
+		}
+
+		if a.Provider() != "" {
+			newPref := a.Realm() + "-" + a.Provider() + "-"
+			if !strings.HasPrefix(a.UID, newPref) {
+				a.UID = newPref + a.RawUID()
+			}
+		}
+
+		if _, exists := p.byUID[a.UID]; exists {
+			idx := 2
+			for {
+				cand := fmt.Sprintf("%s#%d", a.UID, idx)
+				if _, exists := p.byUID[cand]; !exists {
+					a.UID = cand
+					break
+				}
+				idx++
+			}
+		}
+
+		p.byUID[a.UID] = &entry{a: a}
 		return
 	}
 	p.byUID[a.UID] = &entry{a: a}

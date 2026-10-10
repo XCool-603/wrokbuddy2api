@@ -1795,6 +1795,18 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🌍 GLOBAL</span>'
           : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">🇨🇳 CN</span>';
 
+        let provBadge = '';
+        const pLower = (a.provider || '').toLowerCase();
+        if (pLower === 'google') {
+          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-red-500/10 text-red-400 border border-red-500/20">Google</span>';
+        } else if (pLower === 'twitter' || pLower === 'x') {
+          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">Twitter / X</span>';
+        } else if (pLower === 'github') {
+          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-slate-500/10 text-slate-300 border border-slate-500/20">GitHub</span>';
+        } else if (pLower) {
+          provBadge = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">${escapeHtml(a.provider)}</span>`;
+        }
+
         let statusBadge = '<span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>健康在线</span>';
         if (a.manual_disabled) {
           statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.manual_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>手动停用</span>';
@@ -1866,7 +1878,12 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
           html += `
             <tr class="hover:bg-slate-800/40 transition">
-              <td class="px-6 py-4">${realmBadge}</td>
+              <td class="px-6 py-4">
+                <div class="flex flex-col gap-1.5 items-start">
+                  ${realmBadge}
+                  ${provBadge}
+                </div>
+              </td>
               <td class="px-6 py-4">
                 <div class="font-sans font-semibold text-white text-xs flex items-center">
                   <span>${escapeHtml(a.nickname || a.uid)}</span>

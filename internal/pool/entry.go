@@ -35,6 +35,8 @@ type Status struct {
 	UID           string    `json:"uid"`
 	Realm         string    `json:"realm,omitempty"`
 	Nickname      string    `json:"nickname,omitempty"`
+	Provider      string    `json:"provider,omitempty"`
+	FilePath      string    `json:"file_path,omitempty"`
 	Credits       int64     `json:"credits"`
 	Cooling       bool      `json:"cooling"`
 	CoolKind      string    `json:"cool_kind,omitempty"`

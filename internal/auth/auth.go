@@ -47,9 +47,65 @@ type Auth struct {
 	DeviceToken string
 
 	// Owner 所属用户账号 ID/用户名（多租户/用户角色隔离）。
+	// Owner 所属用户账号 ID/用户名（多租户/用户角色隔离）。
 	// 为空或 "admin" 表示公共/系统账号（管理员或共享池）；若为特定用户（如 "u_xxx" 或 "alice"），
 	// 则仅该用户的请求或 API Key 可以调用此账号。
 	Owner string
+
+	// provider 账号身份提供商（"google" / "twitter" / "github" / "wechat" 等）。
+	provider string
+}
+
+// NormalizeProvider 归一化身份提供商标识（如 google, twitter, github, wechat 等）。
+func NormalizeProvider(p string) string {
+	p = strings.ToLower(strings.TrimSpace(p))
+	switch p {
+	case "google", "google.com", "gmail":
+		return "google"
+	case "twitter", "twitter.com", "x", "x.com":
+		return "twitter"
+	case "github", "github.com":
+		return "github"
+	case "wechat", "weixin", "wx":
+		return "wechat"
+	case "qq":
+		return "qq"
+	}
+	if strings.Contains(p, "google") {
+		return "google"
+	}
+	if strings.Contains(p, "twitter") || p == "x" {
+		return "twitter"
+	}
+	if strings.Contains(p, "github") {
+		return "github"
+	}
+	return p
+}
+
+// ProviderValue 加锁读取 Provider。
+func (a *Auth) ProviderValue() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.provider
+}
+
+// Provider 加锁读取 Provider（别名）。
+func (a *Auth) Provider() string {
+	return a.ProviderValue()
+}
+
+// SetProvider 加锁设置 Provider。
+func (a *Auth) SetProvider(provider string) {
+	if a == nil {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.provider = NormalizeProvider(provider)
 }
 
 // OwnerValue 加锁读取 Owner。
@@ -314,20 +370,28 @@ func (a *Auth) rawUIDLocked() string {
 	}
 	realm := a.realmLocked()
 	if strings.HasPrefix(uid, realm+"-") {
-		return strings.TrimPrefix(uid, realm+"-")
-	}
-	if strings.HasPrefix(uid, realm+":") {
-		return strings.TrimPrefix(uid, realm+":")
-	}
-	if strings.HasPrefix(uid, "cn-") || strings.HasPrefix(uid, "global-") {
+		uid = strings.TrimPrefix(uid, realm+"-")
+	} else if strings.HasPrefix(uid, realm+":") {
+		uid = strings.TrimPrefix(uid, realm+":")
+	} else if strings.HasPrefix(uid, "cn-") || strings.HasPrefix(uid, "global-") {
 		if idx := strings.IndexByte(uid, '-'); idx != -1 {
-			return uid[idx+1:]
+			uid = uid[idx+1:]
+		}
+	} else if strings.HasPrefix(uid, "cn:") || strings.HasPrefix(uid, "global:") {
+		if idx := strings.IndexByte(uid, ':'); idx != -1 {
+			uid = uid[idx+1:]
 		}
 	}
-	if strings.HasPrefix(uid, "cn:") || strings.HasPrefix(uid, "global:") {
-		if idx := strings.IndexByte(uid, ':'); idx != -1 {
-			return uid[idx+1:]
+	// 如果带有 provider 前缀（例如 "google-" 或 "twitter-"），去掉 provider 前缀
+	for _, p := range []string{"google-", "twitter-", "github-", "copilot-"} {
+		if strings.HasPrefix(strings.ToLower(uid), p) {
+			uid = uid[len(p):]
+			break
 		}
+	}
+	// 如果带有 disambiguation 标记（例如 #2 或 #twitter），剥离 # 及其后缀
+	if idx := strings.IndexByte(uid, '#'); idx != -1 {
+		uid = uid[:idx]
 	}
 	return uid
 }
@@ -363,7 +427,7 @@ func tryParseRawToken(str string) *Auth {
 	str = strings.TrimPrefix(str, "Bearer ")
 	str = strings.TrimPrefix(str, "bearer ")
 
-	var at, rt, explicitRealm, explicitUID, explicitNick string
+	var at, rt, explicitRealm, explicitUID, explicitNick, explicitProvider string
 
 	// 支持 key-value 格式：例如 access_token=xxx 或 accessToken: xxx
 	if strings.Contains(str, "\n") || strings.Contains(str, "=") || (strings.Contains(str, ":") && !strings.HasPrefix(str, "http")) {
@@ -396,6 +460,8 @@ func tryParseRawToken(str string) *Auth {
 				explicitUID = v
 			case "nickname", "nick", "name":
 				explicitNick = v
+			case "provider", "idp", "identity_provider", "type":
+				explicitProvider = v
 			}
 		}
 		if kvAt != "" {
@@ -437,6 +503,7 @@ func tryParseRawToken(str string) *Auth {
 		realm:        explicitRealm,
 		UID:          explicitUID,
 		Nickname:     explicitNick,
+		provider:     NormalizeProvider(explicitProvider),
 	}
 
 	// 尝试解构 JWT Payload
@@ -450,6 +517,9 @@ func tryParseRawToken(str string) *Auth {
 		}
 		if a.Nickname == "" {
 			a.Nickname = extractValString(claims, "name", "nickname", "nick_name", "username")
+		}
+		if a.provider == "" {
+			a.provider = NormalizeProvider(extractValString(claims, "identity_provider", "idp", "auth_provider", "provider"))
 		}
 		if iss, ok := claims["iss"].(string); ok && iss != "" {
 			if strings.Contains(iss, "workbuddy.ai") {
@@ -676,6 +746,17 @@ func Parse(raw []byte) (*Auth, error) {
 		return nil, fmt.Errorf("parse_error: missing accessToken")
 	}
 
+	provider := extractValString(authMap, "provider", "idp", "identity_provider", "auth_provider", "login_provider", "login_type", "type")
+	if provider == "" {
+		provider = extractValString(accountMap, "provider", "idp", "identity_provider", "auth_provider", "login_provider", "login_type", "type")
+	}
+	if provider == "" {
+		provider = extractValString(dataMap, "provider", "idp", "identity_provider", "auth_provider", "login_provider", "login_type", "type")
+	}
+	if provider == "" {
+		provider = extractValString(m, "provider", "idp", "identity_provider", "auth_provider", "login_provider", "login_type", "type")
+	}
+
 	// 若未指定 expAt 或 uid，尝试从 JWT claims 中解析补充
 	if claims := parseJWTClaims(at); claims != nil {
 		if expAt == 0 {
@@ -689,7 +770,12 @@ func Parse(raw []byte) (*Auth, error) {
 		if nick == "" {
 			nick = extractValString(claims, "name", "nickname", "nick_name", "username")
 		}
+		if provider == "" {
+			provider = extractValString(claims, "identity_provider", "idp", "federated_identity_provider", "auth_provider", "provider")
+		}
 	}
+
+	provider = NormalizeProvider(provider)
 
 	a := &Auth{
 		AccessToken:  at,
@@ -702,6 +788,7 @@ func Parse(raw []byte) (*Auth, error) {
 		Nickname:     nick,
 		DeviceToken:  deviceToken,
 		Owner:        owner,
+		provider:     provider,
 	}
 
 	return a, nil
@@ -732,6 +819,10 @@ func (a *Auth) SaveAtomic() error {
 			"enterpriseId": a.EnterpriseID,
 			"nickname":     a.Nickname,
 		},
+	}
+	if a.provider != "" {
+		doc["account"].(map[string]any)["provider"] = a.provider
+		doc["auth"].(map[string]any)["provider"] = a.provider
 	}
 	// DeviceToken 非空才写回顶层 device_token：避免在无该字段的旧文件里引入空键
 	// （保持与插件 OAuth 输出形状一致，插件读取忽略未知键）。
@@ -846,6 +937,16 @@ func LoadDir(dir string) ([]*Auth, error) {
 		}
 		if a.Owner == "" {
 			a.Owner = "public"
+		}
+		if a.provider == "" {
+			base := strings.ToLower(filepath.Base(f))
+			if strings.Contains(base, "twitter") || strings.Contains(base, "-x-") {
+				a.provider = "twitter"
+			} else if strings.Contains(base, "google") {
+				a.provider = "google"
+			} else if strings.Contains(base, "github") {
+				a.provider = "github"
+			}
 		}
 		seenUID[a.UID] = f
 		if a.RealmStored() == "" {

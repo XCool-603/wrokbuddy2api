@@ -198,13 +198,7 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
-	safeUID := auth.SanitizeFilename(uid)
-	realm := a.Realm()
-	filename := fmt.Sprintf("workbuddy-%s-%s.json", realm, safeUID)
-	if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(realm)+"-") {
-		filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
-	}
-	targetFile := filepath.Join(authDir, filename)
+	targetFile := resolveAuthFilePath(authDir, a.Realm(), a.UID, a.Provider(), a.AccessTokenValue(), a.RefreshTokenValue())
 	a.FilePath = targetFile
 	if err := a.SaveAtomic(); err != nil {
 		log.Printf("WARN: [import] single import save failed: uid=%s err=%v (仍载入内存池)", uid, err)
@@ -216,7 +210,7 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 		h.cfg.Pool.ReviveDisabled(a.UID)
 		h.cfg.Pool.ClearCooling(a.UID)
 	}
-	log.Printf("INFO: [import] single import success: uid=%s owner=%s realm=%s file=%s", uid, a.Owner, a.Realm(), filepath.Base(targetFile))
+	log.Printf("INFO: [import] single import success: uid=%s owner=%s realm=%s provider=%s file=%s", uid, a.Owner, a.Realm(), a.Provider(), filepath.Base(targetFile))
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":  true,
@@ -224,6 +218,7 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 		"filename": filepath.Base(targetFile),
 		"realm":    a.Realm(),
 		"nickname": a.Nickname,
+		"provider": a.Provider(),
 	})
 }
 
@@ -417,13 +412,7 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 		} else if user != nil && user.Role != usermgr.RoleAdmin && user.Username != "admin" && user.ID != "u_admin" && user.ID != "admin" {
 			a.Owner = user.ID
 		}
-		safeUID := auth.SanitizeFilename(uid)
-		realm := a.Realm()
-		filename := fmt.Sprintf("workbuddy-%s-%s.json", realm, safeUID)
-		if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(realm)+"-") {
-			filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
-		}
-		targetFile := filepath.Join(authDir, filename)
+		targetFile := resolveAuthFilePath(authDir, a.Realm(), a.UID, a.Provider(), a.AccessTokenValue(), a.RefreshTokenValue())
 		a.FilePath = targetFile
 		if err := a.SaveAtomic(); err != nil {
 			log.Printf("WARN: [import] 保存文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
