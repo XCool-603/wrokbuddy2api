@@ -199,7 +199,12 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
 	safeUID := auth.SanitizeFilename(uid)
-	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
+	realm := a.Realm()
+	filename := fmt.Sprintf("workbuddy-%s-%s.json", realm, safeUID)
+	if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(realm)+"-") {
+		filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
+	}
+	targetFile := filepath.Join(authDir, filename)
 	a.FilePath = targetFile
 	if err := a.SaveAtomic(); err != nil {
 		log.Printf("WARN: [import] single import save failed: uid=%s err=%v (仍载入内存池)", uid, err)
@@ -208,14 +213,14 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 	// 立即将新账号同步入账号池并清除历史冷却与禁用状态
 	if h.cfg.Pool != nil {
 		h.cfg.Pool.Add(a)
-		h.cfg.Pool.ReviveDisabled(uid)
-		h.cfg.Pool.ClearCooling(uid)
+		h.cfg.Pool.ReviveDisabled(a.UID)
+		h.cfg.Pool.ClearCooling(a.UID)
 	}
 	log.Printf("INFO: [import] single import success: uid=%s owner=%s realm=%s file=%s", uid, a.Owner, a.Realm(), filepath.Base(targetFile))
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":  true,
-		"uid":      uid,
+		"uid":      a.UID,
 		"filename": filepath.Base(targetFile),
 		"realm":    a.Realm(),
 		"nickname": a.Nickname,
@@ -413,26 +418,31 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 			a.Owner = user.ID
 		}
 		safeUID := auth.SanitizeFilename(uid)
-		targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
+		realm := a.Realm()
+		filename := fmt.Sprintf("workbuddy-%s-%s.json", realm, safeUID)
+		if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(realm)+"-") {
+			filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
+		}
+		targetFile := filepath.Join(authDir, filename)
 		a.FilePath = targetFile
 		if err := a.SaveAtomic(); err != nil {
 			log.Printf("WARN: [import] 保存文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
 		}
 		if h.cfg.Pool != nil {
 			h.cfg.Pool.Add(a)
-			h.cfg.Pool.ReviveDisabled(uid)
-			h.cfg.Pool.ClearCooling(uid)
+			h.cfg.Pool.ReviveDisabled(a.UID)
+			h.cfg.Pool.ClearCooling(a.UID)
 			// 异步回填积分
 			if h.cfg.Upstream != nil && a.AccessTokenValue() != "" {
 				go func(acct *auth.Auth, u string) {
 					if rem, _, _, _, e := h.cfg.Upstream.ResourceSummary(acct); e == nil {
 						h.cfg.Pool.SetCredits(u, rem)
 					}
-				}(a, uid)
+				}(a, a.UID)
 			}
 		}
 		successCount++
-		successUIDs = append(successUIDs, uid)
+		successUIDs = append(successUIDs, a.UID)
 	}
 
 	log.Printf("INFO: [import] batch import finished: total=%d, success=%d, failed=%d, owner=%s, uids=%v",

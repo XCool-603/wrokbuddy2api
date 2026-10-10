@@ -145,8 +145,9 @@ func (c *Client) injectAccountStableHeaders(req *http.Request, a *auth.Auth) {
 	if a == nil || a.UID == "" {
 		return
 	}
-	req.Header.Set("X-Machine-ID", deriveAccountStableID(a.UID, "machine"))
-	req.Header.Set("X-Session-ID", deriveAccountStableID(a.UID, "session"))
+	rawUID := a.RawUID()
+	req.Header.Set("X-Machine-ID", deriveAccountStableID(rawUID, "machine"))
+	req.Header.Set("X-Session-ID", deriveAccountStableID(rawUID, "session"))
 }
 
 // CommonHeaders 设置所有 API 共享的请求头。
@@ -228,8 +229,8 @@ func (c *Client) ChatHeaders(req *http.Request, a *auth.Auth, clientIP string, m
 	} else {
 		req.Header.Set("X-No-Authorization", "1")
 	}
-	if a.UID != "" {
-		req.Header.Set("X-User-Id", a.UID)
+	if rawUID := a.RawUID(); rawUID != "" {
+		req.Header.Set("X-User-Id", rawUID)
 	} else {
 		req.Header.Set("X-No-User-Id", "1")
 	}
@@ -408,8 +409,8 @@ func (c *Client) BillingHeaders(req *http.Request, a *auth.Auth) {
 	} else if ua := c.billingUA(); ua != "" {
 		req.Header.Set("User-Agent", ua)
 	}
-	if a.UID != "" {
-		req.Header.Set("X-User-Id", a.UID)
+	if rawUID := a.RawUID(); rawUID != "" {
+		req.Header.Set("X-User-Id", rawUID)
 	}
 	if a.EnterpriseID != "" {
 		req.Header.Set("X-Enterprise-Id", a.EnterpriseID)

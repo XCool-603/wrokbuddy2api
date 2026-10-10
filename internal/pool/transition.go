@@ -96,8 +96,8 @@ func (p *Pool) setManualDisabledLocked(e *entry, disabled bool, reason string) {
 func (p *Pool) ClearCooling(uid string) bool {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return false
 	}
 	e.clearCoolingLocked()

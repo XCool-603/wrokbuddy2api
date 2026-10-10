@@ -156,7 +156,11 @@ PYEOF
 fi
 
 # ─── 落盘 auth 文件（与 internal/auth 读取格式一致）─────────────────
-AUTH_FILE="$AUTH_DIR/workbuddy-${USER_ID}.json"
+if [[ -n "$REALM" ]]; then
+    AUTH_FILE="$AUTH_DIR/workbuddy-${REALM}-${USER_ID}.json"
+else
+    AUTH_FILE="$AUTH_DIR/workbuddy-${USER_ID}.json"
+fi
 if [[ -f "$AUTH_FILE" ]]; then
     echo "账号已存在（uid=${USER_ID}），将覆盖更新凭证"
     ACTION="覆盖"

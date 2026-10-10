@@ -461,7 +461,7 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 	// global 模型名单：仅 GlobalEnabled=true 时列出（逃生门）。
 	// 名单 = 探测结果（fetchGlobalModels 纯动态，失败/无号 → 空）；无 global 账号时
 	// 空名单且零上游调用。
-	if h.cfg.GlobalEnabled {
+	if h.cfg.GlobalEnabled && h.cfg.Upstream != nil {
 		// global 域 effort 能力三级查找：探测下发桶（权威）→ 静态兜底表 → 省略。
 		// 先 fetchGlobalModels（内部探测并落 effort 桶），再按 id 取快照。
 		globalIDs, globalAccount := h.fetchGlobalModels()
@@ -562,6 +562,9 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 // FetchGlobalModels 共享缓存，不会触发第二次上游探测）。
 // GlobalEnabled=false 时 modelList 已不进入本分支（逃生门在调用方 gate）。
 func (h *Handler) fetchGlobalModels() ([]string, *auth.Auth) {
+	if h.cfg.Upstream == nil {
+		return nil, nil
+	}
 	acct := h.cfg.Pool.PickExcludingForRealm(nil, "", "global")
 	if acct == nil {
 		return nil, nil
@@ -609,6 +612,9 @@ func (h *Handler) fetchDynamicModels() []upstream.ModelInfo {
 	}
 	dynamicModelsCache.RUnlock()
 
+	if h.cfg.Upstream == nil {
+		return nil
+	}
 	acct := h.cfg.Pool.PickExcludingForRealm(nil, "", "cn")
 	if acct == nil {
 		return nil

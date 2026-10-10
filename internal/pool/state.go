@@ -275,7 +275,7 @@ func (p *Pool) Status(uid string) (Status, bool) {
 func (p *Pool) AuthByUID(uid string) *auth.Auth {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
-	if e, ok := p.byUID[uid]; ok {
+	if e := p.entryLocked(uid); e != nil {
 		return e.a
 	}
 	return nil
@@ -331,8 +331,8 @@ func (p *Pool) availableUIDsLocked(realm string, health func(e *entry, now time.
 func (p *Pool) PickByUIDForModel(uid, model string) *auth.Auth {
 	p.mu.Lock()
 	defer p.mu.Unlock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		return nil
 	}
 	now := time.Now()

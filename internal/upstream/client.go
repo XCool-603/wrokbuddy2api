@@ -969,7 +969,7 @@ func (c *Client) RefreshToken(a *auth.Auth) error {
 		RefreshToken: rtSnapshot,
 		ExpiresAt:    a.ExpiresAt,
 		Domain:       a.Domain,
-		UID:          a.UID,
+		UID:          a.RawUIDLocked(),
 		EnterpriseID: a.EnterpriseID,
 		Nickname:     a.Nickname,
 		DeviceToken:  a.DeviceToken,

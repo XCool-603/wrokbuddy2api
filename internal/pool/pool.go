@@ -217,12 +217,27 @@ func (p *Pool) SetStore(s StoreSnapshotter) {
 }
 
 // Acquire 为 uid 占一个在途名额（会话粘性命中后调用）；池上限内返回 true。
+// entryLocked 查找账号条目：优先精确匹配 UID，未命中时按 a.RawUID() 回退匹配。
+// 调用方需持有 p.mu（读锁或写锁）。
+func (p *Pool) entryLocked(uid string) *entry {
+	if e, ok := p.byUID[uid]; ok {
+		return e
+	}
+	for _, e := range p.byUID {
+		if e.a != nil && e.a.RawUID() == uid {
+			return e
+		}
+	}
+	return nil
+}
+
+// Acquire 为 uid 占一个在途名额（会话粘性命中后调用）；池上限内返回 true。
 // 名额用 entry.inFlight 原子自增，满额返回 false。上限按账号 realm 分档
 // （global 档 maxInFlightGlobal，P1-1；未设置回落 maxInFlight）。
 func (p *Pool) Acquire(uid string) bool {
 	p.mu.RLock()
-	e, ok := p.byUID[uid]
-	if !ok {
+	e := p.entryLocked(uid)
+	if e == nil {
 		p.mu.RUnlock()
 		return false
 	}
@@ -247,9 +262,9 @@ func (p *Pool) Acquire(uid string) bool {
 // Release 释放一个在途名额。幂等减到 0 为止（防重复释放扣成负数）。
 func (p *Pool) Release(uid string) {
 	p.mu.RLock()
-	e, ok := p.byUID[uid]
+	e := p.entryLocked(uid)
 	p.mu.RUnlock()
-	if !ok {
+	if e == nil {
 		return
 	}
 	for {
@@ -285,6 +300,14 @@ func (p *Pool) Remove(uid string) {
 	if _, ok := p.byUID[uid]; ok {
 		delete(p.byUID, uid)
 		p.saveLocked()
+		return
+	}
+	for k, e := range p.byUID {
+		if e.a != nil && e.a.RawUID() == uid {
+			delete(p.byUID, k)
+			p.saveLocked()
+			return
+		}
 	}
 }
 
@@ -293,6 +316,27 @@ func (p *Pool) Remove(uid string) {
 func (p *Pool) SyncToDir(auths []*auth.Auth) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+
+	// 检测并隔离跨域同名 UID（防止同一个邮箱/UID 的国内版和国际版账号在池中相互覆盖）
+	rawRealmCounts := make(map[string]map[string]int, len(auths))
+	for _, a := range auths {
+		raw := a.RawUID()
+		r := a.Realm()
+		if rawRealmCounts[raw] == nil {
+			rawRealmCounts[raw] = make(map[string]int)
+		}
+		rawRealmCounts[raw][r]++
+	}
+	for _, a := range auths {
+		raw := a.RawUID()
+		if len(rawRealmCounts[raw]) > 1 {
+			prefix := a.Realm() + "-"
+			if !strings.HasPrefix(a.UID, prefix) {
+				a.UID = prefix + raw
+			}
+		}
+	}
+
 	seen := make(map[string]bool, len(auths))
 	for _, a := range auths {
 		seen[a.UID] = true
@@ -328,7 +372,27 @@ func (p *Pool) SyncToDir(auths []*auth.Auth) {
 // 调用方必须已持有 p.mu；Add 与 SyncToDir 共用此 upsert 逻辑。
 func (p *Pool) upsertLocked(a *auth.Auth) {
 	if e, ok := p.byUID[a.UID]; ok {
-		e.a = a // 保留 credits/cooling 状态
+		if e.a != nil && e.a.Realm() != a.Realm() {
+			// 跨域同名冲突：将旧条目与新条目按各自 realm 前缀独立隔离，绝不互相覆盖
+			oldRealm := e.a.Realm()
+			newRealm := a.Realm()
+			oldRaw := e.a.RawUID()
+			newRaw := a.RawUID()
+
+			oldUID := e.a.UID
+			if !strings.HasPrefix(oldUID, oldRealm+"-") {
+				e.a.UID = oldRealm + "-" + oldRaw
+			}
+			delete(p.byUID, oldUID)
+			p.byUID[e.a.UID] = e
+
+			if !strings.HasPrefix(a.UID, newRealm+"-") {
+				a.UID = newRealm + "-" + newRaw
+			}
+			p.byUID[a.UID] = &entry{a: a}
+			return
+		}
+		e.a = a // 相同 realm：保留 credits/cooling 状态
 		return
 	}
 	p.byUID[a.UID] = &entry{a: a}

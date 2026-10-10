@@ -266,7 +266,9 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 		deletedFromPool := false
 		if h.cfg.Pool != nil {
 			for _, st := range h.cfg.Pool.List() {
-				if fmt.Sprintf("workbuddy-%s.json", st.UID) == req.Filename || st.UID == req.Filename {
+				if fmt.Sprintf("workbuddy-%s.json", st.UID) == req.Filename ||
+					fmt.Sprintf("workbuddy-%s-%s.json", st.Realm, st.UID) == req.Filename ||
+					st.UID == req.Filename {
 					h.cfg.Pool.Remove(st.UID)
 					deletedFromPool = true
 					break
@@ -292,8 +294,18 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 	}
 
 	_ = os.Remove(target)
-	if deletedUID != "" && h.cfg.Pool != nil {
-		h.cfg.Pool.Remove(deletedUID)
+	if h.cfg.Pool != nil {
+		if deletedUID != "" {
+			h.cfg.Pool.Remove(deletedUID)
+		}
+		for _, st := range h.cfg.Pool.List() {
+			if a := h.cfg.Pool.AuthByUID(st.UID); a != nil {
+				if a.FilePath == target || filepath.Base(a.FilePath) == req.Filename {
+					h.cfg.Pool.Remove(st.UID)
+					break
+				}
+			}
+		}
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"success": true})

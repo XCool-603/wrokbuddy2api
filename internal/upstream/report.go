@@ -131,7 +131,7 @@ func (c *Client) ReportChatActivity(a *auth.Auth, conversationID, requestID stri
 		ParentConversationID:  conversationID,
 		AgentName:             "default",
 		AgentType:             "conversation",
-		UserID:                a.UID,
+		UserID:                a.RawUID(),
 	}
 	raw, err := json.Marshal([]chatRequestEvent{ev})
 	if err != nil {

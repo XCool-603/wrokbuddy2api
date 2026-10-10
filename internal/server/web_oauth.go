@@ -280,7 +280,11 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 	authDir := h.getAuthDir()
 	_ = os.MkdirAll(authDir, 0755)
 	safeUID := auth.SanitizeFilename(uid)
-	targetFile := filepath.Join(authDir, fmt.Sprintf("workbuddy-%s.json", safeUID))
+	filename := fmt.Sprintf("workbuddy-%s-%s.json", req.Realm, safeUID)
+	if strings.HasPrefix(strings.ToLower(safeUID), strings.ToLower(req.Realm)+"-") {
+		filename = fmt.Sprintf("workbuddy-%s.json", safeUID)
+	}
+	targetFile := filepath.Join(authDir, filename)
 	if err := os.WriteFile(targetFile, docBytes, 0644); err != nil {
 		log.Printf("WARN: [oauth] 保存授权文件 %s 异常: %v（仍将其载入内存账号池）", targetFile, err)
 	}
@@ -290,15 +294,15 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 		newAuth.FilePath = targetFile
 		if h.cfg.Pool != nil {
 			h.cfg.Pool.Add(newAuth)
-			h.cfg.Pool.ReviveDisabled(uid)
-			h.cfg.Pool.ClearCooling(uid)
+			h.cfg.Pool.ReviveDisabled(newAuth.UID)
+			h.cfg.Pool.ClearCooling(newAuth.UID)
 			// 异步回填积分
 			if h.cfg.Upstream != nil {
 				go func(a *auth.Auth, u string) {
 					if rem, _, _, _, e := h.cfg.Upstream.ResourceSummary(a); e == nil {
 						h.cfg.Pool.SetCredits(u, rem)
 					}
-				}(newAuth, uid)
+				}(newAuth, newAuth.UID)
 			}
 		}
 	}

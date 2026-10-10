@@ -289,6 +289,49 @@ func (a *Auth) SetRealm(realm string) {
 	a.realm = strings.TrimSpace(realm)
 }
 
+// RawUID 返回未经 realm 前缀修饰的原始用户 ID（用于出站发送给上游 X-User-Id 等头）。
+func (a *Auth) RawUID() string {
+	if a == nil {
+		return ""
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.rawUIDLocked()
+}
+
+// RawUIDLocked 是 RawUID 的无锁内部实现：仅限已持 a.mu 的调用方使用。
+func (a *Auth) RawUIDLocked() string {
+	if a == nil {
+		return ""
+	}
+	return a.rawUIDLocked()
+}
+
+func (a *Auth) rawUIDLocked() string {
+	uid := a.UID
+	if uid == "" {
+		return ""
+	}
+	realm := a.realmLocked()
+	if strings.HasPrefix(uid, realm+"-") {
+		return strings.TrimPrefix(uid, realm+"-")
+	}
+	if strings.HasPrefix(uid, realm+":") {
+		return strings.TrimPrefix(uid, realm+":")
+	}
+	if strings.HasPrefix(uid, "cn-") || strings.HasPrefix(uid, "global-") {
+		if idx := strings.IndexByte(uid, '-'); idx != -1 {
+			return uid[idx+1:]
+		}
+	}
+	if strings.HasPrefix(uid, "cn:") || strings.HasPrefix(uid, "global:") {
+		if idx := strings.IndexByte(uid, ':'); idx != -1 {
+			return uid[idx+1:]
+		}
+	}
+	return uid
+}
+
 // ParseJWTClaims 解析并提取 JWT Payload 中的 claims 字典。
 func ParseJWTClaims(token string) map[string]any {
 	parts := strings.Split(token, ".")
@@ -400,7 +443,7 @@ func tryParseRawToken(str string) *Auth {
 	claims := ParseJWTClaims(at)
 	if claims != nil {
 		if a.UID == "" {
-			a.UID = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id")
+			a.UID = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id", "email", "preferred_username")
 		}
 		if exp, ok := claims["exp"].(float64); ok && exp > 0 {
 			a.ExpiresAt = int64(exp)
@@ -582,6 +625,15 @@ func Parse(raw []byte) (*Auth, error) {
 	if uid == "" {
 		uid = extractValString(m, "uid", "user_id", "userId", "id", "sub", "account_id")
 	}
+	if uid == "" {
+		uid = extractValString(accountMap, "email", "preferred_username", "username")
+	}
+	if uid == "" {
+		uid = extractValString(dataMap, "email", "preferred_username", "username")
+	}
+	if uid == "" {
+		uid = extractValString(m, "email", "preferred_username", "username")
+	}
 
 	ent := extractValString(accountMap, "enterpriseId", "enterprise_id", "enterpriseID")
 	if ent == "" {
@@ -632,7 +684,7 @@ func Parse(raw []byte) (*Auth, error) {
 			}
 		}
 		if uid == "" {
-			uid = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id")
+			uid = extractValString(claims, "sub", "uid", "id", "user_id", "userId", "account_id", "email", "preferred_username")
 		}
 		if nick == "" {
 			nick = extractValString(claims, "name", "nickname", "nick_name", "username")

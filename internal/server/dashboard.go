@@ -209,9 +209,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	poolMap := make(map[string]pool.Status)
 	for _, p := range poolList {
 		poolMap[p.UID] = p
+		poolMap[p.Realm+":"+p.UID] = p
 	}
 
-	seenUID := make(map[string]bool)
+	seenKey := make(map[string]bool)
 	accounts := make([]AccountItem, 0, len(files)+len(poolList))
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
@@ -228,7 +229,12 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 		isMine := h.isAccountOwnedBy(a, user)
 
-		seenUID[a.UID] = true
+		key := fmt.Sprintf("%s:%s", a.Realm(), a.UID)
+		rawKey := fmt.Sprintf("%s:%s", a.Realm(), a.RawUID())
+		seenKey[key] = true
+		seenKey[rawKey] = true
+		seenKey[a.UID] = true
+
 		item := AccountItem{
 			UID:         a.UID,
 			Realm:       a.Realm(),
@@ -237,18 +243,31 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			Owner:       a.Owner,
 			IsMyAccount: isMine,
 		}
+		var matched *pool.Status
 		if p, ok := poolMap[a.UID]; ok {
-			item.Credits = p.Credits
-			item.Disabled = p.Disabled
-			item.DisabledReason = p.DisabledReason
-			item.ManualDisabled = p.ManualDisabled
-			item.ManualReason = p.ManualReason
-			item.Cooling = p.Cooling
-			item.CoolKind = p.CoolKind
-			item.CoolRemaining = p.CoolRemaining
-			item.Reason = p.Reason
-			item.RateLimitedModels = p.RateLimitedModels
-			item.ModelCosts = p.ModelCosts
+			matched = &p
+		} else if p, ok := poolMap[key]; ok {
+			matched = &p
+		} else if p, ok := poolMap[rawKey]; ok {
+			matched = &p
+		}
+
+		if matched != nil {
+			item.UID = matched.UID
+			item.Credits = matched.Credits
+			item.Disabled = matched.Disabled
+			item.DisabledReason = matched.DisabledReason
+			item.ManualDisabled = matched.ManualDisabled
+			item.ManualReason = matched.ManualReason
+			item.Cooling = matched.Cooling
+			item.CoolKind = matched.CoolKind
+			item.CoolRemaining = matched.CoolRemaining
+			item.Reason = matched.Reason
+			item.RateLimitedModels = matched.RateLimitedModels
+			item.ModelCosts = matched.ModelCosts
+
+			seenKey[matched.UID] = true
+			seenKey[matched.Realm+":"+matched.UID] = true
 		}
 		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
 		if item.Credits == 0 && a.AccessTokenValue() != "" {
@@ -260,10 +279,17 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	// 兜底与并集补齐：如果有任何在内存账号池（Pool）中已存在但在磁盘扫描中遗漏的账号，
 	// 无论文件路径差异或磁盘读取延时，均保证在账号池中 100% 完整展示给用户！
 	for _, p := range poolList {
-		if seenUID[p.UID] {
+		poolKey := fmt.Sprintf("%s:%s", p.Realm, p.UID)
+		if seenKey[p.UID] || seenKey[poolKey] {
 			continue
 		}
 		authObj := h.cfg.Pool.AuthByUID(p.UID)
+		if authObj != nil {
+			rawKey := fmt.Sprintf("%s:%s", authObj.Realm(), authObj.RawUID())
+			if seenKey[rawKey] || seenKey[authObj.RawUID()] {
+				continue
+			}
+		}
 		if authObj != nil && !h.isAccountVisibleTo(authObj, user) {
 			continue
 		}
@@ -290,7 +316,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			isMine = true
 		}
 
-		seenUID[p.UID] = true
+		seenKey[poolKey] = true
+		seenKey[p.UID] = true
 		item := AccountItem{
 			UID:               p.UID,
 			Realm:             realm,
