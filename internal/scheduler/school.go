@@ -12,6 +12,8 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+
+	"workbuddy2api/internal/sysproc"
 )
 
 // repoRoot 定位仓库根（容器内 /app、宿主 /root/workbuddy2api）。
@@ -52,9 +54,11 @@ func (c *scriptCmd) SetDir(dir string) { c.cmd.Dir = dir }
 func (c *scriptCmd) Run() error        { return c.cmd.Run() }
 
 // newScriptCmd 构建脚本子进程。包级变量便于测试注入 fake（installFakeExec 覆盖）。
-// 工作目录由调用方 SetDir 显式设置仓库根。
+// 工作目录由调用方 SetDir 显式设置仓库根。配置 sysproc.HideWindow 避免 Windows 弹出黑框控制台。
 var newScriptCmd = func(program string, args ...string) scriptRunner {
-	return &scriptCmd{cmd: exec.Command(program, args...)}
+	cmd := exec.Command(program, args...)
+	sysproc.HideWindow(cmd)
+	return &scriptCmd{cmd: cmd}
 }
 
 // pythonCmd 返回执行 scripts/*.py 的解释器名。
@@ -78,6 +82,13 @@ func pythonCmd() string {
 // 不影响调度主循环继续跑下一个时点。单命令失败不中断后续命令。
 func runScript(name, root string, commands [][]string) {
 	for _, cmdArgs := range commands {
+		// 校验目标脚本文件是否存在：若不存在（如纯绿色发行版无 scripts 目录），静默跳过，避免无效拉起系统 Python 产生闪现窗口
+		if len(cmdArgs) > 1 && strings.HasSuffix(cmdArgs[1], ".py") {
+			scriptPath := filepath.Join(root, cmdArgs[1])
+			if _, err := os.Stat(scriptPath); os.IsNotExist(err) {
+				continue
+			}
+		}
 		c := newScriptCmd(cmdArgs[0], cmdArgs[1:]...)
 		c.SetDir(root)
 		if err := c.Run(); err != nil {

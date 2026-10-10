@@ -26,6 +26,7 @@ import (
 	"workbuddy2api/internal/scheduler"
 	"workbuddy2api/internal/server"
 	"workbuddy2api/internal/session"
+	"workbuddy2api/internal/sysproc"
 	"workbuddy2api/internal/upstream"
 	"workbuddy2api/internal/usermgr"
 )
@@ -66,6 +67,7 @@ func openBrowser(url string) {
 	default:
 		cmd = exec.Command("xdg-open", url)
 	}
+	sysproc.HideWindow(cmd)
 	_ = cmd.Start()
 }
 

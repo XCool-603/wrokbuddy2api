@@ -13,6 +13,7 @@ import (
 	"sync"
 	"time"
 
+	"workbuddy2api/internal/sysproc"
 	"workbuddy2api/internal/usermgr"
 )
 
@@ -261,7 +262,7 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 本地桌面或独立进程模式：启动新进程并退出旧进程
-		cmd := exec.Command(currentExe, os.Args[1:]...)
+		cmd := sysproc.HideWindow(exec.Command(currentExe, os.Args[1:]...))
 		cmd.Dir = filepath.Dir(currentExe)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr

@@ -19,6 +19,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"workbuddy2api/internal/sysproc"
 )
 
 // Manager 管理 DeepSeek Harness (dsh) 子进程生命周期、自动安装与状态探测。
@@ -36,6 +38,14 @@ type Manager struct {
 	workDir      string
 	installing   bool
 	installError string
+
+	// 环境探测缓存：避免每次请求 /v1/models 或控制台轮询时频繁执行 node/npx 产生进程开销与窗口闪现
+	envMu         sync.RWMutex
+	envCached     bool
+	cachedHasNode bool
+	cachedNodeVer string
+	cachedHasNpx  bool
+	cachedAt      time.Time
 }
 
 // New 创建 DSH 管理器。
@@ -92,7 +102,7 @@ func verifyNode(nodePath string) bool {
 			return true
 		}
 	}
-	cmd := exec.Command(nodePath, "-v")
+	cmd := sysproc.HideWindow(exec.Command(nodePath, "-v"))
 	out, err := cmd.CombinedOutput()
 	if err != nil {
 		return false
@@ -112,13 +122,13 @@ func verifyNpx(nodePath, npxPath string) bool {
 	}
 	// 1. 若提供了有效 nodePath，尝试通过 node 运行 npx / npx-cli.js 严格验证
 	if nodePath != "" && verifyNode(nodePath) {
-		cmd := exec.Command(nodePath, npxPath, "--version")
+		cmd := sysproc.HideWindow(exec.Command(nodePath, npxPath, "--version"))
 		if err := cmd.Run(); err == nil {
 			return true
 		}
 	}
 	// 2. 尝试作为独立二进制 / 脚本直接运行验证
-	cmd := exec.Command(npxPath, "--version")
+	cmd := sysproc.HideWindow(exec.Command(npxPath, "--version"))
 	if err := cmd.Run(); err == nil {
 		return true
 	}
@@ -211,10 +221,18 @@ func findNpxCliJs(baseDir string) string {
 	return found
 }
 
+// InvalidateEnvCache 清理环境检测缓存，强制下一次探测执行实时检查
+func (m *Manager) InvalidateEnvCache() {
+	m.envMu.Lock()
+	m.envCached = false
+	m.envMu.Unlock()
+}
+
 // CleanRuntime 彻底清理本地绿色便携 Node.js 运行时目录，以便重置或平滑回退至系统全局环境。
 func (m *Manager) CleanRuntime() error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
+	m.InvalidateEnvCache()
 	localDir := m.localBinDir()
 	if err := os.RemoveAll(localDir); err != nil {
 		return fmt.Errorf("清理本地运行时目录失败: %w", err)
@@ -342,14 +360,31 @@ func (m *Manager) resolveNodeNpx() (nodePath, npxPath string, ok bool) {
 	return "", "", false
 }
 
-// DetectEnv 探测宿主机或内置 Node.js 与 npx 环境。
+// DetectEnv 探测宿主机或内置 Node.js 与 npx 环境（支持 30s 缓存与无窗口静默执行）。
 func (m *Manager) DetectEnv() (hasNode bool, nodeVer string, hasNpx bool) {
+	m.envMu.RLock()
+	if m.envCached && time.Since(m.cachedAt) < 30*time.Second {
+		hn, nv, hx := m.cachedHasNode, m.cachedNodeVer, m.cachedHasNpx
+		m.envMu.RUnlock()
+		return hn, nv, hx
+	}
+	m.envMu.RUnlock()
+
+	m.envMu.Lock()
+	defer m.envMu.Unlock()
+	if m.envCached && time.Since(m.cachedAt) < 30*time.Second {
+		return m.cachedHasNode, m.cachedNodeVer, m.cachedHasNpx
+	}
+
 	nodePath, npxPath, ok := m.resolveNodeNpx()
 	if !ok {
+		m.envCached = true
+		m.cachedAt = time.Now()
+		m.cachedHasNode, m.cachedNodeVer, m.cachedHasNpx = false, "", false
 		return false, "", false
 	}
 
-	cmd := exec.Command(nodePath, "-v")
+	cmd := sysproc.HideWindow(exec.Command(nodePath, "-v"))
 	out, err := cmd.CombinedOutput()
 	if err == nil {
 		hasNode = true
@@ -362,6 +397,10 @@ func (m *Manager) DetectEnv() (hasNode bool, nodeVer string, hasNpx bool) {
 	if npxPath != "" {
 		hasNpx = true
 	}
+
+	m.envCached = true
+	m.cachedAt = time.Now()
+	m.cachedHasNode, m.cachedNodeVer, m.cachedHasNpx = hasNode, nodeVer, hasNpx
 	return
 }
 
@@ -562,9 +601,9 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 	dshArgs := []string{"-y", "@deepseek-ai/dsh", "web", "--port", fmt.Sprintf("%d", targetPort)}
 	if strings.HasSuffix(strings.ToLower(npxExe), ".js") {
 		fullArgs := append([]string{npxExe}, dshArgs...)
-		cmd = exec.CommandContext(ctx, nodeExe, fullArgs...)
+		cmd = sysproc.HideWindow(exec.CommandContext(ctx, nodeExe, fullArgs...))
 	} else {
-		cmd = exec.CommandContext(ctx, npxExe, dshArgs...)
+		cmd = sysproc.HideWindow(exec.CommandContext(ctx, npxExe, dshArgs...))
 	}
 	cmd.Dir = m.workDir
 	cmd.Env = env
@@ -591,7 +630,7 @@ func (m *Manager) Start(gatewayURL, apiKey string) error {
 			}
 			if fallbackCli != "" {
 				fullArgs := append([]string{fallbackCli}, dshArgs...)
-				fallbackCmd := exec.CommandContext(ctx, nodeExe, fullArgs...)
+				fallbackCmd := sysproc.HideWindow(exec.CommandContext(ctx, nodeExe, fullArgs...))
 				fallbackCmd.Dir = m.workDir
 				fallbackCmd.Env = env
 				if startErr := fallbackCmd.Start(); startErr == nil {
@@ -865,7 +904,7 @@ func (m *Manager) doInstall() error {
 			}
 		}
 		if _, statErr := os.Stat(candNode); statErr == nil {
-			cmd := exec.Command(candNode, "-v")
+			cmd := sysproc.HideWindow(exec.Command(candNode, "-v"))
 			var out []byte
 			out, testErr = cmd.CombinedOutput()
 			if testErr == nil {
@@ -883,6 +922,7 @@ func (m *Manager) doInstall() error {
 		return fmt.Errorf("%s", errMsg)
 	}
 
+	m.InvalidateEnvCache()
 	m.mu.Lock()
 	m.appendLog(fmt.Sprintf("便携式 Node.js 环境验证正常: %s", ver))
 	m.mu.Unlock()
