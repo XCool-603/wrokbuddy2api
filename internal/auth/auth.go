@@ -275,9 +275,13 @@ func isGlobalDomain(d string) bool {
 }
 
 // NeedsRefresh 报告 token 是否将在 within 内过期（或已过期/无 expiry）。
+// 无 refreshToken 的凭证无法执行主动刷新，返回 false。
 func (a *Auth) NeedsRefresh(within time.Duration) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	if strings.TrimSpace(a.RefreshToken) == "" {
+		return false
+	}
 	if a.ExpiresAt <= 0 {
 		return true
 	}

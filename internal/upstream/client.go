@@ -661,6 +661,9 @@ type Client struct {
 	// 见 global_models.go。按实例持有，测试新建 Client 即隔离。
 	globalModels fetchGlobalModelsCache
 
+	// refreshSF 抑制并发刷新同一个账号的 refreshToken 风暴
+	refreshSF singleflightGroup
+
 	// SanitizeFingerprints 出站请求体黑名单指纹脱敏开关（默认 true；false 完全还原）。
 	SanitizeFingerprints bool
 
@@ -949,11 +952,31 @@ func (c *Client) RefreshToken(a *auth.Auth) error {
 	a.Lock()
 	rtSnapshot := a.RefreshToken
 	atBefore := a.AccessToken
+	uid := a.RawUIDLocked()
+	if uid == "" {
+		uid = a.UID
+	}
 	a.Unlock()
 	if strings.TrimSpace(rtSnapshot) == "" {
 		return fmt.Errorf("no refreshToken")
 	}
 
+	// 抑制并发刷新风暴：相同账号的并发刷新进入 singleflight 排队，仅向外发起一次实际网络调用
+	_, err := c.refreshSF.Do(uid, func() (any, error) {
+		a.Lock()
+		if a.AccessToken != atBefore && a.RefreshToken != rtSnapshot {
+			a.Unlock()
+			return nil, nil // 已由先到达的 goroutine 刷新完毕，直接复用
+		}
+		curRT := a.RefreshToken
+		a.Unlock()
+
+		return nil, c.doRefreshToken(a, curRT, atBefore)
+	})
+	return err
+}
+
+func (c *Client) doRefreshToken(a *auth.Auth, rtSnapshot, atBefore string) error {
 	url := c.chatBase(a) + "/v2/plugin/auth/token/refresh"
 	ctx, cancel := context.WithTimeout(context.Background(), refreshIOTimeout)
 	defer cancel()

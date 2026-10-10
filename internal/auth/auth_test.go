@@ -87,13 +87,17 @@ func TestLoadDirLoadsAllValid(t *testing.T) {
 }
 
 func TestNeedsRefresh(t *testing.T) {
-	a := &Auth{ExpiresAt: 0}
+	a := &Auth{RefreshToken: "test-rt", ExpiresAt: 0}
 	if !a.NeedsRefresh(0) {
 		t.Error("zero expiry should need refresh")
 	}
 	a.ExpiresAt = 9999999999
 	if a.NeedsRefresh(0) {
 		t.Error("far future should not need refresh")
+	}
+	aNoRT := &Auth{RefreshToken: "", ExpiresAt: 0}
+	if aNoRT.NeedsRefresh(0) {
+		t.Error("no refresh token should never need refresh")
 	}
 }
 

@@ -105,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.20"
+const CurrentVersion = "v1.2.21"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -899,6 +899,46 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if acct == nil {
+			// 并发流量排队容灾：若池中有健康账号但当前全部在途满载（常见于多项目同时用多角色流水线），
+			// 在轮转第 1 轮内排队等待名额释放（最长等待 12 秒，微轮询 60ms），一旦有在途请求完成释放租约，
+			// 立即接管执行，绝不在突发高并发时粗暴返回 503 打崩客户端流水线！
+			if i == 0 && (h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) || h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner)) {
+				waitStart := time.Now()
+				waitTimeout := 12 * time.Second
+				for time.Since(waitStart) < waitTimeout {
+					select {
+					case <-r.Context().Done():
+						break
+					case <-time.After(60 * time.Millisecond):
+					}
+					if r.Context().Err() != nil {
+						break
+					}
+					// 重试选号
+					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
+					if acct == nil {
+						otherRealm := "global"
+						if realm == "global" {
+							otherRealm = "cn"
+						}
+						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
+						if acct == nil {
+							acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
+						}
+					}
+					if acct != nil {
+						log.Printf("INFO: [server] concurrency queue slot acquired after %v: acct=%s",
+							time.Since(waitStart).Round(time.Millisecond), logfmt.Label(acct.UID, acct.Nickname))
+						break
+					}
+					if !h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) && !h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner) {
+						// 已无在途忙碌账号，不必继续等待
+						break
+					}
+				}
+			}
+		}
+		if acct == nil {
 			diagRealm := realm
 			totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
 			if totalInRealm == 0 {
@@ -953,27 +993,33 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		// token 临近过期 → 先 refresh（失败冷却换号）
 		if acct.NeedsRefresh(h.cfg.RefreshSkew) {
 			if err := h.cfg.Upstream.RefreshToken(acct); err != nil {
-				lastErr = err
-				log.Printf("WARN: [server] token refresh failed: acct=%s err=%v", logfmt.Label(acct.UID, acct.Nickname), err)
-				st.errDetail = fmt.Sprintf("token 刷新失败: %v", err)
-				var ue *upstream.Error
-				if errors.As(err, &ue) && ue.Kind == upstream.ErrSessionDead {
-					// 12153 一次失败不杀号（临时触发会误杀）：与 scheduler keepalive/checkin
-					// 同口径走连续计数，达到 sessionDeadThreshold 才禁用。
-					h.cfg.Pool.NoteSessionDead(acct.UID)
+				// 若仅仅是因为账号没有配置 refreshToken，当前 accessToken 仍可能有效，直接放行继续请求上游
+				if strings.Contains(err.Error(), "no refreshToken") {
+					log.Printf("INFO: [server] acct=%s has no refreshToken, continuing with existing accessToken", logfmt.Label(acct.UID, acct.Nickname))
 				} else {
-					h.cfg.Pool.NoteError(acct.UID)
+					lastErr = err
+					log.Printf("WARN: [server] token refresh failed: acct=%s err=%v", logfmt.Label(acct.UID, acct.Nickname), err)
+					st.errDetail = fmt.Sprintf("token 刷新失败: %v", err)
+					var ue *upstream.Error
+					if errors.As(err, &ue) && ue.Kind == upstream.ErrSessionDead {
+						// 12153 一次失败不杀号（临时触发会误杀）：与 scheduler keepalive/checkin
+						// 同口径走连续计数，达到 sessionDeadThreshold 才禁用。
+						h.cfg.Pool.NoteSessionDead(acct.UID)
+					} else {
+						h.cfg.Pool.NoteError(acct.UID)
+					}
+					fail(acct.UID)
+					if !rotateBackoff(i, r.Context()) {
+						break // ctx 取消：终止轮转（refresh 失败换号退避，WAF P0-2）
+					}
+					continue
 				}
-				fail(acct.UID)
-				if !rotateBackoff(i, r.Context()) {
-					break // ctx 取消：终止轮转（refresh 失败换号退避，WAF P0-2）
+			} else {
+				acct.BackfillRealm() // 老 auth 空 realm → 落盘前补标识（幂等：已有不动）
+				if err := acct.SaveAtomic(); err != nil {
+					// 刷新成功但落盘失败：下次启动会用旧 token，必须暴露
+					log.Printf("ERR: [server] chat refresh acct=%s: save auth failed: %v", logfmt.Label(acct.UID, acct.Nickname), err)
 				}
-				continue
-			}
-			acct.BackfillRealm() // 老 auth 空 realm → 落盘前补标识（幂等：已有不动）
-			if err := acct.SaveAtomic(); err != nil {
-				// 刷新成功但落盘失败：下次启动会用旧 token，必须暴露
-				log.Printf("ERR: [server] chat refresh acct=%s: save auth failed: %v", logfmt.Label(acct.UID, acct.Nickname), err)
 			}
 		}
 
@@ -995,6 +1041,15 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			status = uerr.Status
 		}
 		if uerr == nil && terr != nil {
+			// 若为客户端自身断开连接或超时取消（context.Canceled / DeadlineExceeded），属于客户端主动行为，
+			// 不作为上游或账号故障，绝不调用 NoteFailures 冤枉惩罚账号
+			if errors.Is(terr, context.Canceled) || errors.Is(terr, context.DeadlineExceeded) || r.Context().Err() != nil {
+				log.Printf("INFO: [server] client canceled request: acct=%s model=%s err=%v", logfmt.Label(acct.UID, acct.Nickname), bareModel, terr)
+				st.status = 499
+				st.errDetail = "客户端断开连接或超时取消"
+				fail(acct.UID)
+				return
+			}
 			// 网络层抖动：只换号，不喂熔断计数（传输层错误对连续失败连坐熔断过于严苛）。
 			// 连败兜底（issue #114）：喂连败计数——连不上上游是「不知道原因的失败」，
 			// 连败 N 次临时出池，单次/偶发不罚（NoteFailures 内部达阈才动作）。
@@ -1108,6 +1163,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 		h.cfg.Pool.NoteSuccess(acct.UID)
+		st.errDetail = "" // 成功则清空之前可能残留的轮转尝试错误信息
 		// 11102 负缓存清命：该账号该模型实测成功，立即解除避让（不必等 TTL 到期）。
 		// BlockModelClear 按 "11102" reason 前缀识别，只清 11102 条目、不碰 6004 独立冷却。
 		h.cfg.Pool.BlockModelClear(acct.UID, bareModel)

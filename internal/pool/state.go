@@ -428,6 +428,33 @@ func (p *Pool) ServableForRealm(realm string) bool {
 	return p.servableLocked(realm)
 }
 
+// HasInFlightBusy 报告是否存在 healthy（含模型豁免）但当前仅因在途占满而无法被选中的账号。
+// 供 handler 在并发突发时排队等待名额释放，避免立即报 503 击垮多角色流水线。
+func (p *Pool) HasInFlightBusy(reqModel, realm, owner string) bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	now := time.Now()
+	for _, e := range p.byUID {
+		if realm != "" && e.a.Realm() != realm {
+			continue
+		}
+		if !IsOwnerMatch(e.a.OwnerValue(), owner) {
+			continue
+		}
+		if e.disabled || e.manualDisabled {
+			continue
+		}
+		isHealthy := e.healthy(now)
+		if reqModel != "" {
+			isHealthy = e.healthyForModel(now, reqModel)
+		}
+		if isHealthy && p.inFlightFull(e) {
+			return true
+		}
+	}
+	return false
+}
+
 // servableLocked 是 ServableNow / ServableForRealm 共用的遍历实现：
 // 存在至少一个（realm 匹配、未占满在途名额、healthy 或模型豁免形态）的账号即 true。
 // realm=="" 不加 realm 谓词（全池）。调用方必须不持锁。
