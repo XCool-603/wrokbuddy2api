@@ -103,6 +103,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 		healthyOf = func(e *entry) bool { return realmOK(e) && ownerOK(e) && e.healthyForModel(now, reqModel) }
 	}
 	var cands []*entry
+	hasHealthyInFlight := false
 	for uid, e := range p.byUID {
 		if tried != nil && tried[uid] {
 			continue
@@ -111,14 +112,20 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 			continue
 		}
 		if p.inFlightFull(e) {
+			hasHealthyInFlight = true
 			continue // 在途占满：跳过（max=0 不限时不触发）
 		}
 		cands = append(cands, e)
 	}
 	if len(cands) == 0 {
+		if hasHealthyInFlight {
+			// 修复并发排队：池中有健康的账号，只是正在处理在途请求（名额满载）。
+			// 此时绝不能降级去捞正在冷却的账号送死，返回 nil 让上层并发队列排队等待健康账号释放！
+			return nil
+		}
 		// 全冷却兜底：无 healthy 候选时，从冷却账号里选 until 最早到期的一个
 		// （熔断/冷却共用 expiry 口径，取较早截止者）。禁用的账号永不参与兜底。
-		return p.pickEarliestExpiryLocked(tried, now, realm, owner)
+		return p.pickEarliestExpiryLocked(tried, now, realm, owner, reqModel)
 	}
 	// top5 短名单按三因子权重降序截断（而非 credits 单纯降序）：否则闲置补偿
 	// 根本进不了短名单决策，低 credits 但久置的账号会永远排不进 top5。
@@ -281,7 +288,7 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 // 分级：disabled 永不参与；CoolHard（余额耗尽，等签到的号）同样排除——调了必 402，浪费轮换并产生噪音日志；
 // CoolSoft 与熔断号允许参与（可能已恢复，失败成本仅一轮换）。
 // 被 tried 排除、在途占满的账号同样跳过（维持请求级轮换 + 租约语义）。无任何可用返回 nil。
-func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, realm string, owner string) *auth.Auth {
+func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, realm string, owner string, reqModel string) *auth.Auth {
 	var best *entry
 	for uid, e := range p.byUID {
 		if tried != nil && tried[uid] {
@@ -301,6 +308,9 @@ func (p *Pool) pickEarliestExpiryLocked(tried map[string]bool, now time.Time, re
 		}
 		if e.coolKind == CoolHard && !e.until.IsZero() && now.Before(e.until) {
 			continue // 余额耗尽号（处于有效 hard 冷却期）不参与兜底：等签到恢复，调了必 402
+		}
+		if reqModel != "" && e.modelCooled(now, reqModel) {
+			continue // 该模型在当前账号上正处于明确限流期（6004），不兜底该模型
 		}
 		if p.inFlightFull(e) {
 			continue

@@ -305,9 +305,18 @@ func (p *Pool) Add(a *auth.Auth) {
 func (p *Pool) Remove(uid string) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	// 1. 优先精确匹配 UID，严防跨域同名账号因 RawUID 相同而被误删！
+	for k := range p.byUID {
+		if k == uid || strings.EqualFold(k, uid) {
+			delete(p.byUID, k)
+			p.saveLocked()
+			return
+		}
+	}
+	// 2. 若精确未匹配，仅回退匹配无歧义的条目
 	clean := strings.ToLower(auth.CleanRawUID(uid))
 	for k, e := range p.byUID {
-		if k == uid || strings.ToLower(k) == strings.ToLower(uid) || strings.ToLower(auth.CleanRawUID(k)) == clean || (e.a != nil && (strings.ToLower(e.a.RawUID()) == clean || strings.ToLower(auth.CleanRawUID(e.a.UID)) == clean)) {
+		if strings.EqualFold(auth.CleanRawUID(k), clean) || (e.a != nil && strings.EqualFold(auth.CleanRawUID(e.a.UID), clean)) {
 			delete(p.byUID, k)
 			p.saveLocked()
 			return

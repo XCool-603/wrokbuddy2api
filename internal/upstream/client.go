@@ -162,7 +162,14 @@ var softRateRule = errorRule{kind: ErrSoftRate, mode: matchFold, patterns: []str
 	"请求过于频繁", "限流",
 }}
 
-var sessionDeadRule = errorRule{kind: ErrSessionDead, mode: matchExact, patterns: []string{"Offline user session not found", "12153"}}
+var sessionDeadRule = errorRule{kind: ErrSessionDead, mode: matchFold, patterns: []string{
+	"Offline user session not found",
+	"12153",
+	"Authorization Required",
+	"401 Authorization",
+	"token is expired",
+	"token expired",
+}}
 
 // contentBlockedRule 内容策略拦截关键词（大小写不敏感子串匹配）。
 //

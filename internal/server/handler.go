@@ -105,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.21"
+const CurrentVersion = "v1.2.22"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -1073,6 +1073,29 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			} else {
 				kind = upstream.Classify(status, string(respBody))
 				uerr = &upstream.Error{Kind: kind, Status: status, Msg: string(respBody)}
+			}
+			if status == http.StatusUnauthorized || kind == upstream.ErrSessionDead {
+				// 若为 401 鉴权失效，且账号配有 refreshToken，先尝试静默刷新一次并救活账号
+				if acct.RefreshToken != "" {
+					if refErr := h.cfg.Upstream.RefreshToken(acct); refErr == nil {
+						_ = acct.SaveAtomic()
+						log.Printf("INFO: [server] acct=%s recovered from 401 via token refresh", logfmt.Label(acct.UID, acct.Nickname))
+						h.cfg.Pool.ClearSessionDead(acct.UID)
+						fail(acct.UID)
+						if !rotateBackoff(i, r.Context()) {
+							break
+						}
+						continue
+					}
+				}
+				// 无 refreshToken 或刷新失败：该账号凭证已彻底失效，立即禁用，防继续污染池子与报错
+				log.Printf("WARN: [server] acct=%s session dead (401 unauthorized), disabling account", logfmt.Label(acct.UID, acct.Nickname))
+				h.cfg.Pool.Disable(acct.UID, "401 unauthorized session dead")
+				fail(acct.UID)
+				if !rotateBackoff(i, r.Context()) {
+					break
+				}
+				continue
 			}
 			// 内容拦截误报（passthrough/append 模式首遇）：判定为 system 指纹误报，
 			// 触发降级到次日 00:00 CST，换 Degraded 中性提示词同请求内重试（append
