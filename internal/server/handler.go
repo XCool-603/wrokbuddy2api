@@ -83,6 +83,15 @@ type Config struct {
 
 	// StopFunc 终止服务上下文（用于升级完成后触发优雅重启或退出）
 	StopFunc func()
+
+	// QueueTimeout 账号在途满载排队等待超时时间，默认 60s
+	QueueTimeout time.Duration
+
+	// ModelAliases 虚拟模型别名映射表
+	ModelAliases map[string]string
+
+	// AlertMgr 运维风控告警通知管理器（可选）
+	AlertMgr *AlertManager
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -105,7 +114,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.22"
+const CurrentVersion = "v1.2.23"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。原判断是
 // 「超过 max_body_mb 上限一半」，max_body_mb 移除后改为固定值，语义不变：
@@ -121,7 +130,9 @@ type Handler struct {
 	degrade degradeGate
 	// wafIP WAF IP 级拦截状态机（fail-fast，wafip.go）：短窗多号 WAF 403 →
 	// 激活期轮转遇 WAF 403 直接终止（不放大请求量）。进程内状态、重启清零。
-	wafIP wafIPGate
+	wafIP           wafIPGate
+	inFlightTracker *InFlightTracker
+	alertMgr        *AlertManager
 }
 
 func (h *Handler) getAuthDir() string {
@@ -169,7 +180,18 @@ func NewHandler(cfg Config) *Handler {
 	if cfg.PromptMode == "" {
 		cfg.PromptMode = "passthrough" // 缺省 passthrough：透传客户端原始 system
 	}
-	h := &Handler{cfg: cfg, mux: http.NewServeMux()}
+	if cfg.QueueTimeout <= 0 {
+		cfg.QueueTimeout = 60 * time.Second
+	}
+	if cfg.AlertMgr == nil {
+		cfg.AlertMgr = NewAlertManager(AlertConfig{Enabled: false})
+	}
+	h := &Handler{
+		cfg:             cfg,
+		mux:             http.NewServeMux(),
+		inFlightTracker: NewInFlightTracker(),
+		alertMgr:        cfg.AlertMgr,
+	}
 	h.mux.HandleFunc("POST /v1/chat/completions", h.withAuth(h.chatCompletions))
 	h.mux.HandleFunc("GET /v1/models", h.withAuth(h.models))
 	h.mux.HandleFunc("GET /status", h.withAuth(h.status))
@@ -211,7 +233,16 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 		// 1. 如果配置了 UserMgr，优先尝试校验用户专属 API Key
 		if h.cfg.UserMgr != nil && strings.HasPrefix(authz, "Bearer ") && provided != "" {
 			if u, ok := h.cfg.UserMgr.FindByAPIKey(provided); ok {
-				// 命中用户专属 API Key，注入 Request Context 并放行
+				// 命中用户专属 API Key：校验 RPM 限频与每日积分配额 (F-07)
+				if err := h.cfg.UserMgr.CheckRPM(provided); err != nil {
+					writeOpenAIError(w, http.StatusTooManyRequests, "rate_limit_exceeded", err.Error())
+					return
+				}
+				if err := h.cfg.UserMgr.CheckDailyCredit(provided); err != nil {
+					writeOpenAIError(w, http.StatusForbidden, "quota_exceeded", err.Error())
+					return
+				}
+				// 注入 Request Context 并放行
 				ctx := context.WithValue(r.Context(), userContextKey, u)
 				next(w, r.WithContext(ctx))
 				return
@@ -549,6 +580,30 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 		}
 	}
 
+	// 虚拟模型别名注入（如 deepseek-chat -> global:deepseek-v4.1-flash）
+	if len(h.cfg.ModelAliases) > 0 {
+		seen := make(map[string]bool)
+		for _, m := range out {
+			if id, ok := m["id"].(string); ok {
+				seen[id] = true
+			}
+		}
+		for alias, target := range h.cfg.ModelAliases {
+			if !seen[alias] {
+				out = append(out, map[string]any{
+					"id":             alias,
+					"name":           alias + " (-> " + target + ")",
+					"description":    "虚拟别名模型，请求自动重定向至 " + target,
+					"object":         "model",
+					"created":        1753600000,
+					"owned_by":       "alias",
+					"context_length": 131072,
+				})
+				seen[alias] = true
+			}
+		}
+	}
+
 	return out
 }
 
@@ -691,9 +746,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	}
 	_ = json.Unmarshal(body, &peek)
 
-	realm, bareModel := resolveModel(peek.Model)
+	realm, bareModel := h.resolveModelWithAliases(peek.Model)
 	if bareModel == "auto" || bareModel == "default-model" || bareModel == "" {
 		bareModel = "deepseek-v4.1-flash"
+	}
+	fullModel := bareModel
+	if realm != "" {
+		fullModel = realm + ":" + bareModel
 	}
 
 	// 若客户端请求的是 dsh 虚拟智能体模型，直接转发至本地或容器内的 dsh 服务端口
@@ -745,7 +804,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		// 恒剥出 realm=cn，跨 realm 粘性会话会被错误钉回 CN 集合；完整前缀才能让
 		// 闭包正确过滤到 global 集合（见 cmd/server/wiring.go realmAwareAvailableForModel）。
 		// 模型名也参与成本账本与选号过滤，不能用 "-" 占位污染模型键。
-		if uid, ok := h.cfg.Session.ResolveForModel(stickyKey, peek.Model); ok {
+		if uid, ok := h.cfg.Session.ResolveForModel(stickyKey, fullModel); ok {
 			stickyUID = uid
 		}
 	}
@@ -763,12 +822,20 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 	// 在途租约：成功选中即占名额；函数出口（含成功 return 与 panic）统一释放。
 	var heldUID string
+	var endInFlight func()
 	defer func() {
+		if endInFlight != nil {
+			endInFlight()
+		}
 		if heldUID != "" {
 			h.cfg.Pool.Release(heldUID)
 		}
 	}()
 	releaseHeld := func() {
+		if endInFlight != nil {
+			endInFlight()
+			endInFlight = nil
+		}
 		if heldUID != "" {
 			h.cfg.Pool.Release(heldUID)
 			heldUID = ""
@@ -851,6 +918,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		chatMeta.ConversationRequestID = session.TurnRequestID("")
 	}
 	chatMeta.TraceID = r.Header.Get("X-Trace-ID")
+	streamHeadersSent := false
 
 	for i := 0; i < h.cfg.MaxRotate; i++ {
 		// 选号：粘性号优先（PickByUIDForModel 已校验该模型可用性 + 在途未满），否则普通轮换。
@@ -900,11 +968,16 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 		if acct == nil {
 			// 并发流量排队容灾：若池中有健康账号但当前全部在途满载（常见于多项目同时用多角色流水线），
-			// 在轮转第 1 轮内排队等待名额释放（最长等待 12 秒，微轮询 60ms），一旦有在途请求完成释放租约，
-			// 立即接管执行，绝不在突发高并发时粗暴返回 503 打崩客户端流水线！
+			// 在轮转第 1 轮内排队等待名额释放（最长等待 queue_timeout 秒，微轮询 60ms），一旦有在途请求完成释放租约，
+			// 立即接管执行，绝不在突发高并发时粗暴返回 503 打崩客户端流水线！流式长排队期间每 3 秒下发 SSE ping 注释心跳防客户端超时。
 			if i == 0 && (h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) || h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner)) {
 				waitStart := time.Now()
-				waitTimeout := 12 * time.Second
+				waitTimeout := h.cfg.QueueTimeout
+				if waitTimeout <= 0 {
+					waitTimeout = 60 * time.Second
+				}
+				lastPing := waitStart
+				flusher, _ := w.(http.Flusher)
 				for time.Since(waitStart) < waitTimeout {
 					select {
 					case <-r.Context().Done():
@@ -913,6 +986,20 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					}
 					if r.Context().Err() != nil {
 						break
+					}
+					// 流式请求若排队等待且支持 flush，周期性（3s）发送 SSE 注释心跳防客户端断连超时
+					if peek.Stream && flusher != nil && time.Since(lastPing) >= 3*time.Second {
+						if !streamHeadersSent {
+							w.Header().Set("Content-Type", "text/event-stream")
+							w.Header().Set("Cache-Control", "no-cache")
+							w.Header().Set("Connection", "keep-alive")
+							w.Header().Set("X-Accel-Buffering", "no")
+							w.WriteHeader(http.StatusOK)
+							streamHeadersSent = true
+						}
+						_, _ = io.WriteString(w, ": ping queue wait slot...\n\n")
+						flusher.Flush()
+						lastPing = time.Now()
 					}
 					// 重试选号
 					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
@@ -957,6 +1044,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			st.errDetail = diag.Summary
 			if diag.IsRateLimited {
 				st.status = http.StatusTooManyRequests
+				if h.alertMgr != nil {
+					h.alertMgr.NotifyAllCooling(realm, bareModel)
+				}
 				if !diag.EarliestReset.IsZero() {
 					delta := int(time.Until(diag.EarliestReset).Seconds())
 					if delta > 0 {
@@ -987,6 +1077,16 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			continue // 最后一个名额被并发抢走 → 换号
 		}
 		heldUID = acct.UID
+		if endInFlight != nil {
+			endInFlight()
+			endInFlight = nil
+		}
+		reqID := fmt.Sprintf("req-%d", time.Now().UnixNano())
+		callerIP := r.RemoteAddr
+		if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
+			callerIP = strings.TrimSpace(strings.Split(xff, ",")[0])
+		}
+		endInFlight = h.inFlightTracker.Begin(reqID, bareModel, acct.UID, acct.Nickname, peek.Stream, callerIP, reqOwner)
 		log.Printf("INFO: [server] chat dispatch (turn=%d/%d): acct=%s realm=%s model=%s owner=%q",
 			i+1, h.cfg.MaxRotate, logfmt.Label(acct.UID, acct.Nickname), acct.Realm(), bareModel, reqOwner)
 
@@ -1236,6 +1336,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			// 供下次选号把免费/便宜的号排在前面。
 			if credit, ok := stats.Credit(); ok {
 				h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, stats.TotalTokens())
+				if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
+					cost := int64(credit)
+					if cost <= 0 && credit > 0 {
+						cost = 1
+					}
+					h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
+				}
 			} else if hasUsage {
 				// R9(c) 防护观测：usage 存在但 credit 缺失（如 global SSE 末帧未带 credit）。
 				// 不算合法成本观测（缺失≠0），仅记一条 WARN 协助排障，绝不写入账本。
@@ -1258,6 +1365,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		// 成本账本（非流式）：从聚合响应的 usage 取 credit 与 token 总数。
 		if credit, total, ok := usageCreditTotal(resp); ok {
 			h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, total)
+			if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
+				cost := int64(credit)
+				if cost <= 0 && credit > 0 {
+					cost = 1
+				}
+				h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
+			}
 		}
 		// metrics 采集（非流式）：与流式同口径，从同一份 usage 带出。
 		fillStatFromUsage(st, resp)
@@ -1316,7 +1430,23 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			msg = fmt.Sprintf("all accounts are temporarily unavailable: %s", st.errDetail)
 		}
 	}
-	writeOpenAIErrorHint(w, status, code, msg, hint)
+	if streamHeadersSent {
+		errPayload, _ := json.Marshal(map[string]any{
+			"error": map[string]any{
+				"message":      msg,
+				"type":         "server_error",
+				"code":         code,
+				"gateway_hint": hint,
+			},
+		})
+		_, _ = io.WriteString(w, "data: "+string(errPayload)+"\n\n")
+		_, _ = io.WriteString(w, "data: [DONE]\n\n")
+		if flusher, ok := w.(http.Flusher); ok {
+			flusher.Flush()
+		}
+	} else {
+		writeOpenAIErrorHint(w, status, code, msg, hint)
+	}
 	st.status = status
 }
 
@@ -1436,6 +1566,13 @@ func (h *Handler) applyErrorPolicy(uid string, kind upstream.ErrKind, body, mode
 		h.cfg.Pool.CooldownSoftRate(uid, jitterDur(wafCooldownBase), time.Time{}, "waf 403 block")
 	case upstream.ErrSessionDead:
 		h.cfg.Pool.Disable(uid, "12153 session dead")
+		if h.alertMgr != nil {
+			nick := uid
+			if a := h.cfg.Pool.AuthByUID(uid); a != nil {
+				nick = a.Nickname
+			}
+			h.alertMgr.NotifyBan(uid, nick, "12153 session dead")
+		}
 	case upstream.ErrNotFound:
 		// 404 短冷却（软冷却），防雪崩。固定 notFoundCooldown，不随 soft_rate 退避：
 		// 偶发路径缺失不是限流信号，不该按限流惩罚升级。
@@ -1450,7 +1587,15 @@ func (h *Handler) applyErrorPolicy(uid string, kind upstream.ErrKind, body, mode
 		// 两条路径对坏号都立刻换号（同一请求轮转出池），只是后续可恢复性不同。
 		// 大小写不敏感（与 Classify 的 marker 匹配同口径）。
 		if strings.Contains(strings.ToLower(body), "request illegal") {
-			h.cfg.Pool.Disable(uid, "account banned by upstream (11140 request illegal), re-login required")
+			reason := "account banned by upstream (11140 request illegal), re-login required"
+			h.cfg.Pool.Disable(uid, reason)
+			if h.alertMgr != nil {
+				nick := uid
+				if a := h.cfg.Pool.AuthByUID(uid); a != nil {
+					nick = a.Nickname
+				}
+				h.alertMgr.NotifyBan(uid, nick, reason)
+			}
 			return
 		}
 		h.cfg.Pool.Cooldown(uid, pool.CoolSoft, h.cfg.SoftCooldown, "account fault (14017)")
@@ -1487,6 +1632,13 @@ func (h *Handler) applyErrorPolicy(uid string, kind upstream.ErrKind, body, mode
 		// 到这里属防御路径（status>=400 但分类成功），语义不明不喂。
 		if kind == upstream.ErrClient {
 			h.cfg.Pool.NoteFailures(uid)
+			if uerr != nil && uerr.Status == 401 && h.alertMgr != nil {
+				nick := uid
+				if a := h.cfg.Pool.AuthByUID(uid); a != nil {
+					nick = a.Nickname
+				}
+				h.alertMgr.NotifyAuthFailed(uid, nick, uerr.Msg)
+			}
 		}
 	}
 }

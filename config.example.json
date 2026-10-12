@@ -54,7 +54,8 @@
     "device_token": "",
     "device_token_file": "",
     "client_name": "WorkBuddy",
-    "passthrough_ip": false
+    "passthrough_ip": false,
+    "proxy": ""
   },
   "features": {
     "sanitize_blacklist_fingerprints": true
@@ -67,9 +68,24 @@
     "url": "",
     "token": ""
   },
+  "model_aliases": {
+    "deepseek-chat": "global:deepseek-v4.1-flash",
+    "gpt-4o": "cn:glm-5.3"
+  },
+  "alert": {
+    "enabled": false,
+    "feishu_webhook": "",
+    "wechat_webhook": "",
+    "dingtalk_webhook": "",
+    "telegram_bot_token": "",
+    "telegram_chat_id": "",
+    "generic_webhook": "",
+    "cooldown_minutes": 15
+  },
   "pool": {
     "max_in_flight": 3,
     "max_in_flight_global": 2,
+    "queue_timeout_seconds": 60,
     "breaker_threshold": 3,
     "breaker_cooldown": "30m",
     "breaker_cooldown_max": "6h",

@@ -93,6 +93,8 @@ type Config struct {
 		// PassthroughIP 是否透传客户端 IP（X-Forwarded-For/X-Real-IP 首段）给上游。
 		// 缺省 false（反代安全边界：不把内网/代理 IP 暴露给上游）；true 才透传。
 		PassthroughIP bool `json:"passthrough_ip"`
+		// Proxy 出站 HTTP/HTTPS/SOCKS5 代理 URL（空则回退至系统环境变量 HTTP_PROXY/HTTPS_PROXY）。
+		Proxy string `json:"proxy"`
 	} `json:"upstream"`
 
 	Features struct {
@@ -141,7 +143,20 @@ type Config struct {
 		// 错误策略）。默认 "30m"（≤48 次/天/模型）；"0" 关停（完全回到现状行为）；
 		// 空值回落默认。
 		CostExploreInterval string `json:"cost_explore_interval"`
+		// QueueTimeoutSeconds 账号在途满载时的并发排队最大等待时长（秒），默认 60。
+		QueueTimeoutSeconds int `json:"queue_timeout_seconds"`
 	} `json:"pool"`
+
+	// ModelAliases 虚拟模型别名重定向映射表（如 deepseek-chat -> global:deepseek-v4.1-flash）。
+	ModelAliases map[string]string `json:"model_aliases"`
+
+	// Alert 运维与风控告警 Webhook 通知配置（支持飞书、企业微信、钉钉、Telegram）。
+	Alert struct {
+		Enabled   bool     `json:"enabled"`
+		Webhooks  []string `json:"webhooks"`
+		Events    []string `json:"events"`
+		MinCredit int      `json:"min_credit"` // 积分低于此阈值告警，默认 100
+	} `json:"alert"`
 
 	SessionSticky struct {
 		Enabled    bool   `json:"enabled"`     // 默认 true
@@ -206,6 +221,14 @@ func Default() *Config {
 	c.Pool.ExpiringSoon = "168h" // 快过期窗口默认 7 天：官方活动奖励积分多在两周内过期
 	// costTier 探索默认 30m（issue #136：垄断破除 + 搭车改道零新增请求）；"0" 关停。
 	c.Pool.CostExploreInterval = "30m"
+	c.Pool.QueueTimeoutSeconds = 60
+	c.ModelAliases = map[string]string{
+		"deepseek-chat":     "global:deepseek-v4.1-flash",
+		"deepseek-reasoner": "global:deepseek-v4.1-flash",
+		"gpt-4o":            "cn:glm-5.3",
+		"claude-3-7-sonnet": "cn:glm-5.3",
+	}
+	c.Alert.MinCredit = 100
 	c.SessionSticky.Enabled = true
 	c.SessionSticky.TTL = "30m"
 	c.SessionSticky.GCInterval = "5m"
@@ -330,6 +353,41 @@ func applyEnv(c *Config) {
 			c.Admin.Enabled = b
 		}
 	}
+	if v := os.Getenv("WB2A_UPSTREAM_PROXY"); v != "" {
+		c.Upstream.Proxy = v
+	} else if v := os.Getenv("WB2A_PROXY"); v != "" {
+		c.Upstream.Proxy = v
+	}
+	if v := os.Getenv("WB2A_QUEUE_TIMEOUT"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Pool.QueueTimeoutSeconds = n
+		}
+	} else if v := os.Getenv("WB2A_QUEUE_TIMEOUT_SECONDS"); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			c.Pool.QueueTimeoutSeconds = n
+		}
+	}
+	if v := os.Getenv("WB2A_ALERT_ENABLED"); v != "" {
+		if b, err := strconv.ParseBool(v); err == nil {
+			c.Alert.Enabled = b
+		}
+	}
+	if v := os.Getenv("WB2A_ALERT_WEBHOOKS"); v != "" {
+		parts := strings.Split(v, ",")
+		var list []string
+		for _, p := range parts {
+			if s := strings.TrimSpace(p); s != "" {
+				list = append(list, s)
+			}
+		}
+		c.Alert.Webhooks = list
+	}
+	if v := os.Getenv("WB2A_MODEL_ALIASES"); v != "" {
+		var m map[string]string
+		if err := json.Unmarshal([]byte(v), &m); err == nil {
+			c.ModelAliases = m
+		}
+	}
 }
 
 func (c *Config) normalize() error {
@@ -417,6 +475,12 @@ func (c *Config) normalize() error {
 	}
 	if c.Upstream.IdleTimeoutSeconds <= 0 {
 		c.Upstream.IdleTimeoutSeconds = 300
+	}
+	if c.Pool.QueueTimeoutSeconds <= 0 {
+		c.Pool.QueueTimeoutSeconds = 60
+	}
+	if c.Alert.MinCredit <= 0 {
+		c.Alert.MinCredit = 100
 	}
 	if !strings.HasPrefix(c.Listen, ":") && !strings.Contains(c.Listen, ":") {
 		c.Listen = ":" + c.Listen

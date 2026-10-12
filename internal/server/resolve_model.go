@@ -24,3 +24,15 @@ func resolveModel(model string) (realm, bare string) {
 
 // ResolveModel 是 resolveModel 的导出面（跨包调用）。
 func ResolveModel(model string) (realm, bare string) { return resolveModel(model) }
+
+// resolveModelWithAliases 先查询 ModelAliases 映射表，再解析 realm 和 bare 模型名。
+func (h *Handler) resolveModelWithAliases(model string) (realm, bare string) {
+	if h != nil && h.cfg.ModelAliases != nil {
+		if target, ok := h.cfg.ModelAliases[model]; ok && target != "" {
+			model = target
+		} else if target, ok := h.cfg.ModelAliases[strings.ToLower(strings.TrimSpace(model))]; ok && target != "" {
+			model = target
+		}
+	}
+	return resolveModel(model)
+}

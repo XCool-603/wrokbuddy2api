@@ -212,7 +212,7 @@ func main() {
 		return 0
 	}
 
-	up := upstream.New()
+	up := upstream.NewWithProxy(cfg.Upstream.Proxy)
 	// 短 RPC 总时长上限（refresh/checkin/balance/FetchModels），语义不变。
 	up.HTTP.Timeout = time.Duration(cfg.Upstream.TimeoutSeconds) * time.Second
 	// 聊天 SSE 首字节前（响应头）上限：cfg 已 normalize（缺省回落 timeout_seconds）。
@@ -317,6 +317,13 @@ func main() {
 	}
 	dshManager := dshmgr.New(dshDir)
 
+	alertMgr := server.NewAlertManager(server.AlertConfig{
+		Enabled:   cfg.Alert.Enabled,
+		Webhooks:  cfg.Alert.Webhooks,
+		Events:    cfg.Alert.Events,
+		MinCredit: cfg.Alert.MinCredit,
+	})
+
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
@@ -338,6 +345,9 @@ func main() {
 		UserMgr:      userMgr,
 		DshMgr:       dshManager,
 		StopFunc:     stop,
+		QueueTimeout: time.Duration(cfg.Pool.QueueTimeoutSeconds) * time.Second,
+		ModelAliases: cfg.ModelAliases,
+		AlertMgr:     alertMgr,
 	})
 
 	go sch.Run(ctx)

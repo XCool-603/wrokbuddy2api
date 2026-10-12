@@ -731,7 +731,12 @@ type Client struct {
 // New 生产默认值。Transport 由 newTransport() 集中构造（连接层加固：禁 h2 /
 // TLS 握手超时 / 短 keepalive 探测，参数见 transport.go）。
 func New() *Client {
-	tr := newTransport()
+	return NewWithProxy("")
+}
+
+// NewWithProxy 构造带出站代理（http/https/socks5）的 Client，代理为空时自动使用系统环境变量。
+func NewWithProxy(proxyURL string) *Client {
+	tr := newTransportWithProxy(proxyURL)
 	return &Client{
 		HTTP:                 &http.Client{Timeout: 120 * time.Second, Transport: tr},
 		ChatHTTP:             &http.Client{Timeout: 0, Transport: tr}, // 无总时长；首字节由 ResponseHeaderTimeout 管

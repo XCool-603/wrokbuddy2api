@@ -33,6 +33,14 @@ type User struct {
 	APIKey       string    `json:"api_key"` // 用户专属 API Key，格式: sk-wb2a-...
 	Disabled     bool      `json:"disabled"`
 	CreatedAt    time.Time `json:"created_at"`
+
+	// 多租户配额与频控 (F-07)
+	DailyCreditLimit int64     `json:"daily_credit_limit"` // 每日积分上限 (0 = 不限)
+	UsedCreditToday  int64     `json:"used_credit_today"`  // 当日已消耗积分
+	LastCreditDay    string    `json:"last_credit_day"`    // 统计日期 "2006-01-02"
+	RPM              int       `json:"rpm"`                // 每分钟请求频次上限 (0 = 不限)
+	rpmCount         int       `json:"-"`
+	rpmWindow        time.Time `json:"-"`
 }
 
 // Manager 用户管理器。
@@ -527,3 +535,91 @@ func GenerateAPIKey() string {
 	_, _ = rand.Read(b)
 	return "sk-wb2a-" + hex.EncodeToString(b)
 }
+
+// SetUserQuota 管理员设置用户的每日积分配额与 RPM 限频 (F-07)。
+func (m *Manager) SetUserQuota(username string, dailyLimit int64, rpm int) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.users[strings.ToLower(strings.TrimSpace(username))]
+	if !ok {
+		return errors.New("用户不存在")
+	}
+	u.DailyCreditLimit = dailyLimit
+	u.RPM = rpm
+	return m.saveLocked()
+}
+
+// CheckRPM 校验用户是否超出每分钟请求频次上限 (RPM)。
+func (m *Manager) CheckRPM(apiKey string) error {
+	if apiKey == "" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.byAPIKey[apiKey]
+	if !ok || u == nil || u.RPM <= 0 {
+		return nil
+	}
+
+	now := time.Now()
+	if now.Sub(u.rpmWindow) >= time.Minute {
+		u.rpmWindow = now
+		u.rpmCount = 1
+		return nil
+	}
+	if u.rpmCount >= u.RPM {
+		return fmt.Errorf("rate limited: RPM limit exceeded (%d requests/min)", u.RPM)
+	}
+	u.rpmCount++
+	return nil
+}
+
+// CheckDailyCredit 校验用户当日积分消耗是否超限。
+func (m *Manager) CheckDailyCredit(apiKey string) error {
+	if apiKey == "" {
+		return nil
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.byAPIKey[apiKey]
+	if !ok || u == nil || u.DailyCreditLimit <= 0 {
+		return nil
+	}
+
+	today := time.Now().Format("2006-01-02")
+	if u.LastCreditDay != today {
+		u.LastCreditDay = today
+		u.UsedCreditToday = 0
+	}
+
+	if u.UsedCreditToday >= u.DailyCreditLimit {
+		return fmt.Errorf("daily quota exceeded: used %d / %d credits today", u.UsedCreditToday, u.DailyCreditLimit)
+	}
+	return nil
+}
+
+// DeductDailyCredit 累加扣减用户当日积分消耗。
+func (m *Manager) DeductDailyCredit(apiKey string, creditCost int64) {
+	if apiKey == "" || creditCost <= 0 {
+		return
+	}
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	u, ok := m.byAPIKey[apiKey]
+	if !ok || u == nil || u.DailyCreditLimit <= 0 {
+		return
+	}
+
+	today := time.Now().Format("2006-01-02")
+	if u.LastCreditDay != today {
+		u.LastCreditDay = today
+		u.UsedCreditToday = 0
+	}
+	u.UsedCreditToday += creditCost
+	_ = m.saveLocked()
+}
+

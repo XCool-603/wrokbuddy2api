@@ -262,6 +262,22 @@ func (h *Handler) handleActionBackup(w http.ResponseWriter, r *http.Request) {
 		}
 		_, _ = fw.Write(data)
 	}
+
+	// 如果是管理员，将数据配置也打入备份包 (F-08 全量备份)
+	if user != nil && user.Role == usermgr.RoleAdmin {
+		dataDir := "./data"
+		if h.cfg.StateFile != "" {
+			dataDir = filepath.Dir(h.cfg.StateFile)
+		}
+		for _, dataName := range []string{"users.json", "settings.json", "state.json"} {
+			dataPath := filepath.Join(dataDir, dataName)
+			if dBytes, dErr := os.ReadFile(dataPath); dErr == nil {
+				if dfw, dfwErr := zw.Create("data/" + dataName); dfwErr == nil {
+					_, _ = dfw.Write(dBytes)
+				}
+			}
+		}
+	}
 }
 
 func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request) {
@@ -320,7 +336,16 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 								zData, _ := io.ReadAll(rc)
 								_ = rc.Close()
 								if len(zData) > 0 {
-									items = append(items, extractAuthItems(zData, baseName)...)
+									if user != nil && user.Role == usermgr.RoleAdmin && (strings.HasPrefix(lowerZf, "data/") || baseName == "users.json" || baseName == "settings.json") {
+										dataDir := "./data"
+										if h.cfg.StateFile != "" {
+											dataDir = filepath.Dir(h.cfg.StateFile)
+										}
+										_ = os.MkdirAll(dataDir, 0755)
+										_ = os.WriteFile(filepath.Join(dataDir, baseName), zData, 0644)
+									} else {
+										items = append(items, extractAuthItems(zData, baseName)...)
+									}
 								}
 							}
 						}

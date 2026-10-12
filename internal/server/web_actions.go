@@ -377,3 +377,91 @@ func (h *Handler) handleConfigAPIKey(w http.ResponseWriter, r *http.Request) {
 		"api_key": newKey,
 	})
 }
+
+// handleInFlightData 实时在途流监控数据接口 (F-06)。
+func (h *Handler) handleInFlightData(w http.ResponseWriter, r *http.Request) {
+	items := h.inFlightTracker.Snapshot()
+	writeJSON(w, http.StatusOK, map[string]any{
+		"count": len(items),
+		"items": items,
+	})
+}
+
+// handleAccountUpdateToken 一键重新授权/Token 更新与解封接口 (F-04)。
+func (h *Handler) handleAccountUpdateToken(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID          string `json:"uid"`
+		AccessToken  string `json:"access_token"`
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UID == "" || strings.TrimSpace(req.AccessToken) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "参数错误：UID 与 AccessToken 必填"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	a := h.cfg.Pool.AuthByUID(req.UID)
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "未找到指定账号"})
+		return
+	}
+	if !h.isAccountOwnedBy(a, user) {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足：只能操作自己名下的账号"})
+		return
+	}
+
+	// 更新凭证值
+	a.AccessToken = strings.TrimSpace(req.AccessToken)
+	if req.RefreshToken != "" {
+		a.RefreshToken = strings.TrimSpace(req.RefreshToken)
+	}
+
+	// 激活/解封账号并清空错误与冷却
+	h.cfg.Pool.ReviveDisabled(req.UID)
+	h.cfg.Pool.ClearCooling(req.UID)
+	h.cfg.Pool.NoteSuccess(req.UID)
+
+	// 落盘保存到磁盘文件
+	if a.FilePath != "" {
+		if raw, err := json.MarshalIndent(a, "", "  "); err == nil {
+			_ = os.WriteFile(a.FilePath, raw, 0600)
+		}
+	}
+
+	// 异步刷新一次该号资产明细
+	h.triggerAsyncCreditFetch(a, req.UID)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"message": "Token 更新成功，账号已解除封禁并恢复健康",
+	})
+}
+
+// handleAdminSetUserQuota 管理员设置租户配额与 RPM 限制 (F-07)。
+func (h *Handler) handleAdminSetUserQuota(w http.ResponseWriter, r *http.Request) {
+	user := h.getWebSessionUser(r)
+	if user == nil || user.Role != usermgr.RoleAdmin {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "仅管理员可配置配额"})
+		return
+	}
+	if h.cfg.UserMgr == nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]any{"error": "用户系统未启用"})
+		return
+	}
+	var req struct {
+		Username   string `json:"username"`
+		DailyLimit int64  `json:"daily_limit"`
+		RPM        int    `json:"rpm"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Username == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "参数错误：用户名必填"})
+		return
+	}
+	if err := h.cfg.UserMgr.SetUserQuota(req.Username, req.DailyLimit, req.RPM); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": err.Error()})
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"success": true})
+}
+
+

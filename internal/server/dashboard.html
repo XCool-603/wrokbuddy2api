@@ -387,6 +387,46 @@
           </table>
         </div>
       </div>
+
+      <!-- 实时在途流监控 (In-Flight Stream Inspector) -->
+      <div class="glass-panel rounded-2xl border border-slate-800 p-6 shadow-glass space-y-4">
+        <div class="flex items-center justify-between border-b border-slate-800/80 pb-4">
+          <div class="flex items-center gap-3">
+            <span class="relative flex h-3 w-3">
+              <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+              <span class="relative inline-flex rounded-full h-3 w-3 bg-emerald-500"></span>
+            </span>
+            <h2 class="text-base font-bold text-white flex items-center gap-2">
+              <span>实时在途流监控 (Live In-Flight Stream Inspector)</span>
+              <span id="inFlightCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0 在途</span>
+            </h2>
+          </div>
+          <button onclick="fetchInFlightData()" class="text-xs text-indigo-400 hover:text-indigo-300 flex items-center gap-1 font-sans">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/></svg>
+            <span>刷新</span>
+          </button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="w-full text-left text-xs text-slate-300">
+            <thead class="text-[11px] uppercase tracking-wider text-slate-400 bg-slate-900/60 border-b border-slate-800">
+              <tr>
+                <th class="px-4 py-2.5 font-semibold">请求ID</th>
+                <th class="px-4 py-2.5 font-semibold">模型</th>
+                <th class="px-4 py-2.5 font-semibold">承载账号</th>
+                <th class="px-4 py-2.5 font-semibold">传输模式</th>
+                <th class="px-4 py-2.5 font-semibold">客户端IP</th>
+                <th class="px-4 py-2.5 font-semibold">租户身份</th>
+                <th class="px-4 py-2.5 font-semibold text-right">已持续时长</th>
+              </tr>
+            </thead>
+            <tbody id="inFlightTable" class="divide-y divide-slate-800/60 font-mono">
+              <tr>
+                <td colspan="7" class="px-4 py-6 text-center text-slate-500 font-sans">当前无在途活跃请求，网关处于就绪状态</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
     </div>
 
     <!-- TAB 2: 客户端接入 & Key & 聚合模型 -->
@@ -1514,6 +1554,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         if (data.stats) {
           renderTokenAnalytics(data.stats);
         }
+        fetchInFlightData();
       } catch (err) {
         console.error('加载控制台数据失败:', err);
       } finally {
@@ -1899,6 +1940,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               <td class="px-6 py-4 text-right font-sans space-x-2">
                 ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
                 ${isCooling ? `<button onclick="controlAccount('${a.uid}', 'clear_cooling')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="上游已恢复时可直接解除冷却">解除冷却</button>` : ''}
+                <button onclick="openUpdateTokenModal('${a.uid}', '${escapeHtml(a.nickname || a.uid)}')" class="text-xs text-sky-400 hover:text-sky-300 hover:underline" title="更换/更新 Token 并一键解封">重填Token</button>
                 ${isManualDisabled 
                   ? `<button onclick="controlAccount('${a.uid}', 'enable')" class="text-xs text-emerald-400 hover:text-emerald-300 hover:underline">启用</button>` 
                   : `<button onclick="controlAccount('${a.uid}', 'disable')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">停用</button>`}
@@ -2451,6 +2493,60 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         alert('请求失败: ' + e);
       }
     }
+
+    async function openUpdateTokenModal(uid, nick) {
+      const token = prompt(`【一键重填 Token 与解封复活】\n账号: ${nick} (${uid})\n\n请输入新的 Access Token (必填):`);
+      if (!token || !token.trim()) return;
+      const refreshToken = prompt(`(可选) 请输入 Refresh Token (若无请留空直接确定):`) || "";
+      try {
+        const res = await fetch('/ui/account/update_token', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            uid: uid,
+            access_token: token.trim(),
+            refresh_token: refreshToken.trim()
+          })
+        });
+        const data = await res.json();
+        if (data.success) {
+          showToast(data.message || 'Token 已更新，账号已成功解封复活！');
+          refreshData();
+        } else {
+          alert('更新失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('请求失败: ' + e);
+      }
+    }
+
+    async function fetchInFlightData() {
+      try {
+        const res = await fetch('/ui/inflight/data');
+        if (!res.ok) return;
+        const data = await res.json();
+        const badge = document.getElementById('inFlightCountBadge');
+        if (badge) badge.innerText = `${data.count || 0} 在途`;
+        const tbody = document.getElementById('inFlightTable');
+        if (!tbody) return;
+        if (!data.items || data.items.length === 0) {
+          tbody.innerHTML = `<tr><td colspan="7" class="px-4 py-6 text-center text-slate-500 font-sans">当前无在途活跃请求，网关处于就绪状态</td></tr>`;
+          return;
+        }
+        tbody.innerHTML = data.items.map(it => `
+          <tr class="hover:bg-slate-800/30">
+            <td class="px-4 py-3 text-slate-400 font-mono">${escapeHtml(it.id)}</td>
+            <td class="px-4 py-3 text-emerald-400 font-semibold">${escapeHtml(it.model)}</td>
+            <td class="px-4 py-3 text-slate-200">${escapeHtml(it.nick || it.uid)}</td>
+            <td class="px-4 py-3">${it.stream ? '<span class="text-cyan-400">Stream SSE</span>' : '<span class="text-slate-400">Sync JSON</span>'}</td>
+            <td class="px-4 py-3 text-slate-400">${escapeHtml(it.client_ip || '-')}</td>
+            <td class="px-4 py-3 text-purple-300">${escapeHtml(it.owner || 'public')}</td>
+            <td class="px-4 py-3 text-right text-amber-300 font-bold">${escapeHtml(it.elapsed || '0s')}</td>
+          </tr>
+        `).join('');
+      } catch (e) {}
+    }
+    setInterval(fetchInFlightData, 3000);
 
     async function deleteAccount(filename) {
       if (!confirm('确认删除凭证文件 ' + filename + ' 吗？删除后账号将移出池。')) return;
@@ -3102,6 +3198,9 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               <button onclick="adminResetKey('${escapeHtml(u.username)}')" class="text-xs text-cyan-400 hover:text-cyan-300 hover:underline">
                 换Key
               </button>
+              <button onclick="adminSetUserQuota('${escapeHtml(u.username)}', ${u.daily_credit_limit || 0}, ${u.rpm || 0})" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="设置每日积分上限与 RPM">
+                配额
+              </button>
               ${!isAdmin ? `
                 <button onclick="toggleUserDisabled('${escapeHtml(u.username)}', ${!u.disabled})" class="text-xs ${u.disabled ? 'text-emerald-400 hover:text-emerald-300' : 'text-amber-400 hover:text-amber-300'} hover:underline">
                   ${u.disabled ? '启用' : '禁用'}
@@ -3168,6 +3267,31 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         }
       } catch (e) {
         alert('网络异常: ' + e);
+      }
+    }
+
+    async function adminSetUserQuota(username, curDaily, curRPM) {
+      const dailyStr = prompt(`【用户配额与频控设置】\n用户: ${username}\n\n请输入每日积分消耗上限 (0 表示不限):`, curDaily || 0);
+      if (dailyStr === null) return;
+      const rpmStr = prompt(`请输入每分钟请求数限制 RPM (0 表示不限):`, curRPM || 0);
+      if (rpmStr === null) return;
+      const daily = parseInt(dailyStr) || 0;
+      const rpm = parseInt(rpmStr) || 0;
+      try {
+        const res = await fetch('/ui/admin/user/quota', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, daily_limit: daily, rpm })
+        });
+        const data = await res.json();
+        if (data.success) {
+          alert(`✅ 用户 "${username}" 配额与频控设置已生效！\n• 每日积分上限: ${daily === 0 ? '不限' : daily}\n• RPM 频控: ${rpm === 0 ? '不限' : rpm + ' 次/分'}`);
+          loadAdminUsers();
+        } else {
+          alert('设置失败: ' + (data.error || '未知错误'));
+        }
+      } catch (e) {
+        alert('请求失败: ' + e);
       }
     }
 

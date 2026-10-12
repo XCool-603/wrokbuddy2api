@@ -36,6 +36,9 @@ func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string) {
 	go func() {
 		if remain, expiring, _, _, err := h.cfg.Upstream.ResourceSummary(a); err == nil {
 			h.cfg.Pool.SetCreditsDetailed(uid, remain, expiring)
+			if h.alertMgr != nil && remain < int64(h.alertMgr.cfg.MinCredit) {
+				h.alertMgr.NotifyLowCredit(uid, a.Nickname, remain)
+			}
 		}
 	}()
 }
@@ -67,12 +70,16 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/oauth/poll", h.withWebAuth(h.handleOAuthPoll))
 	h.mux.HandleFunc("POST /ui/oauth/import", h.withWebAuth(h.handleOAuthImport))
 	h.mux.HandleFunc("POST /ui/account/admin", h.withWebAuth(h.handleAccountAdmin))
+	h.mux.HandleFunc("POST /ui/account/update_token", h.withWebAuth(h.handleAccountUpdateToken))
+	h.mux.HandleFunc("GET /ui/inflight/data", h.withWebAuth(h.handleInFlightData))
 	h.mux.HandleFunc("POST /ui/action/signin", h.withWebAuth(h.handleActionSignin))
 	h.mux.HandleFunc("POST /ui/action/trial", h.withWebAuth(h.handleActionTrial))
 	h.mux.HandleFunc("POST /ui/action/delete", h.withWebAuth(h.handleActionDelete))
 	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))
 	h.mux.HandleFunc("POST /ui/config/password", h.withWebAuth(h.handleConfigPassword))
 	h.mux.HandleFunc("GET /ui/action/backup", h.withWebAuth(h.handleActionBackup))
+	h.mux.HandleFunc("GET /ui/backup/export", h.withWebAuth(h.handleActionBackup))
+	h.mux.HandleFunc("POST /ui/backup/import", h.withWebAuth(h.handleOAuthBatchImport))
 	h.mux.HandleFunc("POST /ui/oauth/batch_import", h.withWebAuth(h.handleOAuthBatchImport))
 	h.mux.HandleFunc("GET /ui/system/update/check", h.withWebAuth(h.handleSystemUpdateCheck))
 	h.mux.HandleFunc("POST /ui/system/update/do", h.withWebAuth(h.handleSystemUpdateDo))
@@ -80,6 +87,7 @@ func (h *Handler) RegisterWebUI() {
 	// 用户中心与多用户管理端点
 	h.mux.HandleFunc("POST /ui/user/apikey/reset", h.withWebAuth(h.handleUserAPIKeyReset))
 	h.mux.HandleFunc("GET /ui/admin/users", h.withWebAuth(h.handleAdminListUsers))
+	h.mux.HandleFunc("POST /ui/admin/user/quota", h.withWebAuth(h.handleAdminSetUserQuota))
 	h.mux.HandleFunc("POST /ui/admin/user/toggle", h.withWebAuth(h.handleAdminToggleUser))
 	h.mux.HandleFunc("POST /ui/admin/user/role", h.withWebAuth(h.handleAdminSetUserRole))
 	h.mux.HandleFunc("POST /ui/admin/user/delete", h.withWebAuth(h.handleAdminDeleteUser))
