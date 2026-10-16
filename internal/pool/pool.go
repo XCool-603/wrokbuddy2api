@@ -3,6 +3,7 @@
 package pool
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"os"
@@ -250,6 +251,7 @@ func (p *Pool) Acquire(uid string) bool {
 		return false
 	}
 	limit := p.inFlightLimit(e)
+	leaser, _ := p.store.(StoreLeaser)
 	p.mu.RUnlock()
 	if limit <= 0 {
 		// 不限：计数仍累加（供状态观测），但永不拒绝。
@@ -262,6 +264,12 @@ func (p *Pool) Acquire(uid string) bool {
 			return false
 		}
 		if e.inFlight.CompareAndSwap(cur, cur+1) {
+			// 若配置了分布式租约，协同校验分布式并发名额
+			if leaser != nil && !leaser.AcquireLease(context.Background(), uid, limit, 90*time.Second) {
+				// 分布式租约满（其他节点已占满）：回滚本地计数并返回失败
+				e.inFlight.Add(-1)
+				return false
+			}
 			return true
 		}
 	}
@@ -271,9 +279,13 @@ func (p *Pool) Acquire(uid string) bool {
 func (p *Pool) Release(uid string) {
 	p.mu.RLock()
 	e := p.entryLocked(uid)
+	leaser, _ := p.store.(StoreLeaser)
 	p.mu.RUnlock()
 	if e == nil {
 		return
+	}
+	if leaser != nil {
+		leaser.ReleaseLease(context.Background(), uid)
 	}
 	for {
 		cur := e.inFlight.Load()

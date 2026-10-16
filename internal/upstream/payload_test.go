@@ -267,3 +267,31 @@ func TestNormalizeImageURL(t *testing.T) {
 		})
 	}
 }
+
+func TestEnsureConversationID(t *testing.T) {
+	// 1. 无 conversation_id 时自动注入
+	in := []byte(`{"model":"deepseek-chat"}`)
+	out := EnsureConversationID(in, "test-conv-123")
+	var obj map[string]any
+	if err := json.Unmarshal(out, &obj); err != nil {
+		t.Fatal(err)
+	}
+	if obj["conversation_id"] != "test-conv-123" {
+		t.Fatalf("conversation_id = %v, want test-conv-123", obj["conversation_id"])
+	}
+	if obj["conversationId"] != "test-conv-123" {
+		t.Fatalf("conversationId = %v, want test-conv-123", obj["conversationId"])
+	}
+
+	// 2. 已有 conversation_id 时不覆盖原值
+	in2 := []byte(`{"model":"deepseek-chat","conversation_id":"orig-conv"}`)
+	out2 := EnsureConversationID(in2, "new-conv")
+	var obj2 map[string]any
+	if err := json.Unmarshal(out2, &obj2); err != nil {
+		t.Fatal(err)
+	}
+	if obj2["conversation_id"] != "orig-conv" {
+		t.Fatalf("conversation_id = %v, want orig-conv", obj2["conversation_id"])
+	}
+}
+

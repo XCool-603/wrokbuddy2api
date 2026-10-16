@@ -60,16 +60,16 @@ func TestChatHeadersConversationFullMeta(t *testing.T) {
 	}
 }
 
-// TestChatHeadersConversationNoConvID meta.ConversationID 为空 → 不发 X-Conversation-ID
-// （透传客户端原值优先，不伪造），其余头族照常。
+// TestChatHeadersConversationNoConvID meta.ConversationID 为空 → 自动补齐标准 UUID 格式
+// X-Conversation-ID 以通过上游渠道校验（防 11128 conversation id missing 拦截）。
 func TestChatHeadersConversationNoConvID(t *testing.T) {
 	a := &auth.Auth{AccessToken: "at", UID: "u1"}
 	req := mustRequest(t)
 	c := &Client{}
 	c.ChatHeaders(req, a, "", ChatMeta{ConversationRequestID: "convreq-1"})
 
-	if got := req.Header.Get("X-Conversation-ID"); got != "" {
-		t.Errorf("X-Conversation-ID = %q want empty (client didn't send one)", got)
+	if got := req.Header.Get("X-Conversation-ID"); got == "" {
+		t.Errorf("X-Conversation-ID should be auto-populated to pass channel verification, got empty")
 	}
 	if got := req.Header.Get("X-Conversation-Request-ID"); got != "convreq-1" {
 		t.Errorf("X-Conversation-Request-ID = %q want convreq-1", got)
@@ -79,8 +79,8 @@ func TestChatHeadersConversationNoConvID(t *testing.T) {
 	}
 }
 
-// TestChatHeadersConversationEmptyMeta 零值 meta（如测试/直接调用方）也必发聚合主键：
-// conversationRequestID 内部补一个 NewMessageID（32 hex），B3 TraceId 取其值。
+// TestChatHeadersConversationEmptyMeta 零值 meta（如测试/直接调用方）也必发聚合主键与会话ID：
+// conversationRequestID 内部补一个 NewMessageID（32 hex），X-Conversation-ID 补 UUID。
 func TestChatHeadersConversationEmptyMeta(t *testing.T) {
 	a := &auth.Auth{AccessToken: "at", UID: "u1"}
 	req := mustRequest(t)
@@ -97,8 +97,8 @@ func TestChatHeadersConversationEmptyMeta(t *testing.T) {
 	if got := req.Header.Get("X-B3-TraceId"); got != convReqID {
 		t.Errorf("X-B3-TraceId = %q want %q", got, convReqID)
 	}
-	if got := req.Header.Get("X-Conversation-ID"); got != "" {
-		t.Errorf("X-Conversation-ID = %q want empty", got)
+	if got := req.Header.Get("X-Conversation-ID"); got == "" {
+		t.Errorf("X-Conversation-ID should be auto-populated, got empty")
 	}
 }
 

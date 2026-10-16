@@ -223,3 +223,22 @@ func TurnRequestID(turnKey string) string {
 	sum := sha256.Sum256([]byte(deriveSalt + "|" + turnKey))
 	return hex.EncodeToString(sum[:16])
 }
+
+// FormatUUID 把 32 位 hex 格式化为标准 UUID 字符串（8-4-4-4-12）
+func FormatUUID(hex32 string) string {
+	if len(hex32) != 32 {
+		return hex32
+	}
+	return fmt.Sprintf("%s-%s-%s-%s-%s", hex32[0:8], hex32[8:12], hex32[12:16], hex32[16:20], hex32[20:32])
+}
+
+// NewUUID 生成标准 36 位 UUID 格式字符串
+func NewUUID() string {
+	return FormatUUID(NewMessageID())
+}
+
+// UUIDForKey 根据会话键确定性派生标准 UUID
+func UUIDForKey(key string) string {
+	return FormatUUID(RequestIDForKey(key))
+}
+

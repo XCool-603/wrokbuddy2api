@@ -38,6 +38,16 @@ type Store interface {
 	SaveState(data []byte)
 	// LoadState 读池状态快照；仅在启动时调用（同步）。
 	LoadState() ([]byte, bool)
+	// AcquireLease 尝试获取跨实例在途并发租约名额。
+	// 当多节点集群部署时，保证集群总并发请求不超过 maxInFlight。
+	// maxInFlight <= 0 表示不限制；ttl 为锁的防死锁失效窗口（例如 90s）。
+	AcquireLease(ctx context.Context, uid string, maxInFlight int, ttl time.Duration) bool
+	// ReleaseLease 释放跨实例在途并发租约名额。
+	ReleaseLease(ctx context.Context, uid string)
+	// SetCooldown 异步同步账号冷却状态至分布式集群（带 TTL）。
+	SetCooldown(uid string, ttl time.Duration)
+	// IsCooldown 检查账号是否被集群其他节点标记为全局冷却状态。
+	IsCooldown(uid string) bool
 	// Close 关停 Store：Upstash 等待已提交的异步写全部执行完再关底层连接
 	// （停机语义：最后一笔 Redis 镜像必须写完），之后新提交的写直接丢弃；幂等。
 	// Noop 为空操作。进程退出前在 pool.Close() 之后调用。
@@ -45,9 +55,11 @@ type Store interface {
 }
 
 const (
-	bindPrefix  = "wb2api:bind:"
-	stateKey    = "wb2api:state"
-	readTimeout = 3 * time.Second
+	bindPrefix     = "wb2api:bind:"
+	stateKey       = "wb2api:state"
+	leasePrefix    = "wb2api:lease:"
+	cooldownPrefix = "wb2api:cooling:"
+	readTimeout    = 3 * time.Second
 )
 
 // New 根据 url+token 构建 Store。
@@ -261,9 +273,77 @@ func (u *Upstash) LoadBinds() map[string]string {
 // Noop 纯内存降级：所有方法空实现。
 type Noop struct{}
 
-func (Noop) SetBind(string, string, time.Duration) {}
-func (Noop) DelBind(string)                        {}
-func (Noop) LoadBinds() map[string]string          { return nil }
-func (Noop) SaveState([]byte)                      {}
-func (Noop) LoadState() ([]byte, bool)             { return nil, false }
-func (Noop) Close() error                          { return nil }
+func (Noop) SetBind(string, string, time.Duration)                         {}
+func (Noop) DelBind(string)                                                {}
+func (Noop) LoadBinds() map[string]string                                  { return nil }
+func (Noop) SaveState([]byte)                                              {}
+func (Noop) LoadState() ([]byte, bool)                                     { return nil, false }
+func (Noop) AcquireLease(context.Context, string, int, time.Duration) bool { return true }
+func (Noop) ReleaseLease(context.Context, string)                          {}
+func (Noop) SetCooldown(string, time.Duration)                             {}
+func (Noop) IsCooldown(string) bool                                        { return false }
+func (Noop) Close() error                                                  { return nil }
+
+var acquireScript = redis.NewScript(`
+local current = redis.call('GET', KEYS[1])
+if current and tonumber(current) >= tonumber(ARGV[1]) then
+    return 0
+end
+local val = redis.call('INCR', KEYS[1])
+if val == 1 then
+    redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+return 1
+`)
+
+var releaseScript = redis.NewScript(`
+local current = redis.call('GET', KEYS[1])
+if current and tonumber(current) > 0 then
+    redis.call('DECR', KEYS[1])
+end
+return 1
+`)
+
+func leaseKey(uid string) string   { return leasePrefix + uid }
+func coolingKey(uid string) string { return cooldownPrefix + uid }
+
+func (u *Upstash) AcquireLease(ctx context.Context, uid string, maxInFlight int, ttl time.Duration) bool {
+	if maxInFlight <= 0 {
+		return true
+	}
+	if ttl <= 0 {
+		ttl = 90 * time.Second
+	}
+	res, err := acquireScript.Run(ctx, u.client, []string{leaseKey(uid)}, maxInFlight, int(ttl.Seconds())).Int()
+	if err != nil {
+		// 出错软降级放行（不因 Redis 偶发抖动阻塞正常请求）
+		return true
+	}
+	return res == 1
+}
+
+func (u *Upstash) ReleaseLease(ctx context.Context, uid string) {
+	_ = releaseScript.Run(ctx, u.client, []string{leaseKey(uid)}).Err()
+}
+
+func (u *Upstash) SetCooldown(uid string, ttl time.Duration) {
+	if ttl <= 0 {
+		return
+	}
+	u.goWrite(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+		_ = u.client.Set(ctx, coolingKey(uid), "1", ttl).Err()
+	})
+}
+
+func (u *Upstash) IsCooldown(uid string) bool {
+	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	defer cancel()
+	v, err := u.client.Exists(ctx, coolingKey(uid)).Result()
+	if err != nil {
+		return false
+	}
+	return v > 0
+}
+

@@ -3,6 +3,7 @@
 package pool
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,6 +33,13 @@ type snapshot struct {
 type StoreSnapshotter interface {
 	SaveState(data []byte)
 	LoadState() ([]byte, bool)
+}
+
+// StoreLeaser 是分布式租约扩展接口（可选）。若注入的 Store 实现了该接口，
+// 则在跨实例高可用部署时，Acquire/Release 自动与分布式租约协同。
+type StoreLeaser interface {
+	AcquireLease(ctx context.Context, uid string, maxInFlight int, ttl time.Duration) bool
+	ReleaseLease(ctx context.Context, uid string)
 }
 
 // RestoreFromSnapshot 择新恢复：比较本地 state.json 与 Redis 快照，采用较新者。

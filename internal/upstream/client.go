@@ -181,6 +181,9 @@ var contentBlockedRule = errorRule{kind: ErrContentBlocked, mode: matchLower, pa
 	"blocked by security policy",
 	"unapproved channel",
 	"illegal api invocation",
+	"conversation id missing",
+	"channel verification",
+	"not sent from an official client",
 }}
 
 // badParamsRule 请求体解析失败关键词（issue #41 连带）：HTTP 400 + 上游
@@ -799,6 +802,8 @@ func (c *Client) prepareBody(body []byte, realm, uid, conversationID string) []b
 		efforts, defs = globalEffortMap(efforts, defs)
 	}
 	body = PrepareBodyOptWithEffortsAndDefault(body, c.SanitizeFingerprints, efforts, defs)
+	// 渠道校验防御：上游强制要求必须有 conversation id，否则报 11128 "conversation id missing"
+	body = EnsureConversationID(body, conversationID)
 	// prompt_cache_key 注入（P0 费用优化，费用降 ~17×）：按账号隔离的稳定缓存键，
 	// 让同一客户端对同一账号的连续请求命中上游前缀缓存。
 	body = InjectPromptCacheKey(body, uid, conversationID)

@@ -1,6 +1,7 @@
 package pool
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -2004,3 +2005,57 @@ func TestStatusExposesRuntimeFields(t *testing.T) {
 	}
 	p.Release("u1")
 }
+
+type mockLeaserStore struct {
+	SaveStateCalled bool
+	allowAcquire    bool
+	releaseCalled   bool
+}
+
+func (m *mockLeaserStore) SaveState(data []byte)        {}
+func (m *mockLeaserStore) LoadState() ([]byte, bool)     { return nil, false }
+func (m *mockLeaserStore) AcquireLease(ctx context.Context, uid string, maxInFlight int, ttl time.Duration) bool {
+	return m.allowAcquire
+}
+func (m *mockLeaserStore) ReleaseLease(ctx context.Context, uid string) {
+	m.releaseCalled = true
+}
+
+func TestDistributedLeaserCooperation(t *testing.T) {
+	p := New("")
+	p.Add(&auth.Auth{UID: "u1"})
+	p.SetMaxInFlight(2)
+
+	mls := &mockLeaserStore{allowAcquire: false}
+	p.SetStore(mls)
+
+	// 分布式租约拒绝时，本地应该同步拒绝并且不占用在途
+	if p.Acquire("u1") {
+		t.Fatalf("expected Acquire to fail when distributed leaser rejects")
+	}
+	st, _ := p.Status("u1")
+	if st.InFlight != 0 {
+		t.Fatalf("in_flight should remain 0 after rollback, got %d", st.InFlight)
+	}
+
+	// 允许获取租约
+	mls.allowAcquire = true
+	if !p.Acquire("u1") {
+		t.Fatalf("expected Acquire to succeed when distributed leaser allows")
+	}
+	st, _ = p.Status("u1")
+	if st.InFlight != 1 {
+		t.Fatalf("in_flight should be 1, got %d", st.InFlight)
+	}
+
+	// 释放租约触发
+	p.Release("u1")
+	if !mls.releaseCalled {
+		t.Fatalf("Release should have called distributed ReleaseLease")
+	}
+	st, _ = p.Status("u1")
+	if st.InFlight != 0 {
+		t.Fatalf("in_flight should be 0 after release, got %d", st.InFlight)
+	}
+}
+

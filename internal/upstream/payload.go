@@ -401,3 +401,39 @@ func normalizeToolChoice(obj map[string]any) {
 		delete(obj, "tool_choice")
 	}
 }
+
+// EnsureConversationID 确保出站请求体 JSON 中包含 conversation_id 与 conversationId 字段。
+// 上游最新风控策略：无 conversation id 时抛出 11128 "conversation id missing" 并阻断渠道校验。
+// 若请求体已存在有效的会话字段，保留原值不覆盖。
+func EnsureConversationID(body []byte, conversationID string) []byte {
+	if len(body) == 0 || conversationID == "" {
+		return body
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body
+	}
+	hasSnake := false
+	if v, ok := obj["conversation_id"].(string); ok && strings.TrimSpace(v) != "" {
+		hasSnake = true
+	}
+	hasCamel := false
+	if v, ok := obj["conversationId"].(string); ok && strings.TrimSpace(v) != "" {
+		hasCamel = true
+	}
+	if hasSnake && hasCamel {
+		return body
+	}
+	if !hasSnake {
+		obj["conversation_id"] = conversationID
+	}
+	if !hasCamel {
+		obj["conversationId"] = conversationID
+	}
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body
+	}
+	return out
+}
+

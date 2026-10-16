@@ -288,7 +288,7 @@
             <div class="w-3 h-3 rounded-full bg-rose-500/80"></div>
             <div class="w-3 h-3 rounded-full bg-amber-500/80"></div>
             <div class="w-3 h-3 rounded-full bg-emerald-500/80"></div>
-            <span class="ml-2 text-xs font-mono text-slate-400 hidden sm:inline">workbuddy-gateway · /v1/chat/completions</span>
+            <span class="ml-2 text-xs font-mono text-slate-400 hidden sm:inline">workbuddy-gateway · /v1/chat/completions & /v1/messages</span>
           </div>
 
           <!-- Language Selector Tabs -->
@@ -297,6 +297,7 @@
             <button onclick="switchCodeLang('python')" id="btnLang-python" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Python</button>
             <button onclick="switchCodeLang('nodejs')" id="btnLang-nodejs" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Node.js</button>
             <button onclick="switchCodeLang('go')" id="btnLang-go" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Go</button>
+            <button onclick="switchCodeLang('claude')" id="btnLang-claude" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Claude</button>
           </div>
         </div>
 
@@ -860,7 +861,19 @@ func main() {
 		if err == io.EOF { break }
 		fmt.Print(resp.Choices[0].Delta.Content)
 	}
-}`
+}`,
+      claude: `curl ${currentBaseURL}/messages \\
+  -H "Content-Type: application/json" \\
+  -H "x-api-key: sk-your-api-key" \\
+  -H "anthropic-version: 2023-06-01" \\
+  -d '{
+    "model": "claude-3-5-sonnet-20241022",
+    "max_tokens": 1024,
+    "messages": [
+      {"role": "user", "content": "你好，请介绍一下你自己"}
+    ],
+    "stream": true
+  }'`
     };
 
     function renderActiveCode() {
@@ -870,7 +883,7 @@ func main() {
 
     function switchCodeLang(lang) {
       currentCodeLang = lang;
-      ['curl', 'python', 'nodejs', 'go'].forEach(l => {
+      ['curl', 'python', 'nodejs', 'go', 'claude'].forEach(l => {
         const btn = document.getElementById('btnLang-' + l);
         if (btn) {
           if (l === lang) {
