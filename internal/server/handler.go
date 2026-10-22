@@ -93,7 +93,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.24"
+const CurrentVersion = "v1.2.25"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。
 const dumpReqMinBytes = 4 << 20
@@ -174,6 +174,12 @@ func NewHandler(cfg Config) *Handler {
 	}
 	h.mux.HandleFunc("POST /v1/chat/completions", h.withAuth(h.chatCompletions))
 	h.mux.HandleFunc("POST /v1/messages", h.withAuth(h.messagesHandler))
+	h.mux.HandleFunc("POST /v1/videos/generations", h.withAuth(h.videoGenerations))
+	h.mux.HandleFunc("POST /v2/videos/generations", h.withAuth(h.videoGenerations))
+	h.mux.HandleFunc("POST /v1/videos/tasks", h.withAuth(h.videoTasksPost))
+	h.mux.HandleFunc("POST /v2/videos/tasks", h.withAuth(h.videoTasksPost))
+	h.mux.HandleFunc("GET /v1/videos/tasks/{id}", h.withAuth(h.videoTaskGet))
+	h.mux.HandleFunc("GET /v1/videos/tasks", h.withAuth(h.videoTaskGet))
 	h.mux.HandleFunc("GET /v1/models", h.withAuth(h.models))
 	h.mux.HandleFunc("GET /status", h.withAuth(h.status))
 	h.mux.HandleFunc("GET /v1/stats", h.withAuth(h.stats))

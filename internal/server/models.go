@@ -268,6 +268,36 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 		}
 	}
 
+	// 视频生成模型注入（快手可灵 Kling 3.0 文生视频与图生视频）：仅在开启下游兼容/裸模型透出时注入
+	if len(includeBare) > 0 && includeBare[0] {
+		videoModels := []map[string]any{
+			{
+				"id":             "kling-v3-t2v",
+				"name":           "快手可灵 3.0 文生视频 (Kling v3 T2V)",
+				"description":    "[Video] 快手可灵 3.0 旗舰级文生视频大模型，支持 720P/1080P 高清生成与原生音效",
+				"object":         "model",
+				"created":        1753600000,
+				"owned_by":       "kuaishou",
+				"tags":           []string{"video", "text-to-video"},
+				"vendor":         "Kling",
+				"context_length": 2500,
+			},
+			{
+				"id":              "kling-v3-i2v",
+				"name":            "快手可灵 3.0 图生视频 (Kling v3 I2V)",
+				"description":     "[Video] 快手可灵 3.0 旗舰级图生视频大模型，支持首帧/首尾帧驱动与 1080P 高清生成",
+				"object":          "model",
+				"created":         1753600000,
+				"owned_by":        "kuaishou",
+				"tags":            []string{"video", "image-to-video"},
+				"vendor":          "Kling",
+				"supports_images": true,
+				"context_length":  2500,
+			},
+		}
+		out = append(out, videoModels...)
+	}
+
 	return out
 }
 

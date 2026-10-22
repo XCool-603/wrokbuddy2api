@@ -298,6 +298,7 @@
             <button onclick="switchCodeLang('nodejs')" id="btnLang-nodejs" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Node.js</button>
             <button onclick="switchCodeLang('go')" id="btnLang-go" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Go</button>
             <button onclick="switchCodeLang('claude')" id="btnLang-claude" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">Claude</button>
+            <button onclick="switchCodeLang('video')" id="btnLang-video" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white transition">可灵视频</button>
           </div>
         </div>
 
@@ -873,7 +874,35 @@ func main() {
       {"role": "user", "content": "你好，请介绍一下你自己"}
     ],
     "stream": true
-  }'`
+  }'`,
+      video: `# 1. 文生视频（支持带 wait: true 同步直出视频，或异步轮询任务 ID）
+curl ${currentBaseURL}/videos/generations \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer sk-your-api-key" \\
+  -d '{
+    "model": "kling-v3-t2v",
+    "prompt": "一段海滩日落电影级镜头，微风吹拂发丝，镜头缓缓向前推进",
+    "seconds": 5,
+    "resolution": "1080P",
+    "aspect_ratio": "16:9",
+    "enable_audio": true,
+    "wait": true
+  }'
+
+# 2. 图生视频（首帧驱动或首尾帧接力）
+curl ${currentBaseURL}/videos/generations \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer sk-your-api-key" \\
+  -d '{
+    "model": "kling-v3-i2v",
+    "image_url": "https://example.com/character.png",
+    "prompt": "角色自然眨眼微笑，呼吸起伏，光影柔和变化",
+    "wait": true
+  }'
+
+# 3. 异步任务状态查询
+curl ${currentBaseURL}/videos/tasks/task_xxxx \\
+  -H "Authorization: Bearer sk-your-api-key"`
     };
 
     function renderActiveCode() {
@@ -883,7 +912,7 @@ func main() {
 
     function switchCodeLang(lang) {
       currentCodeLang = lang;
-      ['curl', 'python', 'nodejs', 'go', 'claude'].forEach(l => {
+      ['curl', 'python', 'nodejs', 'go', 'claude', 'video'].forEach(l => {
         const btn = document.getElementById('btnLang-' + l);
         if (btn) {
           if (l === lang) {
