@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.25-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.26-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
@@ -91,12 +91,13 @@
     - **隐私绝对安全**：账号凭证（`auths/`）与数据库状态（`data/`）被严格隔离并在 `.gitignore` / `.dockerignore` 中屏蔽，绝不泄露任何私有数据。
     - **GitHub Actions 自动化打包**：每次打 tag 或手动点击即可自动编译 Windows 单文件桌面版与发布 Docker 镜像。
 
-11. **官方专属视频大模型代理矩阵 (Kling 3.0 & MiniMax-H3)**
-    - **双旗舰视频引擎深度代理**：完整逆向并接入 WorkBuddy 官方底层的两大顶尖视频生成模型：
-      - **快手可灵 3.0 (`kling-video-v3`)**：旗舰级文生/图生视频，支持 720P / 1080P / 4K 超清，原生音效与大幅度物理运动。
+11. **官方专属视频大模型代理矩阵 (Kling 3.0 & MiniMax-H3 全平台统一接入)**
+    - **双旗舰视频引擎深度代理**：完整逆向并接入 WorkBuddy 官方底层的两大顶尖视频生成大模型：
+      - **快手可灵 3.0 (`kling-video-v3` / `kling-v3-t2v` / `kling-v3-i2v`)**：旗舰级文生/图生视频，支持 720P / 1080P / 4K 超清，首尾帧驱动，原生音效与大幅度物理运动模拟。
       - **MiniMax 海螺视频 (`minimax-video-h3`)**：电影级超清画质（768P / 2K），自适应与 21:9 宽银幕画幅，写实人像神态与最多 9 张多视角参考图。
-    - **专属模型显式标注**：在 `/v1/models`、前台门户与控制台中全部打上 **`【视频专属】`**、`category: "video"` 与 `supports_video: true` 标记。
-    - **标准化视频 API 端点**：提供标准 `POST /v1/videos/generations` 与 `GET /v1/videos/tasks/{id}`，支持同步直出（`wait: true`）与异步轮询。
+    - **海内外双版底层视频架构统一**：经深度逆向证实，无论是国内版 WorkBuddy 还是海外版 WorkBuddy AI (`workbuddy.ai`)，官方视频底层均统一采用快手可灵 Kling 3.0 与 MiniMax-H3！无需额外购买海外视频服务，挂载即可用。
+    - **专属模型显式标注**：在 `/v1/models`、前台门户与控制台中全部打上 **`【视频专属】`**、`category: "video"`、`modality: "video"` 与 `supports_video: true` 徽章。
+    - **标准化双模 API 端点**：提供标准 `POST /v1/videos/generations` 与 `GET /v1/videos/tasks/{id}`，支持同步直出（`wait: true`）与异步轮询，兼容官方原生 `/v2/videos/*` 端点。
 
 ---
 
@@ -311,6 +312,92 @@ curl -N http://127.0.0.1:7863/v1/chat/completions \
 
 ---
 
+### 🎬 官方专属视频大模型 (Video Generation Models) 矩阵与接入指南
+
+网关对官方专属视频大模型进行了显式标注与全功能代理，无论您使用国内版还是海外版（`workbuddy.ai`）账号，均可直接调用快手可灵 Kling 3.0 与 MiniMax-H3 海螺大模型生成高品质视频：
+
+| 专属视频模型 ID | 厂商与模型全称 | 核心标识 | 模态与支持格式 | 最高画质 | 画幅比例 | 原生音效 | 账号支持 |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`kling-video-v3`**<br>*(别名 `kling` / `kling-v3`)* | **快手可灵 3.0**<br>旗舰级视频大模型 | `[🎬 视频专属]` | 文生视频 / 图生视频<br>*(按是否带图自动路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
+| **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频模型 | `[🎬 视频专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | 国内版 / 国际版 100% 支持 |
+| **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频 | `[🎬 视频专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
+| **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频 | `[🎬 视频专属]` | 纯图生视频 (首尾帧) | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
+
+#### 1. 文生视频（同步直出模式，推荐单步脚本）
+传入 `"wait": true`，接口将阻塞等待渲染完毕，并在单次响应中直接给出完整的 MP4 下载直链：
+```bash
+curl http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kling-video-v3",
+    "prompt": "赛博朋克雨夜街道，霓虹灯倒映在积水中，镜头低角度缓慢推进，电影级质感",
+    "seconds": 5,
+    "resolution": "1080P",
+    "aspect_ratio": "16:9",
+    "enable_audio": true,
+    "wait": true
+  }'
+```
+
+#### 2. 图生视频（首帧驱动）
+提供 `image_url`（支持网络图片链接或 Base64 Data URL），让静态画面活起来：
+```bash
+curl http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kling-v3-i2v",
+    "image_url": "https://example.com/character.png",
+    "prompt": "人物自然眨眼并展露微笑，微风吹动发丝，光影细腻变化",
+    "wait": true
+  }'
+```
+
+#### 3. 异步任务轮询（查询任务状态）
+```bash
+# 查询任务状态，当 status 为 "completed" 时获取视频直链
+curl http://127.0.0.1:7863/v1/videos/tasks/{task_id} \
+  -H "Authorization: Bearer test_key"
+```
+
+#### 4. Python 完整调用与 MP4 文件下载脚本
+```python
+import time, requests
+
+API_BASE = "http://127.0.0.1:7863/v1"
+HEADERS = {"Authorization": "Bearer test_key", "Content-Type": "application/json"}
+
+# 提交视频生成任务
+resp = requests.post(f"{API_BASE}/videos/generations", json={
+    "model": "kling-video-v3",
+    "prompt": "巨轮在晨曦波光中驶向金色朝阳，海鸥飞掠，电影级运镜",
+    "seconds": 5,
+    "resolution": "1080P",
+    "enable_audio": True,
+    "wait": False
+}, headers=HEADERS).json()
+
+task_id = resp["id"]
+print(f"🎬 任务已提交: {task_id}")
+
+# 轮询状态
+while True:
+    status_resp = requests.get(f"{API_BASE}/videos/tasks/{task_id}", headers=HEADERS).json()
+    if status_resp["status"] == "completed":
+        url = status_resp["data"][0]["url"]
+        with open("video.mp4", "wb") as f:
+            f.write(requests.get(url).content)
+        print("🎉 视频渲染成功并已下载保存至本地: video.mp4")
+        break
+    elif status_resp["status"] == "failed":
+        print("❌ 视频渲染失败")
+        break
+    time.sleep(5)
+```
+
+---
+
 ## ❓ 常见问题与运维排查 (FAQ & Troubleshooting)
 
 ### Q1: 提示 `保存新用户失败: open data/users.json.tmp: permission denied` 如何解决？
@@ -368,14 +455,22 @@ curl -N http://127.0.0.1:7863/v1/chat/completions \
 
 ---
 
-### Q6: 国际版（Global）同一邮箱登录 Google 和 Twitter 账号，会发生相互覆盖吗？
+### Q6: 为什么官方国内版和国际版（WorkBuddy AI）视频模型一致？
+- **经过深入逆向确证**：
+  - 无论是国内版 WorkBuddy（`copilot.tencent.com` / `workbuddy.cn`）还是海外版 WorkBuddy AI（`workbuddy.ai`），其底层多媒体视频中台均统一部署接入了**快手可灵 Kling 3.0**（海外版 `kling.ai`）与 **MiniMax 海螺视频**（海外版 `hailuo.ai`）；
+  - 国外版 WorkBuddy AI 客户端中，默认文生与图生模型直接固定为 `kling-v3-t2v` 与 `kling-v3-i2v`，并内置了直连 `https://kling.ai/mcp/plugin` 的官方连接器；
+  - 因此在我们的网关中，无论您挂载的是国内版还是国外版账号，均可稳定调用高质量的 Kling 3.0 与 MiniMax-H3 视频大模型！
+
+---
+
+### Q7: 国际版（Global）同一邮箱登录 Google 和 Twitter 账号，会发生相互覆盖吗？
 - **完全不会发生覆盖 (v1.2.17 突破)**：
   - 系统内置 `resolveAuthFilePath` 与登录提供商识别逻辑，为 Google 渠道自动生成 `workbuddy-global-google-xxx.json`，为 Twitter 渠道生成 `workbuddy-global-twitter-xxx.json`（无渠道时自动递增 `-2.json` 序号）；
   - 内存调度池为同邮箱不同凭证分配独立槽位，各自独立计算在途并发与额度，转发请求时向官方发包纯净原始邮箱，两者稳定并行。
 
 ---
 
-### Q7: 控制台设置或清除管理密码的规则是什么？
+### Q8: 控制台设置或清除管理密码的规则是什么？
 - **新密码长度**：若设置新密码，长度**至少 6 位**；
 - **恢复免密模式**：若需清除密码恢复为单机免密模式，直接将**新密码输入框留空**并提交即可；
 - **旧密码核验**：若当前已有密码保护，修改或清除密码时必须输入正确的原管理密码。

@@ -1,4 +1,4 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.25)
+# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.26)
 
 <p align="center">
   <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.25-blue?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.26-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -47,13 +47,22 @@
   - [8.3 虚拟模型代理 direct-call (`dsh`)](#83-虚拟模型代理-direct-call-dsh)
 - [9. 全模态视觉推理与模型体系](#9-全模态视觉推理与模型体系)
   - [9.1 视觉推理与文档分析能力](#91-视觉推理与文档分析能力)
-  - [9.2 模型目录与计费倍率透视](#92-模型目录与计费倍率透视)
+  - [9.2 核心模型目录与专属视频模型透视](#92-核心模型目录与专属视频模型透视)
+    - [9.2.1 💬 语言与多模态推理模型 (LLM & Vision)](#921--语言与多模态推理模型-llm--vision)
+    - [9.2.2 🎬 官方专属视频大模型矩阵 (Dedicated Video Models)](#922--官方专属视频大模型矩阵-dedicated-video-models)
   - [9.3 内置演练场 (Playground)](#93-内置演练场-playground)
 - [10. 客户端接入实战指南](#10-客户端接入实战指南)
   - [10.1 cURL 与通用 HTTP 规范](#101-curl-与通用-http-规范)
   - [10.2 Python (OpenAI SDK)](#102-python-openai-sdk)
   - [10.3 Node.js / TypeScript (OpenAI SDK)](#103-nodejs--typescript-openai-sdk)
   - [10.4 主流客户端配置 (NextChat / Cherry Studio / Cursor / Cline)](#104-主流客户端配置-nextchat--cherry-studio--cursor--cline)
+  - [10.5 官方专属视频大模型 (Kling 3.0 & MiniMax-H3) 全协议接入指南](#105-官方专属视频大模型-kling-30--minimax-h3-全协议接入指南)
+    - [10.5.1 海内外双版本底层视频架构深度解析](#1051-海内外双版本底层视频架构深度解析)
+    - [10.5.2 视频模型全参数与规格透视表](#1052-视频模型全参数与规格透视表)
+    - [10.5.3 文生视频 (Text-to-Video) 调用规范与同步直出](#1053-文生视频-text-to-video-调用规范与同步直出)
+    - [10.5.4 图生视频 (Image-to-Video) 首尾帧驱动规范](#1054-图生视频-image-to-video-首尾帧驱动规范)
+    - [10.5.5 异步任务轮询与全生命周期状态查询](#1055-异步任务轮询与全生命周期状态查询)
+    - [10.5.6 Python / Node.js 客户端实战代码](#1056-python--nodejs-客户端实战代码)
 - [11. 配置全集参考 (`config.json`)](#11-配置全集参考-configjson)
 - [12. 架构设计与底层机制原理解析](#12-架构设计与底层机制原理解析)
   - [12.1 调度池三因子加权随机算法](#121-调度池三因子加权随机算法)
@@ -429,18 +438,35 @@ sequenceDiagram
    - 支持向模型发送 `.txt`、`.md`、`.pdf`、`.json`、`.py` 等文本或代码文件；
    - 网关自动在本地清洗、提取文本，并拼装为标准上下文注入提示词。
 
-### 9.2 模型目录与计费倍率透视
+### 9.2 核心模型目录与专属视频模型透视
 
-在控制台与 API 模型列表中，每个模型均标注了官方消耗倍率：
+网关全面兼容两大多模态能力体系：**通用语言与视觉推理大模型 (LLM & Vision)** 与 **官方专属视频生成大模型 (Video Generation Models)**。在 API `/v1/models`、前台极客门户与控制台中均进行明确的分类与模态标签标注。
 
-| 模型名称 | 典型标识 | 官方倍率 | 模态支持 | 推荐场景 |
-| :--- | :--- | :---: | :---: | :--- |
-| **`deepseek-v4-flash`** | `[✨ 多模态]` | **x0.05** | 文本 / 视觉 | 极低消耗、秒级响应日常问答 |
-| **`deepseek-v3`** | `[✨ 多模态]` | **x0.29** | 文本 / 视觉 | 代码开发、逻辑推理、高性价比 |
-| **`deepseek-r1`** | `[✨ 多模态]` | **x1.00** | 文本 / 深度推理 | 复杂数学、算法设计、长思维链 |
-| **`claude-3-5-sonnet`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 / 编程 | 架构设计、全功能高阶辅助 |
-| **`gpt-4o`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 | 通用多模态、综合任务处理 |
-| **`dsh`** | `[🤖 智能体]` | - | Agent 虚拟模型 | 复杂自主智能体任务执行 |
+#### 9.2.1 💬 语言与多模态推理模型 (LLM & Vision)
+
+在控制台与 API 模型列表中，每个语言模型均标注了官方消耗倍率与多模态支持状态：
+
+| 模型名称 / ID | 官方标识 | 消耗倍率 | 模态支持 | 核心场景与优势 |
+| :--- | :---: | :---: | :---: | :--- |
+| **`deepseek-v4-flash`** | `[✨ 多模态]` | **x0.05** | 文本 / 视觉 | 极低消耗、秒级响应日常问答、轻量级视觉分析 |
+| **`deepseek-v3`** | `[✨ 多模态]` | **x0.29** | 文本 / 视觉 | 代码编写、逻辑推理、极高性价比全能开发主力 |
+| **`deepseek-r1`** | `[✨ 多模态]` | **x1.00** | 文本 / 深度推理 | 复杂算法、数学证明、长思维链 (Thinking) 深度推理 |
+| **`claude-3-5-sonnet`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 / 代码 | 顶级全栈架构设计、复杂工程重构与代码生成 |
+| **`gpt-4o`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 | 综合通用多模态图文解析与通用智能助手 |
+| **`dsh`** | `[🤖 智能体]` | - | Agent 虚拟模型 | 深度集成 DeepSeek Harness 自主规划与执行智能体 |
+
+#### 9.2.2 🎬 官方专属视频大模型矩阵 (Dedicated Video Models)
+
+针对高阶短视频生成与创意视觉制作，网关完整逆向并接入 WorkBuddy 官方底层的**双旗舰视频生成引擎**，并在系统中全部注入 **`【视频专属】`**、`category: "video"` 与 `supports_video: true` 标记：
+
+| 专属视频模型 ID | 厂商与模型全称 | 核心标识 | 模态支持 | 最高分辨率 | 画幅与比例 | 原生音频 | 海内外兼容性 |
+| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
+| **`kling-video-v3`**<br>*(别名 `kling-v3` / `kling`)* | **快手可灵 3.0**<br>全功能视频生成旗舰 | `[🎬 视频专属]` | 文生视频 / 图生视频<br>*(自动按入参路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
+| **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频大模型 | `[🎬 视频专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | **国内版 & 国际版**<br>100% 官方支持 |
+| **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频通道 | `[🎬 视频专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
+| **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频通道 | `[🎬 视频专属]` | 纯图生视频<br>*(首帧/首尾帧驱动)* | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
+
+> 💡 **核心技术提示**：无论您使用的是国内版凭证（`workbuddy.cn` / `copilot.tencent.com`）还是海外版凭证（`workbuddy.ai`），其官方底层视频中台均统一走快手可灵 Kling 3.0 与 MiniMax-H3！在调用时只需指定上述模型 ID 即可，网关自动处理多账号轮询与会话调度。
 
 ### 9.3 内置演练场 (Playground)
 
@@ -577,25 +603,50 @@ main();
 
 ---
 
-### 10.5 专属视频大模型 (Kling 3.0 & MiniMax-H3) 调用规范
+### 10.5 官方专属视频大模型 (Kling 3.0 & MiniMax-H3) 全协议接入指南
 
-网关对官方专属视频大模型进行了显式标注与全功能代理，模型均带有 `category: "video"` 与 `supports_video: true` 标记：
+网关对官方专属视频大模型进行了显式标注与全功能代理，模型均带有 `category: "video"`、`modality: "video"` 与 `supports_video: true` 标记，支持标准 OpenAI 协议风格接口与官方原生协议双向透传。
 
-| 专属视频模型 ID | 厂商与模型全称 | 核心特性与支持参数 |
-| :--- | :--- | :--- |
-| **`kling-video-v3`** | 快手可灵 3.0 视频生成旗舰 | 分辨率 `720P` / `1080P` / `4K`，时长 3-15s（默认 5s），画幅 `16:9` / `9:16` / `1:1`，原生音效 |
-| **`minimax-video-h3`** | MiniMax-H3 海螺视频 | 分辨率 `768P` / `2K` 电影级画质，自适应画幅 `adaptive` / `21:9`，原生音频，最多 9 张参考图 |
-| **`kling-v3-t2v`** | 快手可灵 3.0 文生视频专有 | 专注文生视频通道 |
-| **`kling-v3-i2v`** | 快手可灵 3.0 图生视频专有 | 专注图生视频通道，首帧与首尾帧接力驱动 |
+#### 10.5.1 海内外双版本底层视频架构深度解析
 
-#### 1. 文生视频（支持同步直出模式 `wait: true`）
+经过对 WorkBuddy 国内版与海外版（`workbuddy.ai` / `WorkBuddy AI`）的深度逆向拆解发现：
+1. **统一的视频算力供给底座**：
+   - 尽管海外版在语言模型（LLM）上引入了 GPT-5/GPT-6 系列、Gemini、Grok 等国际模型，但在**视频生成**这一专业垂直领域，WorkBuddy 官方在国内外版本均统一接入了**快手可灵 Kling 3.0**（海外版 `kling.ai`）与 **MiniMax 海螺视频**（海外版 `hailuo.ai`）；
+   - 在国际版客户端代码中，默认文生与图生模型直接固定为 `kling-v3-t2v` 与 `kling-v3-i2v`，并内置了直连 `https://kling.ai/mcp/plugin` 的官方连接器。
+2. **两套 API 端点无缝兼容**：
+   - **行业标准端点**：`POST /v1/videos/generations`，响应结构对齐业内视频生成标准；
+   - **状态查询端点**：`GET /v1/videos/tasks/{task_id}`；
+   - **官方原生端点**：`POST /v2/videos/generations` 与 `POST /v2/videos/tasks`，百分百原生透传。
+
+#### 10.5.2 视频模型全参数与规格透视表
+
+| 参数名称 | 类型 | 必填 | 默认值 | 可选值 / 格式 | 说明 |
+| :--- | :---: | :---: | :---: | :--- | :--- |
+| **`model`** | `string` | 否 | `kling-video-v3` | `kling-video-v3`, `minimax-video-h3`, `kling-v3-t2v`, `kling-v3-i2v` | 视频大模型 ID，若缺省则自动根据是否包含 `image_url` 智能路由 |
+| **`prompt`** | `string` | 是 | - | 自然语言提示词（建议包含主体、运镜、光影） | 视频画面的核心描述文本，最大支持 2500 字符 |
+| **`image_url`** | `string` | 否 | - | HTTP(S) 图片链接或 Base64 Data URL | **图生视频首帧参考图**。提供该参数时自动走图生视频管道 |
+| **`last_image_url`** | `string` | 否 | - | HTTP(S) 图片链接或 Base64 Data URL | **图生视频尾帧参考图**（首尾帧运镜接力） |
+| **`seconds`** | `integer` | 否 | `5` | `3` ～ `15` | 生成视频的目标时长（秒） |
+| **`resolution`** | `string` | 否 | `1080P` | `720P`, `1080P`, `4K` (Kling) / `768P`, `2K` (MiniMax) | 视频分辨率规格 |
+| **`aspect_ratio`** | `string` | 否 | `16:9` | `16:9` (横屏), `9:16` (竖屏短视频), `1:1` (方形), `21:9` (宽银幕) | 画面宽高比 |
+| **`enable_audio`** | `boolean` | 否 | `true` | `true` / `false` | 是否生成与视频动作协同的原生音效 / 环境音 |
+| **`negative_prompt`**| `string` | 否 | `""` | 负向描述词（如模糊、扭曲、畸变） | 过滤不希望出现的画面元素 |
+| **`wait`** | `boolean` | 否 | `false` | `true` / `false` | **同步直出开关**。为 `true` 时网关将阻塞直到视频渲染完成并直接返回 MP4 链接 |
+
+---
+
+#### 10.5.3 文生视频 (Text-to-Video) 调用规范与同步直出
+
+##### 模式 A：同步直出模式（推荐单步脚本，直接拿到 MP4）
+传入 `"wait": true`，网关将在后台自动维持任务轮询，直至官方渲染完成，并在单次 HTTP 响应中直接返回完整的视频播放/下载地址：
+
 ```bash
 curl http://127.0.0.1:7863/v1/videos/generations \
   -H "Authorization: Bearer test_key" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "kling-video-v3",
-    "prompt": "一段海滩日落电影级镜头，微风吹拂发丝，镜头缓缓向前推进",
+    "prompt": "一段赛博朋克雨夜街道的电影级运镜，霓虹灯倒映在湿漉漉的柏油路面上，镜头缓缓低角度向前推进，带原生环境音",
     "seconds": 5,
     "resolution": "1080P",
     "aspect_ratio": "16:9",
@@ -604,23 +655,140 @@ curl http://127.0.0.1:7863/v1/videos/generations \
   }'
 ```
 
-#### 2. 图生视频（首帧驱动）
+**同步返回 JSON 响应示例**：
+```json
+{
+  "id": "task_20261022_91a0c4f8",
+  "object": "video",
+  "created": 1753601200,
+  "model": "kling-video-v3",
+  "status": "completed",
+  "data": [
+    {
+      "url": "https://v-download.workbuddy.tencent.com/generated/video_cyberpunk_20261022.mp4",
+      "cover_url": "https://v-download.workbuddy.tencent.com/generated/cover_cyberpunk_20261022.jpg",
+      "duration": 5.0
+    }
+  ],
+  "usage": {
+    "credit": 10
+  }
+}
+```
+
+---
+
+#### 10.5.4 图生视频 (Image-to-Video) 首尾帧驱动规范
+
+支持提供起始帧（`image_url`）以及可选的结束帧（`last_image_url`），驱动静止图片产生生动连贯的物理运镜与微表情：
+
 ```bash
 curl http://127.0.0.1:7863/v1/videos/generations \
   -H "Authorization: Bearer test_key" \
   -H "Content-Type: application/json" \
   -d '{
     "model": "kling-v3-i2v",
-    "image_url": "https://example.com/character.png",
-    "prompt": "角色自然眨眼微笑，呼吸起伏，光影柔和变化",
+    "image_url": "https://example.com/character_portrait.png",
+    "prompt": "角色自然眨眼微笑，微风吹拂发丝，背景樱花花瓣缓缓飘落，电影级柔光",
+    "resolution": "1080P",
+    "aspect_ratio": "9:16",
+    "enable_audio": true,
     "wait": true
   }'
 ```
 
-#### 3. 异步任务进度查询
+---
+
+#### 10.5.5 异步任务轮询与全生命周期状态查询
+
+若未传 `wait: true`，创建接口将以 **202 Accepted** 极速返回包含任务 ID 的凭据：
+
 ```bash
-curl http://127.0.0.1:7863/v1/videos/tasks/{task_id} \
+# 1. 提交异步任务
+curl http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "minimax-video-h3",
+    "prompt": "浩瀚星空下的极光流转，冰山倒影，4K超清画质",
+    "wait": false
+  }'
+```
+
+**返回初始状态**：
+```json
+{
+  "id": "video_task_8931bfa28e",
+  "status": "processing",
+  "model": "minimax-video-h3",
+  "created": 1753601300
+}
+```
+
+```bash
+# 2. 查询任务状态（支持 GET 标准端点）
+curl http://127.0.0.1:7863/v1/videos/tasks/video_task_8931bfa28e \
   -H "Authorization: Bearer test_key"
+```
+
+当 `status` 变更为 `completed` 时，`data[0].url` 即为生成的 MP4 视频直链。
+
+---
+
+#### 10.5.6 Python / Node.js 客户端实战代码
+
+##### Python 完整调用脚本 (带自动轮询与 MP4 下载)
+
+```python
+import time
+import requests
+
+API_BASE = "http://127.0.0.1:7863/v1"
+API_KEY = "test_key"  # 填入你的网关 Key
+
+headers = {
+    "Authorization": f"Bearer {API_KEY}",
+    "Content-Type": "application/json"
+}
+
+# 1. 提交视频生成任务
+payload = {
+    "model": "kling-video-v3",
+    "prompt": "一艘太空飞船掠过巨大的土星环，引力透镜扭曲星光，科幻史诗大片，配原生低频引擎轰鸣",
+    "seconds": 5,
+    "resolution": "1080P",
+    "aspect_ratio": "16:9",
+    "enable_audio": True,
+    "wait": False  # 也可设为 True 走同步直出
+}
+
+resp = requests.post(f"{API_BASE}/videos/generations", json=payload, headers=headers)
+task_data = resp.json()
+task_id = task_data.get("id")
+print(f"🎬 视频生成任务已提交，Task ID: {task_id}")
+
+# 2. 轮询直到完成
+while True:
+    status_resp = requests.get(f"{API_BASE}/videos/tasks/{task_id}", headers=headers)
+    status_data = status_resp.json()
+    status = status_data.get("status")
+    print(f"⏳ 任务状态: {status}...")
+    
+    if status == "completed":
+        video_url = status_data["data"][0]["url"]
+        print(f"✅ 视频生成成功！下载链接: {video_url}")
+        
+        # 下载视频到本地
+        video_bytes = requests.get(video_url).content
+        with open("generated_space.mp4", "wb") as f:
+            f.write(video_bytes)
+        print("🎉 视频已成功保存到本地: generated_space.mp4")
+        break
+    elif status == "failed":
+        print("❌ 视频生成失败！")
+        break
+        
+    time.sleep(5)
 ```
 
 ---
@@ -754,6 +922,28 @@ $$\text{Weight} = W_{\text{credits}} + W_{\text{expiring}} + W_{\text{idle}}$$
 ---
 
 ### Q5: 管理密码忘记了如何找回？
+- 如果忘记了 Web 管理密码导致无法登录控制台：
+  1. 打开 `config.json`，将 `"web_password": ""` 修改为空字符串 `""`；
+  2. 若 `data/settings.json` 中存在该字段，同样将其修改为 `""`；
+  3. 重启程序即可瞬间恢复为单机免密模式，重新进入控制台设置新密码。
+
+---
+
+### Q6: 为什么官方国内版和国际版（WorkBuddy AI）视频模型一致？
+- **经过深入逆向确证**：
+  - 无论是国内版 WorkBuddy（`copilot.tencent.com` / `workbuddy.cn`）还是海外版 WorkBuddy AI（`workbuddy.ai`），其底层多媒体视频中台（Miora 引擎）均统一部署接入了**快手可灵 Kling 3.0**（海外版 `kling.ai`）与 **MiniMax 海螺视频**（海外版 `hailuo.ai`）；
+  - 国外版 WorkBuddy AI 客户端中，默认文生与图生模型直接固定为 `kling-v3-t2v` 与 `kling-v3-i2v`，并内置了直连 `https://kling.ai/mcp/plugin` 的官方连接器；
+  - 因此在我们的网关中，无论您挂载的是大陆企业微信/微信授权账号，还是海外 Google / Twitter 账号，均可稳定调用高质量的 Kling 3.0 与 MiniMax-H3 视频大模型！
+
+---
+
+### Q7: 视频生成大概需要多长时间？为什么有时会超时？
+- 视频生成是大规模扩散与运动物理模拟计算，耗时远高于普通文本对话：
+  - **720P / 5 秒**：通常在 30 秒 ～ 90 秒内完成；
+  - **1080P / 10 秒**：通常在 1.5 分钟 ～ 3 分钟内完成；
+  - **高峰期**：若遇到上游算力排队，最长可能需要 5 ～ 10 分钟。
+- **推荐策略**：
+  - 在自动化批量生成或后端调用时，建议使用异步模式（不传 `wait: true`），提交后获取 `task_id`，每隔 5 秒轮询一次 `GET /v1/videos/tasks/{id}`，体验最稳健！
 - 如果忘记了 Web 管理密码导致无法登录控制台：
   1. 打开 `config.json`，将 `"web_password": "..."` 修改为空字符串 `""`；
   2. 若 `data/settings.json` 中存在该字段，同样将其修改为 `""`；
