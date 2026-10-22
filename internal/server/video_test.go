@@ -179,19 +179,27 @@ func TestVideoTaskGetAndPost(t *testing.T) {
 	}
 }
 
-func TestVideoValidation(t *testing.T) {
+func TestVideoMiniMaxResolution(t *testing.T) {
 	srv, h, _ := setupVideoTestServer(t)
 	defer srv.Close()
 
-	// Missing prompt without image
-	bodyBytes, _ := json.Marshal(map[string]any{})
+	bodyBytes, _ := json.Marshal(map[string]any{
+		"model":  "hailuo",
+		"prompt": "cinematic camera slow push in on beautiful landscape",
+	})
 	req := httptest.NewRequest("POST", "/v1/videos/generations", bytes.NewReader(bodyBytes))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
 
 	h.ServeHTTP(w, req)
 
-	if w.Code != http.StatusBadRequest {
-		t.Fatalf("expected 400 Bad Request, got %d: %s", w.Code, w.Body.String())
+	if w.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", w.Code, w.Body.String())
+	}
+
+	var res map[string]any
+	json.Unmarshal(w.Body.Bytes(), &res)
+	if res["model"] != "minimax-video-h3" {
+		t.Errorf("expected model minimax-video-h3, got %v", res["model"])
 	}
 }

@@ -64,9 +64,15 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 		lastImgURL = req.LastImage
 	}
 
-	// 模型自适应推断：若有图片默认 kling-v3-i2v（图生视频），否则 kling-v3-t2v（文生视频）
+	// 模型自适应与归一化（支持快手可灵 Kling 3.0 与 MiniMax-H3 海螺双视频方案）
 	model := strings.TrimSpace(req.Model)
-	if model == "" || model == "kling" || model == "kling-v3" {
+	isMiniMax := strings.Contains(strings.ToLower(model), "minimax") ||
+		strings.Contains(strings.ToLower(model), "hailuo") ||
+		strings.Contains(strings.ToLower(model), "h3")
+
+	if isMiniMax {
+		model = "minimax-video-h3"
+	} else if model == "" || model == "kling" || model == "kling-v3" || model == "kling-video" || model == "kling-video-v3" {
 		if imgURL != "" || lastImgURL != "" {
 			model = "kling-v3-i2v"
 		} else {
@@ -81,7 +87,7 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 时长控制（3-15秒，默认 5 秒）
+	// 时长控制（默认 5 秒）
 	seconds := req.Seconds
 	if seconds <= 0 {
 		seconds = req.Duration
@@ -89,23 +95,45 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 	if seconds <= 0 {
 		seconds = 5
 	}
-	if seconds < 3 {
-		seconds = 3
-	}
-	if seconds > 15 {
-		seconds = 15
+	if isMiniMax {
+		if seconds < 4 {
+			seconds = 4
+		}
+		if seconds > 15 {
+			seconds = 15
+		}
+	} else {
+		if seconds < 3 {
+			seconds = 3
+		}
+		if seconds > 15 {
+			seconds = 15
+		}
 	}
 
-	// 分辨率（720P / 1080P，默认 1080P）
+	// 分辨率
 	res := strings.ToUpper(strings.TrimSpace(req.Resolution))
-	if res != "720P" && res != "1080P" {
-		res = "1080P"
+	if isMiniMax {
+		if res != "768P" && res != "2K" {
+			res = "768P"
+		}
+	} else {
+		if res != "720P" && res != "1080P" && res != "4K" {
+			res = "1080P"
+		}
 	}
 
-	// 画幅比（16:9 / 9:16 / 1:1，默认 16:9）
-	ar := strings.TrimSpace(req.AspectRatio)
-	if ar != "16:9" && ar != "9:16" && ar != "1:1" {
-		ar = "16:9"
+	// 画幅比
+	ar := strings.ToLower(strings.TrimSpace(req.AspectRatio))
+	if isMiniMax {
+		validAR := map[string]bool{"adaptive": true, "21:9": true, "16:9": true, "4:3": true, "1:1": true, "3:4": true, "9:16": true}
+		if !validAR[ar] {
+			ar = "adaptive"
+		}
+	} else {
+		if ar != "16:9" && ar != "9:16" && ar != "1:1" {
+			ar = "16:9"
+		}
 	}
 
 	// 音频开关（默认开启）

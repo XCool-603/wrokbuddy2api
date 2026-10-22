@@ -268,9 +268,33 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 		}
 	}
 
-	// 视频生成模型注入（快手可灵 Kling 3.0 文生视频与图生视频）：仅在开启下游兼容/裸模型透出时注入
+	// 视频生成模型注入（快手可灵 Kling 3.0 与 MiniMax-H3 海螺双视频方案）
 	if len(includeBare) > 0 && includeBare[0] {
 		videoModels := []map[string]any{
+			{
+				"id":             "kling-video-v3",
+				"name":           "快手可灵 3.0 视频生成 (Kling-Video-V3)",
+				"description":    "[Video] 快手可灵 3.0 旗舰视频大模型，支持 720P/1080P/4K 高清生成、首尾帧驱动与原生音效",
+				"object":         "model",
+				"created":        1753600000,
+				"owned_by":       "kuaishou",
+				"tags":           []string{"video", "text-to-video", "image-to-video"},
+				"vendor":         "Kling",
+				"supports_images": true,
+				"context_length": 2500,
+			},
+			{
+				"id":             "minimax-video-h3",
+				"name":           "MiniMax-H3 海螺视频 (MiniMax-Video-H3)",
+				"description":    "[Video] MiniMax 原生电影级视频生成大模型，支持 768P/2K、电影级运镜、9参考图与原生音频",
+				"object":         "model",
+				"created":        1753600000,
+				"owned_by":       "minimax",
+				"tags":           []string{"video", "text-to-video", "image-to-video"},
+				"vendor":         "MiniMax",
+				"supports_images": true,
+				"context_length": 2000,
+			},
 			{
 				"id":             "kling-v3-t2v",
 				"name":           "快手可灵 3.0 文生视频 (Kling v3 T2V)",

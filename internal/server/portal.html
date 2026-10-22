@@ -875,12 +875,12 @@ func main() {
     ],
     "stream": true
   }'`,
-      video: `# 1. 文生视频（支持带 wait: true 同步直出视频，或异步轮询任务 ID）
+      video: `# 方案一：快手可灵 Kling 3.0（支持 720P / 1080P / 4K，时长 3-15s，原生音效）
 curl ${currentBaseURL}/videos/generations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer sk-your-api-key" \\
   -d '{
-    "model": "kling-v3-t2v",
+    "model": "kling-video-v3",
     "prompt": "一段海滩日落电影级镜头，微风吹拂发丝，镜头缓缓向前推进",
     "seconds": 5,
     "resolution": "1080P",
@@ -889,7 +889,19 @@ curl ${currentBaseURL}/videos/generations \\
     "wait": true
   }'
 
-# 2. 图生视频（首帧驱动或首尾帧接力）
+# 方案二：MiniMax-H3 海螺视频（电影级原生超清质感，支持 768P / 2K，自适应画幅）
+curl ${currentBaseURL}/videos/generations \\
+  -H "Content-Type: application/json" \\
+  -H "Authorization: Bearer sk-your-api-key" \\
+  -d '{
+    "model": "minimax-video-h3",
+    "prompt": "电影大片镜头，雨夜赛博朋克霓虹街头，积水倒影，光影极其写实",
+    "resolution": "2K",
+    "aspect_ratio": "adaptive",
+    "wait": true
+  }'
+
+# 方案三：图生视频（支持首帧 / 首尾帧驱动）
 curl ${currentBaseURL}/videos/generations \\
   -H "Content-Type: application/json" \\
   -H "Authorization: Bearer sk-your-api-key" \\
@@ -898,11 +910,7 @@ curl ${currentBaseURL}/videos/generations \\
     "image_url": "https://example.com/character.png",
     "prompt": "角色自然眨眼微笑，呼吸起伏，光影柔和变化",
     "wait": true
-  }'
-
-# 3. 异步任务状态查询
-curl ${currentBaseURL}/videos/tasks/task_xxxx \\
-  -H "Authorization: Bearer sk-your-api-key"`
+  }'`
     };
 
     function renderActiveCode() {
