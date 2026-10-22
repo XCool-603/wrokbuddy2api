@@ -577,6 +577,54 @@ main();
 
 ---
 
+### 10.5 专属视频大模型 (Kling 3.0 & MiniMax-H3) 调用规范
+
+网关对官方专属视频大模型进行了显式标注与全功能代理，模型均带有 `category: "video"` 与 `supports_video: true` 标记：
+
+| 专属视频模型 ID | 厂商与模型全称 | 核心特性与支持参数 |
+| :--- | :--- | :--- |
+| **`kling-video-v3`** | 快手可灵 3.0 视频生成旗舰 | 分辨率 `720P` / `1080P` / `4K`，时长 3-15s（默认 5s），画幅 `16:9` / `9:16` / `1:1`，原生音效 |
+| **`minimax-video-h3`** | MiniMax-H3 海螺视频 | 分辨率 `768P` / `2K` 电影级画质，自适应画幅 `adaptive` / `21:9`，原生音频，最多 9 张参考图 |
+| **`kling-v3-t2v`** | 快手可灵 3.0 文生视频专有 | 专注文生视频通道 |
+| **`kling-v3-i2v`** | 快手可灵 3.0 图生视频专有 | 专注图生视频通道，首帧与首尾帧接力驱动 |
+
+#### 1. 文生视频（支持同步直出模式 `wait: true`）
+```bash
+curl http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kling-video-v3",
+    "prompt": "一段海滩日落电影级镜头，微风吹拂发丝，镜头缓缓向前推进",
+    "seconds": 5,
+    "resolution": "1080P",
+    "aspect_ratio": "16:9",
+    "enable_audio": true,
+    "wait": true
+  }'
+```
+
+#### 2. 图生视频（首帧驱动）
+```bash
+curl http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer test_key" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "model": "kling-v3-i2v",
+    "image_url": "https://example.com/character.png",
+    "prompt": "角色自然眨眼微笑，呼吸起伏，光影柔和变化",
+    "wait": true
+  }'
+```
+
+#### 3. 异步任务进度查询
+```bash
+curl http://127.0.0.1:7863/v1/videos/tasks/{task_id} \
+  -H "Authorization: Bearer test_key"
+```
+
+---
+
 ## 11. 配置全集参考 (`config.json`)
 
 系统启动时会自动读取工作目录下的 `config.json`，若文件不存在会自动生成推荐模板：

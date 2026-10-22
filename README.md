@@ -91,6 +91,13 @@
     - **隐私绝对安全**：账号凭证（`auths/`）与数据库状态（`data/`）被严格隔离并在 `.gitignore` / `.dockerignore` 中屏蔽，绝不泄露任何私有数据。
     - **GitHub Actions 自动化打包**：每次打 tag 或手动点击即可自动编译 Windows 单文件桌面版与发布 Docker 镜像。
 
+11. **官方专属视频大模型代理矩阵 (Kling 3.0 & MiniMax-H3)**
+    - **双旗舰视频引擎深度代理**：完整逆向并接入 WorkBuddy 官方底层的两大顶尖视频生成模型：
+      - **快手可灵 3.0 (`kling-video-v3`)**：旗舰级文生/图生视频，支持 720P / 1080P / 4K 超清，原生音效与大幅度物理运动。
+      - **MiniMax 海螺视频 (`minimax-video-h3`)**：电影级超清画质（768P / 2K），自适应与 21:9 宽银幕画幅，写实人像神态与最多 9 张多视角参考图。
+    - **专属模型显式标注**：在 `/v1/models`、前台门户与控制台中全部打上 **`【视频专属】`**、`category: "video"` 与 `supports_video: true` 标记。
+    - **标准化视频 API 端点**：提供标准 `POST /v1/videos/generations` 与 `GET /v1/videos/tasks/{id}`，支持同步直出（`wait: true`）与异步轮询。
+
 ---
 
 ## 🚀 快速上手
