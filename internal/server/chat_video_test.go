@@ -22,9 +22,16 @@ func TestIsVideoModel(t *testing.T) {
 		{"kling-v3-i2v", true},
 		{"kling", true},
 		{"kling-v3", true},
+		{"keling", true},
+		{"keling-v3", true},
+		{"keling-video-v3", true},
+		{"可灵", true},
+		{"可灵视频", true},
 		{"minimax-video-h3", true},
 		{"hailuo-video", true},
+		{"海螺", true},
 		{"cn:kling-video-v3", true},
+		{"cn:keling-video-v3", true},
 		{"global:minimax-video-h3", true},
 		{"deepseek-v3", false},
 		{"deepseek-v4-flash", false},
@@ -237,5 +244,104 @@ func TestChatVideoBridgeStream(t *testing.T) {
 	}
 	if !strings.Contains(body, "[DONE]") {
 		t.Errorf("stream output does not contain [DONE]: %s", body)
+	}
+}
+
+func TestChatVideoBridgeWithKelingAliasAndRetry(t *testing.T) {
+	// Account 1 will return 401, Account 2 will succeed
+	upSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		token := r.Header.Get("Authorization")
+		if strings.Contains(token, "bad-token") {
+			w.WriteHeader(http.StatusUnauthorized)
+			_, _ = w.Write([]byte(`{"code": 401, "msg": "Authorization Required"}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/v2/videos/generations") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"code": 0,
+				"msg": "OK",
+				"requestId": "req-retry-1",
+				"data": {"id": "task-retry-789"}
+			}`))
+			return
+		}
+		if strings.HasSuffix(r.URL.Path, "/v2/videos/tasks") {
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{
+				"code": 0,
+				"msg": "OK",
+				"requestId": "req-retry-2",
+				"data": {
+					"id": "task-retry-789",
+					"status": "completed",
+					"data": [{"url": "https://example.com/retry_video.mp4"}]
+				}
+			}`))
+			return
+		}
+		http.NotFound(w, r)
+	}))
+	defer upSrv.Close()
+
+	testPool := pool.New("")
+	// Bad account
+	badAcct := &auth.Auth{
+		UID:         "bad_user",
+		AccessToken: "bad-token",
+	}
+	testPool.Add(badAcct)
+
+	// Good account
+	goodAcct := &auth.Auth{
+		UID:         "good_user",
+		AccessToken: "good-token",
+	}
+	testPool.Add(goodAcct)
+
+	uClient := &upstream.Client{
+		HTTP:       upSrv.Client(),
+		ChatBaseCN: upSrv.URL,
+	}
+
+	cfg := Config{
+		Pool:     testPool,
+		Upstream: uClient,
+	}
+	h := NewHandler(cfg)
+
+	// Test calling with "keling" alias
+	chatReq := `{
+		"model": "keling",
+		"messages": [{"role": "user", "content": "测试可灵别名视频直出"}],
+		"stream": false
+	}`
+
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", strings.NewReader(chatReq))
+	rec := httptest.NewRecorder()
+
+	h.ServeHTTP(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK, got %d: %s", rec.Code, rec.Body.String())
+	}
+
+	var resp struct {
+		Choices []struct {
+			Message struct {
+				Role    string `json:"role"`
+				Content string `json:"content"`
+			} `json:"message"`
+		} `json:"choices"`
+	}
+
+	if err := json.Unmarshal(rec.Body.Bytes(), &resp); err != nil {
+		t.Fatalf("unmarshal resp failed: %v", err)
+	}
+
+	content := resp.Choices[0].Message.Content
+	if !strings.Contains(content, "https://example.com/retry_video.mp4") {
+		t.Errorf("content does not contain video URL: %s", content)
 	}
 }

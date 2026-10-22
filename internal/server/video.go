@@ -1,14 +1,18 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"strings"
 	"time"
 
+	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
 
 // ClientVideoGenRequest 客户端发来的通用视频生成请求。
@@ -29,6 +33,84 @@ type ClientVideoGenRequest struct {
 	Watermark      *bool  `json:"watermark"`
 	Wait           bool   `json:"wait"`
 	Sync           bool   `json:"sync"`
+}
+
+// normalizeVideoModel 统一解析并归一化视频模型名称（支持 kling、keling、minimax、hailuo 及其中文别名）。
+func normalizeVideoModel(reqModel string, hasImage bool) string {
+	m := strings.ToLower(strings.TrimSpace(reqModel))
+	if idx := strings.Index(m, ":"); idx != -1 {
+		m = m[idx+1:]
+	}
+
+	if strings.Contains(m, "minimax") || strings.Contains(m, "hailuo") || strings.Contains(m, "海螺") || strings.Contains(m, "h3") {
+		return "minimax-video-h3"
+	}
+
+	if strings.Contains(m, "i2v") || strings.Contains(m, "image") {
+		return "kling-v3-i2v"
+	}
+	if strings.Contains(m, "t2v") || strings.Contains(m, "text") {
+		return "kling-v3-t2v"
+	}
+
+	if hasImage {
+		return "kling-v3-i2v"
+	}
+	return "kling-v3-t2v"
+}
+
+// createVideoTaskWithRetry 在账号池中带重试与多账号轮转提交视频任务，自动处理 401 token 过期与刷新。
+func (h *Handler) createVideoTaskWithRetry(ctx context.Context, model string, upReq *upstream.VideoGenRequest, clientIP string, reqOwner string) (*upstream.VideoGenResponse, *auth.Auth, error) {
+	maxAttempts := h.cfg.MaxRotate
+	if maxAttempts <= 0 {
+		maxAttempts = 5
+	}
+	tried := map[string]bool{}
+	var lastErr error
+
+	for i := 0; i < maxAttempts; i++ {
+		// 优先在 CN 域挑选（可灵/海螺在 CN 域稳定供给）
+		acct := h.cfg.Pool.PickExcludingForRealmAndOwner(tried, model, "cn", reqOwner)
+		if acct == nil {
+			acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, model, "", reqOwner)
+		}
+		if acct == nil {
+			break
+		}
+		tried[acct.UID] = true
+
+		resp, err := h.cfg.Upstream.CreateVideoTask(ctx, acct, upReq, clientIP)
+		if err == nil && resp != nil && resp.Data.ID != "" {
+			h.cfg.Pool.NoteSuccess(acct.UID)
+			return resp, acct, nil
+		}
+
+		lastErr = err
+		h.cfg.Pool.NoteError(acct.UID)
+		log.Printf("[Video] CreateVideoTask attempt %d failed (acct=%s, model=%s): %v", i+1, acct.UID, model, err)
+
+		errStr := ""
+		if err != nil {
+			errStr = err.Error()
+		}
+		// 若为 401 凭证过期，自动尝试 RefreshToken
+		if strings.Contains(errStr, "401") || strings.Contains(errStr, "token") {
+			if refErr := h.cfg.Upstream.RefreshToken(acct); refErr == nil {
+				// 刷新成功后重试该账号
+				respRetry, errRetry := h.cfg.Upstream.CreateVideoTask(ctx, acct, upReq, clientIP)
+				if errRetry == nil && respRetry != nil && respRetry.Data.ID != "" {
+					h.cfg.Pool.NoteSuccess(acct.UID)
+					return respRetry, acct, nil
+				}
+				lastErr = errRetry
+			}
+		}
+	}
+
+	if lastErr == nil {
+		lastErr = fmt.Errorf("no healthy account available in pool for video generation")
+	}
+	return nil, nil, lastErr
 }
 
 // videoGenerations 处理 POST /v1/videos/generations 与 POST /v2/videos/generations。
@@ -64,21 +146,9 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 		lastImgURL = req.LastImage
 	}
 
-	// 模型自适应与归一化（支持快手可灵 Kling 3.0 与 MiniMax-H3 海螺双视频方案）
-	model := strings.TrimSpace(req.Model)
-	isMiniMax := strings.Contains(strings.ToLower(model), "minimax") ||
-		strings.Contains(strings.ToLower(model), "hailuo") ||
-		strings.Contains(strings.ToLower(model), "h3")
-
-	if isMiniMax {
-		model = "minimax-video-h3"
-	} else if model == "" || model == "kling" || model == "kling-v3" || model == "kling-video" || model == "kling-video-v3" {
-		if imgURL != "" || lastImgURL != "" {
-			model = "kling-v3-i2v"
-		} else {
-			model = "kling-v3-t2v"
-		}
-	}
+	// 模型自适应与归一化（支持快手可灵 Kling/Keling 与 MiniMax-H3 海螺双视频方案）
+	model := normalizeVideoModel(req.Model, imgURL != "" || lastImgURL != "")
+	isMiniMax := strings.Contains(model, "minimax")
 
 	// 校验提示词
 	prompt := strings.TrimSpace(req.Prompt)
@@ -164,17 +234,17 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	// 从账号池中挑选可用账号
-	acct := h.cfg.Pool.Pick(model)
-	if acct == nil {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "no_healthy_account", "no available account in pool for video generation")
-		return
+	reqOwner := ""
+	if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
+		if u.Role != usermgr.RoleAdmin {
+			reqOwner = u.ID
+		}
 	}
 
 	clientIP := upstream.ExtractClientIP(r)
-	resp, err := h.cfg.Upstream.CreateVideoTask(r.Context(), acct, upReq, clientIP)
+	resp, acct, err := h.createVideoTaskWithRetry(r.Context(), model, upReq, clientIP, reqOwner)
 	if err != nil {
-		log.Printf("[Video] CreateVideoTask failed (account=%s, model=%s): %v", acct.UID, model, err)
+		log.Printf("[Video] createVideoTaskWithRetry failed (model=%s): %v", model, err)
 		writeOpenAIError(w, http.StatusBadGateway, "upstream_error", "failed to create video task: "+err.Error())
 		return
 	}

@@ -9,17 +9,23 @@ import (
 	"time"
 
 	"workbuddy2api/internal/upstream"
+	"workbuddy2api/internal/usermgr"
 )
 
-// isVideoModel 判断指定模型名称是否属于视频生成大模型。
+// isVideoModel 判断指定模型名称是否属于视频生成大模型（支持拼音 keling / kling / 中文别名）。
 func isVideoModel(model string) bool {
 	m := strings.ToLower(strings.TrimSpace(model))
 	if idx := strings.Index(m, ":"); idx != -1 {
 		m = m[idx+1:]
 	}
 	return strings.HasPrefix(m, "kling") ||
+		strings.HasPrefix(m, "keling") ||
+		strings.Contains(m, "kling") ||
+		strings.Contains(m, "keling") ||
+		strings.Contains(m, "可灵") ||
 		strings.Contains(m, "minimax-video") ||
-		strings.Contains(m, "hailuo-video") ||
+		strings.Contains(m, "hailuo") ||
+		strings.Contains(m, "海螺") ||
 		strings.HasSuffix(m, "-video") ||
 		strings.Contains(m, "video-v") ||
 		strings.Contains(m, "video-h")
@@ -132,23 +138,11 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 		lastImgURL = req.LastImage
 	}
 
-	model := strings.TrimSpace(reqModel)
+	model := normalizeVideoModel(reqModel, imgURL != "" || lastImgURL != "")
 	if model == "" {
-		model = req.Model
+		model = normalizeVideoModel(req.Model, imgURL != "" || lastImgURL != "")
 	}
-	isMiniMax := strings.Contains(strings.ToLower(model), "minimax") ||
-		strings.Contains(strings.ToLower(model), "hailuo") ||
-		strings.Contains(strings.ToLower(model), "h3")
-
-	if isMiniMax {
-		model = "minimax-video-h3"
-	} else if model == "" || model == "kling" || model == "kling-v3" || model == "kling-video" || model == "kling-video-v3" {
-		if imgURL != "" || lastImgURL != "" {
-			model = "kling-v3-i2v"
-		} else {
-			model = "kling-v3-t2v"
-		}
-	}
+	isMiniMax := strings.Contains(model, "minimax")
 
 	prompt := strings.TrimSpace(req.Prompt)
 	if imgURL == "" && lastImgURL == "" && prompt == "" {
@@ -226,16 +220,17 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 		},
 	}
 
-	acct := h.cfg.Pool.Pick(model)
-	if acct == nil {
-		writeOpenAIError(w, http.StatusServiceUnavailable, "no_healthy_account", "no available account in pool for video generation")
-		return
+	reqOwner := ""
+	if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil {
+		if u.Role != usermgr.RoleAdmin {
+			reqOwner = u.ID
+		}
 	}
 
 	clientIP := upstream.ExtractClientIP(r)
-	resp, err := h.cfg.Upstream.CreateVideoTask(r.Context(), acct, upReq, clientIP)
+	resp, acct, err := h.createVideoTaskWithRetry(r.Context(), model, upReq, clientIP, reqOwner)
 	if err != nil {
-		log.Printf("[VideoBridge] CreateVideoTask failed (account=%s, model=%s): %v", acct.UID, model, err)
+		log.Printf("[VideoBridge] createVideoTaskWithRetry failed (model=%s): %v", model, err)
 		writeOpenAIError(w, http.StatusBadGateway, "upstream_error", "failed to create video task: "+err.Error())
 		return
 	}

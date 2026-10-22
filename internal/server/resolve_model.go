@@ -27,6 +27,18 @@ func ResolveModel(model string) (realm, bare string) { return resolveModel(model
 
 // resolveModelWithAliases 先查询 ModelAliases 映射表，再解析 realm 和 bare 模型名。
 func (h *Handler) resolveModelWithAliases(model string) (realm, bare string) {
+	lower := strings.ToLower(strings.TrimSpace(model))
+	switch lower {
+	case "keling", "keling-v3", "keling-video", "keling-video-v3", "kling", "kling-v3", "kling-video", "可灵", "可灵3", "可灵v3", "可灵视频":
+		model = "kling-video-v3"
+	case "keling-v3-t2v", "kling-t2v", "可灵-t2v", "可灵文生视频":
+		model = "kling-v3-t2v"
+	case "keling-v3-i2v", "kling-i2v", "可灵-i2v", "可灵图生视频":
+		model = "kling-v3-i2v"
+	case "hailuo", "hailuo-video", "minimax-video", "海螺", "海螺视频":
+		model = "minimax-video-h3"
+	}
+
 	if h != nil && h.cfg.ModelAliases != nil {
 		if target, ok := h.cfg.ModelAliases[model]; ok && target != "" {
 			model = target
@@ -35,4 +47,4 @@ func (h *Handler) resolveModelWithAliases(model string) (realm, bare string) {
 		}
 	}
 	return resolveModel(model)
-}
+}

@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.27-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.28-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
@@ -93,12 +93,12 @@
 
 11. **官方专属视频大模型代理矩阵 (Kling 3.0 & MiniMax-H3 全平台统一接入)**
     - **双旗舰视频引擎深度代理**：完整逆向并接入 WorkBuddy 官方底层的两大顶尖视频生成大模型：
-      - **快手可灵 3.0 (`kling-video-v3` / `kling-v3-t2v` / `kling-v3-i2v`)**：旗舰级文生/图生视频，支持 720P / 1080P / 4K 超清，首尾帧驱动，原生音效与大幅度物理运动模拟。
+      - **快手可灵 3.0 (`kling-video-v3 / keling` / `kling-v3-t2v` / `kling-v3-i2v`)**：旗舰级文生/图生视频，支持 720P / 1080P / 4K 超清，首尾帧驱动，原生音效与大幅度物理运动模拟。
       - **MiniMax 海螺视频 (`minimax-video-h3`)**：电影级超清画质（768P / 2K），自适应与 21:9 宽银幕画幅，写实人像神态与最多 9 张多视角参考图。
     - **海内外双版底层视频架构统一**：经深度逆向证实，无论是国内版 WorkBuddy 还是海外版 WorkBuddy AI (`workbuddy.ai`)，官方视频底层均统一采用快手可灵 Kling 3.0 与 MiniMax-H3！无需额外购买海外视频服务，挂载即可用。
     - **专属模型显式标注**：在 `/v1/models`、前台门户与控制台中全部打上 **`【视频专属】`**、`category: "video"`、`modality: "video"` 与 `supports_video: true` 徽章。
     - **标准化双模 API 端点**：提供标准 `POST /v1/videos/generations` 与 `GET /v1/videos/tasks/{id}`，支持同步直出（`wait: true`）与异步轮询，兼容官方原生 `/v2/videos/*` 端点。
-    - **💬 对话窗口智能桥接与视频直出 (v1.2.27 独创突破)**：完美支持在任何第三方通用聊天客户端（NextChat、Cherry Studio、Chatbox 等）中直接选取视频模型（`kling-video-v3` / `minimax-video-h3`）发消息，网关自动提取提示词与参考图并在 `/v1/chat/completions` 中流式推送进度并直接交付视频卡片（含 MP4 下载直链与播放组件），彻底解决官方聊天路由报 `Backend [maas] is not supported` 的痛点！
+    - **💬 对话窗口智能桥接与视频直出 (v1.2.27 独创突破)**：完美支持在任何第三方通用聊天客户端（NextChat、Cherry Studio、Chatbox 等）中直接选取视频模型（`kling-video-v3 / keling` / `minimax-video-h3`）发消息，网关自动提取提示词与参考图并在 `/v1/chat/completions` 中流式推送进度并直接交付视频卡片（含 MP4 下载直链与播放组件），彻底解决官方聊天路由报 `Backend [maas] is not supported` 的痛点！
 
 ---
 
@@ -319,7 +319,7 @@ curl -N http://127.0.0.1:7863/v1/chat/completions \
 
 | 专属视频模型 ID | 厂商与模型全称 | 核心标识 | 模态与支持格式 | 最高画质 | 画幅比例 | 原生音效 | 账号支持 |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`kling-video-v3`**<br>*(别名 `kling` / `kling-v3`)* | **快手可灵 3.0**<br>旗舰级视频大模型 | `[🎬 视频专属]` | 文生视频 / 图生视频<br>*(按是否带图自动路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
+| **`kling-video-v3 / keling`**<br>*(别名 `kling` / `kling-v3`)* | **快手可灵 3.0**<br>旗舰级视频大模型 | `[🎬 视频专属]` | 文生视频 / 图生视频<br>*(按是否带图自动路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
 | **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频模型 | `[🎬 视频专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | 国内版 / 国际版 100% 支持 |
 | **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频 | `[🎬 视频专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
 | **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频 | `[🎬 视频专属]` | 纯图生视频 (首尾帧) | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | 国内版 / 国际版 100% 支持 |
@@ -331,7 +331,7 @@ curl http://127.0.0.1:7863/v1/videos/generations \
   -H "Authorization: Bearer test_key" \
   -H "Content-Type: application/json" \
   -d '{
-    "model": "kling-video-v3",
+    "model": "kling-video-v3 / keling",
     "prompt": "赛博朋克雨夜街道，霓虹灯倒映在积水中，镜头低角度缓慢推进，电影级质感",
     "seconds": 5,
     "resolution": "1080P",
@@ -371,7 +371,7 @@ HEADERS = {"Authorization": "Bearer test_key", "Content-Type": "application/json
 
 # 提交视频生成任务
 resp = requests.post(f"{API_BASE}/videos/generations", json={
-    "model": "kling-video-v3",
+    "model": "kling-video-v3 / keling",
     "prompt": "巨轮在晨曦波光中驶向金色朝阳，海鸥飞掠，电影级运镜",
     "seconds": 5,
     "resolution": "1080P",
