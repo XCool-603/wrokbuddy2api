@@ -90,6 +90,12 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// 若客户端请求的是专属视频大模型，通过 chatVideoBridge 实现对话窗口直出视频
+	if isVideoModel(bareModel) || isVideoModel(peek.Model) {
+		h.chatVideoBridge(w, r, body, bareModel, peek.Stream)
+		return
+	}
+
 	// 请求级统计：出口即打一行表格日志（任何路径都会走到）。
 	st := newChatStat(time.Now(), body, peek.Stream)
 	defer st.done()

@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.26-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.27-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
@@ -98,6 +98,7 @@
     - **海内外双版底层视频架构统一**：经深度逆向证实，无论是国内版 WorkBuddy 还是海外版 WorkBuddy AI (`workbuddy.ai`)，官方视频底层均统一采用快手可灵 Kling 3.0 与 MiniMax-H3！无需额外购买海外视频服务，挂载即可用。
     - **专属模型显式标注**：在 `/v1/models`、前台门户与控制台中全部打上 **`【视频专属】`**、`category: "video"`、`modality: "video"` 与 `supports_video: true` 徽章。
     - **标准化双模 API 端点**：提供标准 `POST /v1/videos/generations` 与 `GET /v1/videos/tasks/{id}`，支持同步直出（`wait: true`）与异步轮询，兼容官方原生 `/v2/videos/*` 端点。
+    - **💬 对话窗口智能桥接与视频直出 (v1.2.27 独创突破)**：完美支持在任何第三方通用聊天客户端（NextChat、Cherry Studio、Chatbox 等）中直接选取视频模型（`kling-video-v3` / `minimax-video-h3`）发消息，网关自动提取提示词与参考图并在 `/v1/chat/completions` 中流式推送进度并直接交付视频卡片（含 MP4 下载直链与播放组件），彻底解决官方聊天路由报 `Backend [maas] is not supported` 的痛点！
 
 ---
 

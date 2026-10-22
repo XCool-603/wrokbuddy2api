@@ -1,4 +1,4 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.26)
+# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.27)
 
 <p align="center">
   <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.26-blue?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.27-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -62,7 +62,8 @@
     - [10.5.3 文生视频 (Text-to-Video) 调用规范与同步直出](#1053-文生视频-text-to-video-调用规范与同步直出)
     - [10.5.4 图生视频 (Image-to-Video) 首尾帧驱动规范](#1054-图生视频-image-to-video-首尾帧驱动规范)
     - [10.5.5 异步任务轮询与全生命周期状态查询](#1055-异步任务轮询与全生命周期状态查询)
-    - [10.5.6 Python / Node.js 客户端实战代码](#1056-python--nodejs-客户端实战代码)
+    - [10.5.6 对话窗口智能桥接与视频模型直出 (Chat Completions Video Bridge)](#1056-对话窗口智能桥接与视频模型直出-chat-completions-video-bridge)
+    - [10.5.7 Python / Node.js 客户端实战代码](#1057-python--nodejs-客户端实战代码)
 - [11. 配置全集参考 (`config.json`)](#11-配置全集参考-configjson)
 - [12. 架构设计与底层机制原理解析](#12-架构设计与底层机制原理解析)
   - [12.1 调度池三因子加权随机算法](#121-调度池三因子加权随机算法)
@@ -735,7 +736,17 @@ curl http://127.0.0.1:7863/v1/videos/tasks/video_task_8931bfa28e \
 
 ---
 
-#### 10.5.6 Python / Node.js 客户端实战代码
+#### 10.5.6 对话窗口智能桥接与视频模型直出 (Chat Completions Video Bridge)
+
+在以往的调用中，若用户在通用客户端（如 NextChat、Cherry Studio、Chatbox 等）的聊天对话框中直接选择视频模型（如 `kling-video-v3`），上游官方会因为视频模型未挂载在聊天流水线而返回 `11103 Backend [maas] is not supported`。
+
+**自 `v1.2.27` 起，网关内置了全自动视频智能桥接器 (Chat Video Bridge)**：
+1. **自动识别**：当请求发往 `POST /v1/chat/completions` 且模型属于专属视频模型时，网关就地接管；
+2. **多模态与提示词解析**：自动从 `messages` 消息流中提取最后一条文本作为生成 `prompt`，并自动提取上传的参考图片作为图生视频首帧；
+3. **流式状态回传**：在 SSE 流中先发送任务已提交的提示与 Task ID，在等待渲染期间自动打点保持心跳，防止客户端等待超时断流；
+4. **视频渲染直出**：渲染完成后，直接在对话框中吐出带有 `🎥 [下载 MP4 视频]` 直链与原生 HTML5 `<video>` 播放标签的 Markdown 卡片，实现聊天窗口内的「即聊即生成视频」！
+
+#### 10.5.7 Python / Node.js 客户端实战代码
 
 ##### Python 完整调用脚本 (带自动轮询与 MP4 下载)
 
