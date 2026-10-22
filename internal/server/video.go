@@ -235,6 +235,8 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 				errMsg := qResp.Data.Error.Message
 				if errMsg == "" {
 					errMsg = "video generation failed upstream"
+				} else {
+					errMsg = formatVideoError(errMsg)
 				}
 				writeOpenAIError(w, http.StatusInternalServerError, "video_generation_failed", errMsg)
 				return

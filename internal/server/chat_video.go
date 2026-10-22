@@ -330,6 +330,8 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 					errMsg := qResp.Data.Error.Message
 					if errMsg == "" {
 						errMsg = "上游渲染失败，请调整提示词后重试"
+					} else {
+						errMsg = formatVideoError(errMsg)
 					}
 					sendChunk(fmt.Sprintf("\n\n❌ **视频生成失败**: %s\n", errMsg), "", nil)
 					stop := "stop"
@@ -401,10 +403,27 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 				errMsg := qResp.Data.Error.Message
 				if errMsg == "" {
 					errMsg = "video generation failed upstream"
+				} else {
+					errMsg = formatVideoError(errMsg)
 				}
 				writeOpenAIError(w, http.StatusInternalServerError, "video_generation_failed", errMsg)
 				return
 			}
 		}
 	}
+}
+
+// formatVideoError 将上游视频引擎错误码进行可读化解释。
+func formatVideoError(raw string) string {
+	lower := strings.ToLower(raw)
+	if strings.Contains(lower, "1027") || strings.Contains(lower, "sensitive") {
+		return fmt.Sprintf("%s（触发了上游内容安全审查过滤，请检查提示词或参考图是否包含公众人物、敏感情感或合规受限元素）", raw)
+	}
+	if strings.Contains(lower, "face") {
+		return fmt.Sprintf("%s（参考图人脸检测异常，请更换清晰正脸图片）", raw)
+	}
+	if strings.Contains(lower, "timeout") {
+		return fmt.Sprintf("%s（上游算力排队超时，请稍后重试）", raw)
+	}
+	return raw
 }
