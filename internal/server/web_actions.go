@@ -481,3 +481,173 @@ func (h *Handler) handleAdminSetUserQuota(w http.ResponseWriter, r *http.Request
 }
 
 
+
+// handleActionWelfare 一键为所有（或指定）账号吃满全套新手礼包、活动补偿、每日签到与试用福利。
+func (h *Handler) handleActionWelfare(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID string `json:"uid"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	authDir := h.getAuthDir()
+	files, err := auth.LoadAuthFiles(authDir)
+	if err != nil || len(files) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"output": "未找到任何账号凭证文件 (" + authDir + " 目录为空)",
+		})
+		return
+	}
+
+	up := h.cfg.Upstream
+	if up == nil {
+		up = upstream.New()
+		up.GlobalEnabled = true
+	}
+
+	user := h.getWebSessionUser(r)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%-28s | %-10s | %-8s | %-8s | %-8s | %-8s | %-8s\n", "UID", "新手礼包", "补偿", "签到", "试用", "本次到账", "最新余额"))
+	sb.WriteString("-----------------------------+------------+----------+----------+----------+----------+----------\n")
+
+	var results []upstream.WelfareResult
+	var totalNewCredits int64
+	giftSuccessN, checkinSuccessN, trialSuccessN := 0, 0, 0
+
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		a, err := auth.Parse(raw)
+		if err != nil {
+			continue
+		}
+		a.FilePath = f
+
+		// 用户权限过滤
+		if !h.isAccountVisibleTo(a, user) {
+			continue
+		}
+
+		// 若指定了单个 UID，则只处理该账号
+		if req.UID != "" && a.UID != req.UID && auth.CleanRawUID(a.UID) != auth.CleanRawUID(req.UID) {
+			continue
+		}
+
+		res := up.ClaimAllWelfare(a)
+		if res != nil {
+			if res.FinalCredits > 0 && h.cfg.Pool != nil {
+				h.cfg.Pool.SetCredits(a.UID, res.FinalCredits)
+			}
+			results = append(results, *res)
+			totalNewCredits += res.TotalNewCredits
+
+			if res.GiftStatus == "OK" {
+				giftSuccessN++
+			}
+			if res.CheckinStatus == "OK" {
+				checkinSuccessN++
+			}
+			if res.TrialStatus == "OK" {
+				trialSuccessN++
+			}
+
+			// 格式化表格显示
+			giftCol := res.GiftStatus
+			if res.GiftCredit > 0 {
+				giftCol = fmt.Sprintf("+%d", res.GiftCredit)
+			}
+			compCol := res.CompStatus
+			if res.CompCredit > 0 {
+				compCol = fmt.Sprintf("+%d", res.CompCredit)
+			}
+			trialCol := res.TrialStatus
+			if res.TrialCredit > 0 {
+				trialCol = fmt.Sprintf("+%d", res.TrialCredit)
+			}
+			newCreditsCol := "-"
+			if res.TotalNewCredits > 0 {
+				newCreditsCol = fmt.Sprintf("+%d", res.TotalNewCredits)
+			}
+			finalCol := "-"
+			if res.FinalCredits > 0 {
+				finalCol = fmt.Sprintf("%d", res.FinalCredits)
+			}
+
+			sb.WriteString(fmt.Sprintf("%-28s | %-10s | %-8s | %-8s | %-8s | %-8s | %-8s\n",
+				logfmt.Truncate(a.UID, 28), giftCol, compCol, res.CheckinStatus, trialCol, newCreditsCol, finalCol))
+		}
+	}
+
+	sb.WriteString(fmt.Sprintf("\n总计账号: %d | 新手礼包到账: %d | 签到成功: %d | 试用到账: %d | 本轮累计到账算力: +%d\n",
+		len(results), giftSuccessN, checkinSuccessN, trialSuccessN, totalNewCredits))
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":           true,
+		"total_new_credits": totalNewCredits,
+		"results":           results,
+		"output":            sb.String(),
+	})
+}
+
+// handleActionBindInvite 新账号绑定邀请人（填入老号邀请码）。
+func (h *Handler) handleActionBindInvite(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID        string `json:"uid"`
+		InviteCode string `json:"invite_code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.UID == "" || strings.TrimSpace(req.InviteCode) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "参数错误：账号 UID 与邀请码均为必填"})
+		return
+	}
+
+	user := h.getWebSessionUser(r)
+	a := h.cfg.Pool.AuthByUID(req.UID)
+	if a == nil {
+		// 尝试从磁盘加载
+		authDir := h.getAuthDir()
+		files, _ := auth.LoadAuthFiles(authDir)
+		for _, f := range files {
+			raw, _ := os.ReadFile(f)
+			if parsed, perr := auth.Parse(raw); perr == nil && (parsed.UID == req.UID || auth.CleanRawUID(parsed.UID) == auth.CleanRawUID(req.UID)) {
+				parsed.FilePath = f
+				a = parsed
+				break
+			}
+		}
+	}
+
+	if a == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"error": "未找到指定账号"})
+		return
+	}
+
+	if !h.isAccountOwnedBy(a, user) {
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": "权限不足：只能操作自己名下的账号"})
+		return
+	}
+
+	up := h.cfg.Upstream
+	if up == nil {
+		up = upstream.New()
+	}
+
+	reward, err := up.AcceptInvite(a, req.InviteCode)
+	if err != nil {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   "绑定邀请码失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 绑定成功后刷新资产
+	h.triggerAsyncCreditFetch(a, a.UID)
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"reward":  reward,
+		"message": fmt.Sprintf("成功绑定邀请人！恭喜获得邀请奖励积分: +%d", reward),
+	})
+}

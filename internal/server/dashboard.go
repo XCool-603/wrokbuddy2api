@@ -12,6 +12,7 @@ import (
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/pool"
+	"workbuddy2api/internal/upstream"
 	"workbuddy2api/internal/usermgr"
 )
 
@@ -74,6 +75,8 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("GET /ui/inflight/data", h.withWebAuth(h.handleInFlightData))
 	h.mux.HandleFunc("POST /ui/action/signin", h.withWebAuth(h.handleActionSignin))
 	h.mux.HandleFunc("POST /ui/action/trial", h.withWebAuth(h.handleActionTrial))
+	h.mux.HandleFunc("POST /ui/action/welfare", h.withWebAuth(h.handleActionWelfare))
+	h.mux.HandleFunc("POST /ui/action/bind_invite", h.withWebAuth(h.handleActionBindInvite))
 	h.mux.HandleFunc("POST /ui/action/delete", h.withWebAuth(h.handleActionDelete))
 	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))
 	h.mux.HandleFunc("POST /ui/config/password", h.withWebAuth(h.handleConfigPassword))
@@ -214,6 +217,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		ModelCosts        []pool.ModelCostStatus  `json:"model_costs,omitempty"`
 		Owner             string                  `json:"owner"`
 		IsMyAccount       bool                    `json:"is_my_account"`
+		InviteCode        string                  `json:"invite_code,omitempty"`
+		InviteURL         string                  `json:"invite_url,omitempty"`
 	}
 
 	poolList := h.cfg.Pool.List()
@@ -271,6 +276,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		seenKey[a.UID] = true
 		seenKey[filepath.Base(f)] = true
 
+		code := upstream.DefaultInviteCode(a)
 		item := AccountItem{
 			UID:         a.UID,
 			Realm:       a.Realm(),
@@ -279,6 +285,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			Filename:    filepath.Base(f),
 			Owner:       a.Owner,
 			IsMyAccount: isMine,
+			InviteCode:  code,
+			InviteURL:   upstream.DefaultInviteURL(a, code),
 		}
 		var matched *pool.Status
 		if p, ok := poolMap[filepath.Base(f)]; ok {
@@ -380,6 +388,20 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		if prov == "" && authObj != nil {
 			prov = authObj.Provider()
 		}
+		poolInviteCode := ""
+		if authObj != nil {
+			poolInviteCode = upstream.DefaultInviteCode(authObj)
+		} else {
+			poolInviteCode = auth.CleanRawUID(p.UID)
+		}
+		poolInviteURL := ""
+		if authObj != nil {
+			poolInviteURL = upstream.DefaultInviteURL(authObj, poolInviteCode)
+		} else if realm == "global" {
+			poolInviteURL = "https://www.workbuddy.ai/i/" + poolInviteCode
+		} else {
+			poolInviteURL = "https://workbuddy.cn/i/" + poolInviteCode
+		}
 		item := AccountItem{
 			UID:               p.UID,
 			Realm:             realm,
@@ -400,6 +422,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			ModelCosts:        p.ModelCosts,
 			Owner:             owner,
 			IsMyAccount:       isMine,
+			InviteCode:        poolInviteCode,
+			InviteURL:         poolInviteURL,
 		}
 		if item.Credits == 0 && authObj != nil && authObj.AccessTokenValue() != "" {
 			h.triggerAsyncCreditFetch(authObj, p.UID)
