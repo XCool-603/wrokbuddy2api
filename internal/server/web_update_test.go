@@ -1,6 +1,11 @@
 package server
 
 import (
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/httptest"
+	"os"
 	"testing"
 )
 
@@ -35,5 +40,32 @@ func TestFindMatchingAsset(t *testing.T) {
 		if gotURL != tt.wantURL {
 			t.Errorf("findMatchingAsset(%s, %s) = %q, want %q", tt.goos, tt.goarch, gotURL, tt.wantURL)
 		}
+	}
+}
+
+func TestDownloadAssetWithFallback(t *testing.T) {
+	// 模拟镜像服务
+	mirrorServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+		fmt.Fprint(w, "mock binary payload")
+	}))
+	defer mirrorServer.Close()
+
+	// 设置 GH_PROXY 环境变量指向模拟镜像
+	os.Setenv("GH_PROXY", mirrorServer.URL+"/")
+	defer os.Unsetenv("GH_PROXY")
+
+	resp, actualURL, err := downloadAssetWithFallback("https://github.com/fake/releases/download/v1.0.0/app")
+	if err != nil {
+		t.Fatalf("downloadAssetWithFallback failed: %v", err)
+	}
+	defer resp.Body.Close()
+
+	data, _ := io.ReadAll(resp.Body)
+	if string(data) != "mock binary payload" {
+		t.Errorf("expected 'mock binary payload', got %q", string(data))
+	}
+	if actualURL != mirrorServer.URL+"/https://github.com/fake/releases/download/v1.0.0/app" {
+		t.Errorf("unexpected actualURL: %s", actualURL)
 	}
 }

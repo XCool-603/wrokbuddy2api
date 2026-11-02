@@ -36,6 +36,9 @@ type ClientVideoGenRequest struct {
 }
 
 // normalizeVideoModel 统一解析并归一化视频模型名称（支持 kling、keling、minimax、hailuo 及其中文别名）。
+// 注意：上游官方视频中台（国内版与国际版）对快手可灵的统一有效路由标识为 "kling-video-v3"，
+// 细分通道名如 kling-v3-t2v / kling-v3-i2v 在国际版 (workbuddy.ai) 路由不存在会报 14407 route config not found。
+// 上游会根据入参中是否携带 image_url 自动执行文生视频或图生视频，此处统一归一化为通用官方模型名。
 func normalizeVideoModel(reqModel string, hasImage bool) string {
 	m := strings.ToLower(strings.TrimSpace(reqModel))
 	if idx := strings.Index(m, ":"); idx != -1 {
@@ -46,17 +49,7 @@ func normalizeVideoModel(reqModel string, hasImage bool) string {
 		return "minimax-video-h3"
 	}
 
-	if strings.Contains(m, "i2v") || strings.Contains(m, "image") {
-		return "kling-v3-i2v"
-	}
-	if strings.Contains(m, "t2v") || strings.Contains(m, "text") {
-		return "kling-v3-t2v"
-	}
-
-	if hasImage {
-		return "kling-v3-i2v"
-	}
-	return "kling-v3-t2v"
+	return "kling-video-v3"
 }
 
 // createVideoTaskWithRetry 在账号池中带重试与多账号轮转提交视频任务，自动处理 401 token 过期与刷新。
@@ -69,11 +62,8 @@ func (h *Handler) createVideoTaskWithRetry(ctx context.Context, model string, up
 	var lastErr error
 
 	for i := 0; i < maxAttempts; i++ {
-		// 优先在 CN 域挑选（可灵/海螺在 CN 域稳定供给）
+		// 严格限定只在 CN 域挑选（可灵与海螺视频大模型为国内版专属，国际版官方未上线视频模型）
 		acct := h.cfg.Pool.PickExcludingForRealmAndOwner(tried, model, "cn", reqOwner)
-		if acct == nil {
-			acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, model, "", reqOwner)
-		}
 		if acct == nil {
 			break
 		}
@@ -108,7 +98,7 @@ func (h *Handler) createVideoTaskWithRetry(ctx context.Context, model string, up
 	}
 
 	if lastErr == nil {
-		lastErr = fmt.Errorf("no healthy account available in pool for video generation")
+		lastErr = fmt.Errorf("无可用的国内版账号：视频大模型为国内版专属，WorkBuddy 国际版官方暂无视频生成功能，请在后台添加或绑定国内版账号")
 	}
 	return nil, nil, lastErr
 }
@@ -129,6 +119,13 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 	var req ClientVideoGenRequest
 	if err := json.Unmarshal(bodyBytes, &req); err != nil {
 		writeOpenAIError(w, http.StatusBadRequest, "invalid_request_error", "invalid JSON request body: "+err.Error())
+		return
+	}
+
+	// 校验模型 realm：国际版官方明确未开放视频大模型
+	reqRealm, _ := resolveModel(req.Model)
+	if reqRealm == "global" {
+		writeOpenAIError(w, http.StatusBadRequest, "invalid_request_error", "WorkBuddy 国际版 (workbuddy.ai) 官方暂未上线视频大模型，视频模型仅支持国内版 (如 cn:kling-video-v3 或 kling-video-v3)")
 		return
 	}
 
@@ -267,6 +264,7 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// 同步轮询模式：等待任务直到完成或超时（最多等待 300 秒）
+	startTime := time.Now()
 	ctx := r.Context()
 	ticker := time.NewTicker(4 * time.Second)
 	defer ticker.Stop()
@@ -289,6 +287,21 @@ func (h *Handler) videoGenerations(w http.ResponseWriter, r *http.Request) {
 			}
 
 			if qResp.Data.Status == "completed" {
+				if acct != nil {
+					h.cfg.Pool.NoteModelCost(acct.UID, model, qResp.Usage.Credit, 1000)
+					recordChatMetric(&chatStat{
+						start:     startTime,
+						model:     model,
+						mode:      "sync",
+						uid:       acct.UID,
+						nick:      acct.Nickname,
+						status:    200,
+						toks:      100,
+						credit:    qResp.Usage.Credit,
+						hasCredit: true,
+						hasUsage:  true,
+					}, time.Since(startTime))
+				}
 				writeJSON(w, http.StatusOK, map[string]any{
 					"id":      taskID,
 					"object":  "video.generation",

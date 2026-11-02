@@ -1,4 +1,4 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.28)
+# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.29)
 
 <p align="center">
   <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.28-blue?style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.29-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -462,12 +462,12 @@ sequenceDiagram
 
 | 专属视频模型 ID | 厂商与模型全称 | 核心标识 | 模态支持 | 最高分辨率 | 画幅与比例 | 原生音频 | 海内外兼容性 |
 | :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`kling-video-v3`**<br>*(别名 `kling-v3` / `kling`)* | **快手可灵 3.0**<br>全功能视频生成旗舰 | `[🎬 视频专属]` | 文生视频 / 图生视频<br>*(自动按入参路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
-| **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频大模型 | `[🎬 视频专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | **国内版 & 国际版**<br>100% 官方支持 |
-| **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频通道 | `[🎬 视频专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
-| **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频通道 | `[🎬 视频专属]` | 纯图生视频<br>*(首帧/首尾帧驱动)* | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | **国内版 & 国际版**<br>100% 官方支持 |
+| **`kling-video-v3`**<br>*(别名 `kling-v3` / `kling` / `keling`)* | **快手可灵 3.0**<br>全功能视频生成旗舰 | `[🎬 国内专属]` | 文生视频 / 图生视频<br>*(自动按入参路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
+| **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频大模型 | `[🎬 国内专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
+| **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频通道 | `[🎬 国内专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
+| **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频通道 | `[🎬 国内专属]` | 纯图生视频<br>*(首帧/首尾帧驱动)* | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
 
-> 💡 **核心技术提示**：无论您使用的是国内版凭证（`workbuddy.cn` / `copilot.tencent.com`）还是海外版凭证（`workbuddy.ai`），其官方底层视频中台均统一走快手可灵 Kling 3.0 与 MiniMax-H3！在调用时只需指定上述模型 ID 即可，网关自动处理多账号轮询与会话调度。
+> 💡 **核心技术提示**：**视频大模型（快手可灵 Kling 3.0 与 MiniMax-H3）目前仅国内版 WorkBuddy（`codebuddy.cn` / `copilot.tencent.com`）官方支持**。WorkBuddy 国际版（`workbuddy.ai`）官方当前暂未开放视频大模型。网关已在路由层实现严格隔离，所有视频请求统一由国内版账号池供给，杜绝请求误投国际版导致报错。
 
 ### 9.3 内置演练场 (Playground)
 
@@ -611,9 +611,10 @@ main();
 #### 10.5.1 海内外双版本底层视频架构深度解析
 
 经过对 WorkBuddy 国内版与海外版（`workbuddy.ai` / `WorkBuddy AI`）的深度逆向拆解发现：
-1. **统一的视频算力供给底座**：
-   - 尽管海外版在语言模型（LLM）上引入了 GPT-5/GPT-6 系列、Gemini、Grok 等国际模型，但在**视频生成**这一专业垂直领域，WorkBuddy 官方在国内外版本均统一接入了**快手可灵 Kling 3.0**（海外版 `kling.ai`）与 **MiniMax 海螺视频**（海外版 `hailuo.ai`）；
-   - 在国际版客户端代码中，默认文生与图生模型直接固定为 `kling-v3-t2v` 与 `kling-v3-i2v`，并内置了直连 `https://kling.ai/mcp/plugin` 的官方连接器。
+1. **国内外版本视频能力差异与隔离策略**：
+   - 官方在版本规划上存在明确区分：**视频生成（快手可灵 Kling 3.0 与 MiniMax 海螺）当前仅在国内版 WorkBuddy 官方上线支持**；
+   - **WorkBuddy 国际版（`workbuddy.ai`）当前官方暂未提供视频大模型**（其路由网关未配置视频模型通道，请求会返回 `14407 route config not found`）；
+   - 为避免混用导致调用失败，本网关在调度层已将**视频模型与国际版完全切分**：所有可灵/海螺视频任务自动锁定并调度到国内版（CN realm）账号池，杜绝分配到国际版账号。
 2. **两套 API 端点无缝兼容**：
    - **行业标准端点**：`POST /v1/videos/generations`，响应结构对齐业内视频生成标准；
    - **状态查询端点**：`GET /v1/videos/tasks/{task_id}`；
@@ -940,11 +941,11 @@ $$\text{Weight} = W_{\text{credits}} + W_{\text{expiring}} + W_{\text{idle}}$$
 
 ---
 
-### Q6: 为什么官方国内版和国际版（WorkBuddy AI）视频模型一致？
-- **经过深入逆向确证**：
-  - 无论是国内版 WorkBuddy（`copilot.tencent.com` / `workbuddy.cn`）还是海外版 WorkBuddy AI（`workbuddy.ai`），其底层多媒体视频中台（Miora 引擎）均统一部署接入了**快手可灵 Kling 3.0**（海外版 `kling.ai`）与 **MiniMax 海螺视频**（海外版 `hailuo.ai`）；
-  - 国外版 WorkBuddy AI 客户端中，默认文生与图生模型直接固定为 `kling-v3-t2v` 与 `kling-v3-i2v`，并内置了直连 `https://kling.ai/mcp/plugin` 的官方连接器；
-  - 因此在我们的网关中，无论您挂载的是大陆企业微信/微信授权账号，还是海外 Google / Twitter 账号，均可稳定调用高质量的 Kling 3.0 与 MiniMax-H3 视频大模型！
+### Q6: 国际版（WorkBuddy AI）支持视频模型吗？如何区分？
+- **经过深度实测与架构排查**：
+  - **国内版（CodeBuddy / 腾讯版）**：官方完整支持快手可灵 Kling 3.0（`kling-video-v3`）与 MiniMax 海螺（`minimax-video-h3`）的高清视频生成；
+  - **国际版（WorkBuddy AI，`workbuddy.ai`）**：**官方当前暂未开放视频大模型**，没有配置视频模型上游路由；
+  - **网关自动隔离**：网关在调度层已将视频大模型与国际版彻底隔离，视频生成任务严格只在健康国内版账号中挑选，保证 100% 成功率。若池内无国内账号，会给出清晰指引。
 
 ---
 

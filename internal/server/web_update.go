@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -144,6 +146,85 @@ func (h *Handler) handleSystemUpdateCheck(w http.ResponseWriter, r *http.Request
 
 var updateLock sync.Mutex
 
+// downloadAssetWithFallback 下载更新包，采用 10 秒快速探测 + 国内多镜像自动回退机制。
+// 优先直连官方源，若遇国内 GFW 网络屏蔽 (i/o timeout / connection refused) 则自动无缝切换至国内高速加速镜像。
+func downloadAssetWithFallback(rawURL string) (*http.Response, string, error) {
+	mirrors := []string{
+		"", // 优先官方直连
+		"https://ghfast.top/",
+		"https://ghproxy.net/",
+		"https://gh-proxy.com/",
+	}
+
+	// 支持环境变量 GH_PROXY / UPDATE_MIRROR 自定义镜像
+	if custom := strings.TrimSpace(os.Getenv("GH_PROXY")); custom != "" {
+		if !strings.HasSuffix(custom, "/") {
+			custom += "/"
+		}
+		mirrors = append([]string{custom}, mirrors...)
+	} else if custom := strings.TrimSpace(os.Getenv("UPDATE_MIRROR")); custom != "" {
+		if !strings.HasSuffix(custom, "/") {
+			custom += "/"
+		}
+		mirrors = append([]string{custom}, mirrors...)
+	}
+
+	dialer := &net.Dialer{
+		Timeout:   10 * time.Second, // 连接超时设为 10 秒，防止直连超时卡死数分钟
+		KeepAlive: 30 * time.Second,
+	}
+	transport := &http.Transport{
+		Proxy:                 http.ProxyFromEnvironment,
+		DialContext:           dialer.DialContext,
+		ForceAttemptHTTP2:     true,
+		MaxIdleConns:          10,
+		IdleConnTimeout:       90 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+		ResponseHeaderTimeout: 30 * time.Second,
+	}
+	client := &http.Client{
+		Transport: transport,
+		Timeout:   10 * time.Minute,
+	}
+
+	var errs []string
+	for _, prefix := range mirrors {
+		targetURL := rawURL
+		sourceDesc := "GitHub 官方直连"
+		if prefix != "" {
+			targetURL = prefix + rawURL
+			sourceDesc = "加速镜像 (" + prefix + ")"
+		}
+
+		req, err := http.NewRequest("GET", targetURL, nil)
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("%s: %v", sourceDesc, err))
+			continue
+		}
+		req.Header.Set("User-Agent", "workbuddy2api-updater")
+
+		log.Printf("[Updater] 正在尝试从 %s 下载更新包...", sourceDesc)
+		resp, err := client.Do(req)
+		if err != nil {
+			log.Printf("[Updater] %s 下载失败: %v，自动切换备用加速源...", sourceDesc, err)
+			errs = append(errs, fmt.Sprintf("%s: %v", sourceDesc, err))
+			continue
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			resp.Body.Close()
+			log.Printf("[Updater] %s 响应异常 (HTTP %d)，自动切换备用加速源...", sourceDesc, resp.StatusCode)
+			errs = append(errs, fmt.Sprintf("%s: HTTP %d", sourceDesc, resp.StatusCode))
+			continue
+		}
+
+		log.Printf("[Updater] 成功连接更新源并开始下载: %s", targetURL)
+		return resp, targetURL, nil
+	}
+
+	return nil, "", fmt.Errorf("所有下载源均失败: %s", strings.Join(errs, "; "))
+}
+
 func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 	user := h.getWebSessionUser(r)
 	if user == nil || user.Role != usermgr.RoleAdmin {
@@ -183,12 +264,9 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// 1. 下载新版本到临时文件 .new
+	// 1. 下载新版本到临时文件 .new (带多镜像自动回退)
 	newExePath := currentExe + ".new"
-	downloadClient := &http.Client{Timeout: 5 * time.Minute}
-	req, _ := http.NewRequest("GET", targetAssetURL, nil)
-	req.Header.Set("User-Agent", "workbuddy2api-updater")
-	resp, err := downloadClient.Do(req)
+	resp, actualURL, err := downloadAssetWithFallback(targetAssetURL)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]any{
 			"error": "下载更新包失败: " + err.Error(),
@@ -196,13 +274,7 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		writeJSON(w, http.StatusInternalServerError, map[string]any{
-			"error": fmt.Sprintf("下载更新包 HTTP 状态异常: %d", resp.StatusCode),
-		})
-		return
-	}
+	log.Printf("[Updater] 正在从 %s 写入新版本...", actualURL)
 
 	out, err := os.OpenFile(newExePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0755)
 	if err != nil {

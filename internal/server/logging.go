@@ -29,6 +29,7 @@ type RecentLogItem struct {
 	TTFB      string  `json:"ttfb"`
 	Tokens    string  `json:"tokens"`
 	TokenRate string  `json:"token_rate"`
+	Cost      string  `json:"cost"`
 	Duration  float64 `json:"duration"`
 	Error     string  `json:"error,omitempty"`
 }
@@ -104,7 +105,7 @@ func (s *chatStat) done() {
 	}
 	s.logged = true
 	total := time.Since(s.start)
-	logChatRow(s.ttfb, total, s.model, s.mode, s.uid, s.nick, s.status, s.toks, s.errDetail)
+	logChatRow(s.ttfb, total, s.model, s.mode, s.uid, s.nick, s.status, s.toks, s.credit, s.hasCredit, s.errDetail)
 	recordChatMetric(s, total)
 }
 
@@ -281,7 +282,7 @@ const (
 //   - uid/nick：完整 uid 与账号昵称，经 logfmt.Label 拼成 "昵称(uid8)" 展示——只有
 //     uid8 时人眼无法判断是哪个号，要辨认必须再查 auths/，排障多一跳；
 //   - toks<0 表示 usage 缺失，显示 "-"。
-func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status int, toks int, errDetail ...string) {
+func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status int, toks int, credit float64, hasCredit bool, errDetail ...string) {
 	if !chatLogEnabled {
 		return
 	}
@@ -307,8 +308,12 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 	if ttfb > 0 {
 		ttfbMS = fmt.Sprintf("%dms", ttfb.Milliseconds())
 	}
+	costField := "-"
+	if hasCredit {
+		costField = fmt.Sprintf("%.2f", credit)
+	}
 	timeStr := time.Now().Format("15:04:05")
-	fmt.Fprintf(os.Stdout, "| #%03d | %s | %s | %s | %d | %s | TTFB=%s | tok=%s | %s | total=%.1fs |\n",
+	fmt.Fprintf(os.Stdout, "| #%03d | %s | %s | %s | %d | %s | TTFB=%s | tok=%s | %s | cost=%s | total=%.1fs |\n",
 		seq,
 		timeStr,
 		model,
@@ -318,6 +323,7 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 		logfmt.Pad(ttfbMS, chatTTFBWidth),
 		logfmt.Pad(tokField, chatTokWidth),
 		logfmt.Pad(tokpsField, chatRateWidth),
+		logfmt.Pad(costField, 6),
 		total.Seconds(),
 	)
 	if status >= 400 && errStr != "" {
@@ -334,6 +340,7 @@ func logChatRow(ttfb, total time.Duration, model, mode, uid, nick string, status
 		TTFB:      ttfbMS,
 		Tokens:    tokField,
 		TokenRate: tokpsField,
+		Cost:      costField,
 		Duration:  total.Seconds(),
 		Error:     errStr,
 	})

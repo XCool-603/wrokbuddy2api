@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"workbuddy2api/internal/auth"
@@ -69,7 +70,19 @@ func (c *Client) CreateVideoTask(ctx context.Context, a *auth.Auth, req *VideoGe
 		return nil, fmt.Errorf("no account available for video generation")
 	}
 
-	bodyBytes, err := json.Marshal(req)
+	reqCopy := *req
+	// 上游路由兼容：国际版 (workbuddy.ai) 与国内版 (codebuddy.cn) 官方模型标识为 kling-video-v3。
+	// kling-v3-t2v / kling-v3-i2v 等细分名在国际版路由不存在会报 14407 route config not found，
+	// 此处统一将可灵系列归一化为官方路由模型标识 kling-video-v3。
+	if strings.HasPrefix(reqCopy.Model, "kling") || strings.HasPrefix(reqCopy.Model, "keling") || strings.Contains(reqCopy.Model, "可灵") {
+		reqCopy.Model = "kling-video-v3"
+	} else if strings.Contains(reqCopy.Model, "minimax") || strings.Contains(reqCopy.Model, "hailuo") || strings.Contains(reqCopy.Model, "海螺") {
+		reqCopy.Model = "minimax-video-h3"
+	} else if reqCopy.Model == "" {
+		reqCopy.Model = "kling-video-v3"
+	}
+
+	bodyBytes, err := json.Marshal(&reqCopy)
 	if err != nil {
 		return nil, fmt.Errorf("marshal video gen request failed: %w", err)
 	}

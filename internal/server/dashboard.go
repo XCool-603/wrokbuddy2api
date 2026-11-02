@@ -201,6 +201,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		Provider          string                  `json:"provider,omitempty"`
 		Filename          string                  `json:"filename"`
 		Credits           int64                   `json:"credits"`
+		CreditsExpiring   int64                   `json:"credits_expiring,omitempty"`
 		Disabled          bool                    `json:"disabled"`
 		DisabledReason    string                  `json:"disabled_reason"`
 		ManualDisabled    bool                    `json:"manual_disabled"`
@@ -296,6 +297,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 				item.Provider = matched.Provider
 			}
 			item.Credits = matched.Credits
+			item.CreditsExpiring = matched.CreditsExpiring
 			item.Disabled = matched.Disabled
 			item.DisabledReason = matched.DisabledReason
 			item.ManualDisabled = matched.ManualDisabled
@@ -385,6 +387,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			Provider:          prov,
 			Filename:          filename,
 			Credits:           p.Credits,
+			CreditsExpiring:   p.CreditsExpiring,
 			Disabled:          p.Disabled,
 			DisabledReason:    p.DisabledReason,
 			ManualDisabled:    p.ManualDisabled,

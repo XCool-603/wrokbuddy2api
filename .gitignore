@@ -17,6 +17,7 @@ data/
 /wb2api.exe
 /signin_bin.exe
 /workbuddy2api.exe
+workbuddy2api-linux*
 *.exe
 
 # Config with secrets (use config.example.json)

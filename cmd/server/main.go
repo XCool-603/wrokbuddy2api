@@ -352,6 +352,19 @@ func main() {
 
 	go sch.Run(ctx)
 
+	// 服务启动自检补签：如果启用了自动签到，服务启动后延迟 3 秒异步执行一次签到检查与余额刷新，
+	// 避免桌面用户/按需运行用户因非整点（9:00/21:00）启动而必须等待半天甚至全天无法触发自动签到。
+	if cfg.Schedule.CheckinEnabled {
+		go func() {
+			select {
+			case <-time.After(3 * time.Second):
+				log.Printf("[scheduler] 服务启动自检：立即执行首次自动签到与余额刷新...")
+				sch.RunCheckinNow()
+			case <-ctx.Done():
+			}
+		}()
+	}
+
 	srv := &http.Server{
 		Addr:              cfg.Listen,
 		Handler:           h,

@@ -38,6 +38,7 @@ type Status struct {
 	Provider      string    `json:"provider,omitempty"`
 	FilePath      string    `json:"file_path,omitempty"`
 	Credits       int64     `json:"credits"`
+	CreditsExpiring int64   `json:"credits_expiring,omitempty"`
 	Cooling       bool      `json:"cooling"`
 	CoolKind      string    `json:"cool_kind,omitempty"`
 	CoolRemaining int64     `json:"cool_remaining_sec,omitempty"`

@@ -122,6 +122,22 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// 国际版账号官方无每日签到活动，明确跳过并提示，与自动签到调度器保持一致
+		if a.IsGlobal() {
+			remainStr := "-"
+			if remain, qerr := up.UserResource(a); qerr == nil {
+				remainStr = fmt.Sprintf("%d", remain)
+				h.cfg.Pool.SetCredits(a.UID, remain)
+			}
+			nick := a.Nickname
+			if nick == "" {
+				nick = "-"
+			}
+			sb.WriteString(fmt.Sprintf("%-36s | %-12s | %-10s | %-6s | %s\n",
+				logfmt.Truncate(a.UID, 36), logfmt.Truncate(nick, 12), "SKIPPED", remainStr, "国际版官方无签到活动"))
+			continue
+		}
+
 		// token 临近过期时自动刷新
 		if a.NeedsRefresh(2 * 3600) {
 			if err := up.RefreshToken(a); err == nil {

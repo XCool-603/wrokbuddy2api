@@ -125,19 +125,22 @@ type CheckinOutcome struct {
 // ErrBusy 已有一次签到正在执行（手动入口与定时撞车）。
 var ErrBusy = errors.New("checkin already running")
 
-// nextFire 返回 now 之后最近的一个整点触发时间；hours 为本地小时（0-23）。
+// nextFire 返回 now 之后最近的一个整点触发时间；hours 为北京时间小时（0-23）。
+// 腾讯 CodeBuddy / WorkBuddy 官方签到与额度刷新均以北京时间（CST UTC+8）自然日为准，
+// 强制对齐 CST 可彻底解决部署在默认 UTC 时区的 Linux / Docker 容器产生 8 小时严重时差问题。
 func nextFire(now time.Time, hours []int) time.Time {
+	nowCST := now.In(cstZone)
 	var earliest time.Time
 	for _, h := range hours {
-		t := time.Date(now.Year(), now.Month(), now.Day(), h, 0, 0, 0, now.Location())
-		if !t.After(now) {
+		t := time.Date(nowCST.Year(), nowCST.Month(), nowCST.Day(), h, 0, 0, 0, cstZone)
+		if !t.After(nowCST) {
 			t = t.Add(24 * time.Hour)
 		}
 		if earliest.IsZero() || t.Before(earliest) {
 			earliest = t
 		}
 	}
-	return earliest
+	return earliest.In(now.Location())
 }
 
 // taskKind 调度任务类型。
@@ -151,6 +154,25 @@ const (
 	taskSchool
 	taskCat
 )
+
+func (k taskKind) String() string {
+	switch k {
+	case taskCheckin:
+		return "checkin"
+	case taskTravel:
+		return "travel"
+	case taskActivity:
+		return "activity"
+	case taskKeepalive:
+		return "keepalive"
+	case taskSchool:
+		return "school"
+	case taskCat:
+		return "cat"
+	default:
+		return fmt.Sprintf("task(%d)", int(k))
+	}
+}
 
 // nextWake 返回 now 之后最近的唤醒时刻，以及该时刻需要执行的全部任务。
 // 多类任务若配到同一小时（如签到与旅行都含 9），该时刻多类任务需一并执行。
@@ -232,6 +254,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 			<-ctx.Done()
 			return
 		}
+		log.Printf("[scheduler] 下次任务将在 %s 触发 (任务: %v, 预计等待: %s)", next.Format("2006-01-02 15:04:05"), kinds, time.Until(next).Round(time.Second))
 		timer := time.NewTimer(time.Until(next))
 		select {
 		case <-ctx.Done():
@@ -249,6 +272,7 @@ func (s *Scheduler) Run(ctx context.Context) {
 			// 54 号 × 5 条 ≈ 7-8 分钟睡眠）不再阻塞同槽其他任务族；返回前
 			// 等全部任务收尾（下一轮 nextWake 照旧从"现在"起算，多轮重叠
 			// 的风险与串行版相同——nextWake 只挑现在之后的时点）。
+			log.Printf("[scheduler] 唤醒触发，正在执行任务: %v", kinds)
 			s.runBatch(ctx, kinds)
 		}
 	}

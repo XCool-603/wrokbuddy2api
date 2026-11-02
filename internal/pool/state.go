@@ -513,6 +513,7 @@ func (p *Pool) statusOf(uid string, e *entry) Status {
 		Provider:          e.a.Provider(),
 		FilePath:          e.a.FilePath,
 		Credits:           e.credits,
+		CreditsExpiring:   e.creditsExpiring,
 		// Cooling 口径含连败降权（degradeUntil）与模型级 6004 限流（hasModelCooling）：
 		// 处于冷却期或存在模型被限流的账号不可选该模型，运维在 /status 应看到它处于非健康态。
 		Cooling: now.Before(e.until) || now.Before(e.breakerUntil) || now.Before(e.degradeUntil) || hasModelCooling,

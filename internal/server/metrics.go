@@ -25,6 +25,13 @@ import (
 // metricsCap 模型键容量上限。上游目录规模远小于此值；上限只为兜底异常模型名。
 const metricsCap = 512
 
+// cstLocation 北京时间（UTC+8），与官方重置、签到及中国自然日对齐。
+var cstLocation = time.FixedZone("CST", 8*3600)
+
+func beijingToday() string {
+	return time.Now().In(cstLocation).Format("2006-01-02")
+}
+
 // modelMetrics 单模型的累加器（全字段原子性由 metricsMu 保证，无需 atomic）。
 type modelMetrics struct {
 	requests  int64 `json:"requests"`
@@ -162,7 +169,7 @@ func InitMetricsPersistence(filePath string) {
 
 			// 兼容平滑迁移：如果旧版本只有 by_model 而没有 by_day，将旧数据作为今天的起始数据
 			if len(m.byDay) == 0 && len(m.byModel) > 0 {
-				today := time.Now().Format("2006-01-02")
+				today := beijingToday()
 				m.byDay[today] = make(map[string]*modelMetrics, len(m.byModel))
 				for k, v := range m.byModel {
 					cpy := *v
@@ -242,7 +249,7 @@ func recordChatMetric(s *chatStat, total time.Duration) {
 	accumulateMetric(mm, s, total)
 
 	// 2. 按天聚合累加 (按当前本地自然日)
-	today := time.Now().Format("2006-01-02")
+	today := beijingToday()
 	if m.byDay == nil {
 		m.byDay = make(map[string]map[string]*modelMetrics)
 	}
@@ -417,7 +424,7 @@ func aggregateModelMap(modelsMap map[string]*modelMetrics) (ModelStatPayload, []
 // MetricsSnapshotOf 生成当前聚合快照。models 按请求数降序（面板表格默认序）。
 func MetricsSnapshotOf() MetricsSnapshot {
 	now := time.Now()
-	today := now.Format("2006-01-02")
+	today := beijingToday()
 	m := globalMetrics
 	m.mu.Lock()
 	defer m.mu.Unlock()

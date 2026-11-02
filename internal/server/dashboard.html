@@ -540,8 +540,19 @@
           </div>
         </div>
 
-        <!-- Current Scope 4 metrics -->
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
+        <!-- Current Scope 5 metrics -->
+        <div class="grid grid-cols-2 sm:grid-cols-5 gap-3.5">
+          <div class="bg-gradient-to-br from-amber-500/10 to-amber-600/5 p-4 rounded-xl border border-amber-500/30 shadow-sm relative overflow-hidden">
+            <div class="flex items-center justify-between">
+              <span id="labelTotalCredits" class="text-[11px] font-semibold text-amber-400 flex items-center gap-1">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+                今日消耗积分
+              </span>
+              <span id="badgeDateScopeCredits" class="text-[10px] font-mono px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">今日</span>
+            </div>
+            <div id="statTotalCredits" class="text-2xl font-bold font-mono text-amber-300 mt-1">0.00</div>
+            <div id="statCreditPerReq" class="text-[10px] text-amber-400/80 mt-1">单次平均: 0.00 /次</div>
+          </div>
           <div class="bg-slate-900/60 p-4 rounded-xl border border-slate-800/80">
             <div class="flex items-center justify-between">
               <span id="labelTotalTokens" class="text-[11px] font-medium text-slate-400">今日消耗 Token</span>
@@ -582,6 +593,7 @@
                 <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
                   <th class="py-2.5 px-3 font-medium">模型名称</th>
                   <th class="py-2.5 px-3 font-medium">倍率</th>
+                  <th class="py-2.5 px-3 font-medium text-amber-400">消耗积分 (Credit)</th>
                   <th class="py-2.5 px-3 font-medium">请求量</th>
                   <th class="py-2.5 px-3 font-medium">总 Tokens</th>
                   <th class="py-2.5 px-3 font-medium">输入 (Prompt)</th>
@@ -593,7 +605,7 @@
               </thead>
               <tbody id="tokenModelsTable" class="divide-y divide-slate-800/40 text-slate-300">
                 <tr>
-                  <td colspan="9" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
+                  <td colspan="10" class="py-6 text-center text-slate-500 font-sans">暂无模型调用数据，调用后自动在此按天记录</td>
                 </tr>
               </tbody>
             </table>
@@ -614,6 +626,8 @@
               <thead>
                 <tr class="text-slate-400 border-b border-slate-800/80 pb-2">
                   <th class="py-2.5 px-3 font-medium">日期</th>
+                  <th class="py-2.5 px-3 font-medium text-amber-400">消耗积分</th>
+                  <th class="py-2.5 px-3 font-medium text-amber-400/80">单次均耗</th>
                   <th class="py-2.5 px-3 font-medium">总请求数</th>
                   <th class="py-2.5 px-3 font-medium">成功率</th>
                   <th class="py-2.5 px-3 font-medium">总消耗 Tokens</th>
@@ -625,7 +639,7 @@
               </thead>
               <tbody id="dailyHistoryTable" class="divide-y divide-slate-800/40 text-slate-300">
                 <tr>
-                  <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无历史天数统计数据</td>
+                  <td colspan="10" class="py-6 text-center text-slate-500 font-sans">暂无历史天数统计数据</td>
                 </tr>
               </tbody>
             </table>
@@ -750,12 +764,13 @@
                 <th class="py-2 px-2 font-medium">TTFB</th>
                 <th class="py-2 px-2 font-medium">生成Token</th>
                 <th class="py-2 px-2 font-medium">速率</th>
+                <th class="py-2 px-2 font-medium text-amber-400">消耗积分</th>
                 <th class="py-2 px-2 font-medium text-right">总耗时</th>
               </tr>
             </thead>
             <tbody id="requestLogsTable" class="divide-y divide-slate-800/40 text-slate-300">
               <tr>
-                <td colspan="9" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
+                <td colspan="10" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
               </tr>
             </tbody>
           </table>
@@ -1646,12 +1661,28 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         titlePrefix = `${selectedMetricsDate}`;
       }
 
-      // 3. 更新 4 个概览卡片
+      // 3. 更新 5 个概览卡片
       const promptTok = currentTotal.prompt_tokens || 0;
       const compTok = currentTotal.completion_tokens || 0;
       const totalTok = currentTotal.total_tokens || (promptTok + compTok);
       const reqs = currentTotal.requests || 0;
       const succ = currentTotal.success || 0;
+      const totalCredits = currentTotal.credit || 0;
+      const creditPerReq = currentTotal.credit_per_req !== undefined ? currentTotal.credit_per_req : (reqs > 0 ? (totalCredits / reqs) : 0);
+
+      const elCreditsLabel = document.getElementById('labelTotalCredits');
+      if (elCreditsLabel) {
+        elCreditsLabel.innerHTML = `
+          <svg class="w-3.5 h-3.5 inline mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1M21 12a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+          ${(selectedMetricsDate === 'today' ? '今日' : titlePrefix)} 消耗积分
+        `;
+      }
+      const elCreditsBadge = document.getElementById('badgeDateScopeCredits');
+      if (elCreditsBadge) elCreditsBadge.innerText = scopeLabel;
+      const elStatCredits = document.getElementById('statTotalCredits');
+      if (elStatCredits) elStatCredits.innerText = totalCredits.toFixed(2);
+      const elStatCreditPerReq = document.getElementById('statCreditPerReq');
+      if (elStatCreditPerReq) elStatCreditPerReq.innerText = '单次平均: ' + creditPerReq.toFixed(2) + ' /次';
 
       document.getElementById('labelTotalTokens').innerText = (selectedMetricsDate === 'today' ? '今日' : titlePrefix) + ' 消耗 Token';
       document.getElementById('badgeDateScope').innerText = scopeLabel;
@@ -1679,7 +1710,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         if (!currentModels.length) {
           tbody.innerHTML = `
             <tr>
-              <td colspan="8" class="py-6 text-center text-slate-500 font-sans">${escapeHtml(titlePrefix)} 暂无模型调用数据</td>
+              <td colspan="10" class="py-6 text-center text-slate-500 font-sans">${escapeHtml(titlePrefix)} 暂无模型调用数据</td>
             </tr>`;
         } else {
           let html = '';
@@ -1693,6 +1724,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             const mult = m.credits 
               ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-400 border border-amber-500/30 font-semibold">${escapeHtml(m.credits)}</span>` 
               : '<span class="text-slate-500">-</span>';
+            const mCredit = (m.credit !== undefined) ? m.credit.toFixed(2) : '0.00';
 
             html += `
               <tr class="hover:bg-slate-800/40 transition">
@@ -1700,6 +1732,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
                   <span class="text-indigo-300">${escapeHtml(m.model)}</span>
                 </td>
                 <td class="py-2.5 px-3 font-mono">${mult}</td>
+                <td class="py-2.5 px-3 font-mono font-semibold text-amber-300">${mCredit}</td>
                 <td class="py-2.5 px-3 text-slate-300 font-mono">${(m.requests || 0).toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-emerald-400 font-mono font-bold">${tTok.toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-indigo-300 font-mono">${pTok.toLocaleString()}</td>
@@ -1720,7 +1753,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         if (!dailyList.length) {
           dailyTbody.innerHTML = `
             <tr>
-              <td colspan="8" class="py-6 text-center text-slate-500 font-sans">暂无每日统计历史数据</td>
+              <td colspan="10" class="py-6 text-center text-slate-500 font-sans">暂无每日统计历史数据</td>
             </tr>`;
         } else {
           let dHtml = '';
@@ -1734,6 +1767,8 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             const dComp = dTot.completion_tokens || 0;
             const dTotalTok = dTot.total_tokens || (dPrompt + dComp);
             const dHitRate = (dTot.cache_hit_rate ? (dTot.cache_hit_rate * 100).toFixed(1) : '0.0') + '%';
+            const dCredit = (dTot.credit !== undefined) ? dTot.credit.toFixed(2) : '0.00';
+            const dCreditPerReq = (dTot.credit_per_req !== undefined) ? dTot.credit_per_req.toFixed(2) : (dReqs > 0 ? (dTot.credit / dReqs).toFixed(2) : '0.00');
 
             dHtml += `
               <tr class="hover:bg-slate-800/40 transition ${selectedMetricsDate === d.date || (isToday && selectedMetricsDate === 'today') ? 'bg-indigo-950/20' : ''}">
@@ -1741,7 +1776,9 @@ eyJhbGciOi...----refresh_token_here'></textarea>
                   <span>${escapeHtml(d.date)}</span>
                   ${isToday ? '<span class="ml-1.5 text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-400 font-normal">今日</span>' : ''}
                 </td>
-                <td class="py-2.5 px-3 text-amber-400 font-mono font-medium">${dReqs.toLocaleString()}</td>
+                <td class="py-2.5 px-3 text-amber-300 font-mono font-bold">${dCredit}</td>
+                <td class="py-2.5 px-3 text-amber-400/80 font-mono">${dCreditPerReq}</td>
+                <td class="py-2.5 px-3 text-slate-300 font-mono font-medium">${dReqs.toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-slate-400 font-mono">${dRate}</td>
                 <td class="py-2.5 px-3 text-emerald-400 font-mono font-bold">${dTotalTok.toLocaleString()}</td>
                 <td class="py-2.5 px-3 text-indigo-300 font-mono">${dPrompt.toLocaleString()}</td>
@@ -1769,7 +1806,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       if (!logs.length) {
         tbody.innerHTML = `
           <tr>
-            <td colspan="9" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
+            <td colspan="10" class="py-8 text-center text-slate-500 font-sans">暂无请求调用流水（调用网关接口后将在此实时呈现）</td>
           </tr>`;
         return;
       }
@@ -1804,6 +1841,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             <td class="py-2.5 px-2 text-slate-400">${item.ttfb || '-'}</td>
             <td class="py-2.5 px-2 text-slate-300">${item.tokens || '-'}</td>
             <td class="py-2.5 px-2 text-indigo-400">${item.token_rate || '-'}</td>
+            <td class="py-2.5 px-2 font-mono font-semibold ${item.cost && item.cost !== '-' && item.cost !== '0.00' ? 'text-amber-300' : 'text-slate-400'}">${item.cost !== undefined ? item.cost : '-'}</td>
             <td class="py-2.5 px-2 text-right text-slate-300">${item.duration.toFixed(2)}s</td>
           </tr>
         `;
@@ -1935,7 +1973,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               </td>
               <td class="px-6 py-4">${statusBadge}</td>
               <td class="px-6 py-4 font-mono font-medium text-slate-200">
-                ${a.credits !== undefined && a.credits >= 0 ? a.credits : '<span class="text-slate-500">-</span>'}
+                ${a.credits !== undefined && a.credits >= 0 ? a.credits + (a.credits_expiring && a.credits_expiring > 0 ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="即将过期积分">(${a.credits_expiring} 将到期)</span>` : '') : '<span class="text-slate-500">-</span>'}
               </td>
               <td class="px-6 py-4 text-right font-sans space-x-2">
                 ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
@@ -2778,6 +2816,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         const decoder = new TextDecoder('utf-8');
         let fullText = '';
         let buffer = '';
+        let lastUsage = null;
 
         while (true) {
           const { done, value } = await reader.read();
@@ -2799,6 +2838,9 @@ eyJhbGciOi...----refresh_token_here'></textarea>
                 box.innerText = fullText;
                 box.scrollTop = box.scrollHeight;
               }
+              if (chunk.usage) {
+                lastUsage = chunk.usage;
+              }
             } catch (e) {
               // 忽略解析单帧错误
             }
@@ -2811,7 +2853,17 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         box.innerText = '网络连接或响应异常: ' + err;
       } finally {
         const elapsed = ((Date.now() - start) / 1000).toFixed(2);
-        timing.innerText = '耗时: ' + elapsed + 's';
+        let timingMsg = '耗时: ' + elapsed + 's';
+        if (lastUsage) {
+          const c = (lastUsage.credit !== undefined) ? lastUsage.credit : lastUsage.cost_credits;
+          if (c !== undefined && c !== null) {
+            timingMsg += ' | 消耗积分: ' + (c > 0 ? Number(c).toFixed(2) : '0 (免费)');
+          }
+          if (lastUsage.total_tokens) {
+            timingMsg += ' | Tokens: ' + lastUsage.total_tokens;
+          }
+        }
+        timing.innerText = timingMsg;
         btn.disabled = false;
         btn.innerHTML = `<svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M14 5l7 7m0 0l-7 7m7-7H3"/></svg><span>发送测试</span>`;
         // 对话完成后自动刷新一次请求流水

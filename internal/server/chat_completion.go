@@ -704,11 +704,11 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			st.status = http.StatusBadGateway
 			return
 		}
-		writeJSON(w, http.StatusOK, resp)
-		st.status = http.StatusOK
-		st.toks = completionTokens(resp)
 		// 成本账本（非流式）：从聚合响应的 usage 取 credit 与 token 总数。
+		fillStatFromUsage(st, resp)
 		if credit, total, ok := usageCreditTotal(resp); ok {
+			st.credit = credit
+			st.hasCredit = true
 			h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, total)
 			if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
 				cost := int64(credit)
@@ -718,8 +718,15 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
 			}
 		}
-		// metrics 采集（非流式）：与流式同口径，从同一份 usage 带出。
-		fillStatFromUsage(st, resp)
+		if st.hasCredit {
+			if uMap, ok := resp["usage"].(map[string]any); ok {
+				uMap["credit"] = st.credit
+				uMap["cost_credits"] = st.credit
+			}
+		}
+		writeJSON(w, http.StatusOK, resp)
+		st.status = http.StatusOK
+		st.toks = completionTokens(resp)
 		return
 	}
 	// 末端错误透传（error-passthrough）：上游返回的错误原样透传，不再规范化成固定文案。

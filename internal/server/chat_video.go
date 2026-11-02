@@ -138,6 +138,15 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 		lastImgURL = req.LastImage
 	}
 
+	reqRealm, _ := resolveModel(reqModel)
+	if reqRealm == "" {
+		reqRealm, _ = resolveModel(req.Model)
+	}
+	if reqRealm == "global" {
+		writeOpenAIError(w, http.StatusBadRequest, "invalid_request_error", "WorkBuddy 国际版 (workbuddy.ai) 官方暂未上线视频大模型，视频模型仅支持国内版 (如 cn:kling-video-v3 或 kling-video-v3)")
+		return
+	}
+
 	model := normalizeVideoModel(reqModel, imgURL != "" || lastImgURL != "")
 	if model == "" {
 		model = normalizeVideoModel(req.Model, imgURL != "" || lastImgURL != "")
@@ -238,6 +247,13 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 	taskID := resp.Data.ID
 	ctx := r.Context()
 	chunkID := fmt.Sprintf("chatcmpl-vid-%s", taskID)
+	st := newChatStat(time.Now(), body, stream)
+	st.model = model
+	if acct != nil {
+		st.uid = acct.UID
+		st.nick = acct.Nickname
+	}
+	defer st.done()
 
 	// 流式直出（SSE）
 	if stream {
@@ -305,6 +321,20 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 				}
 
 				if qResp.Data.Status == "completed" {
+					st.status = 200
+					st.toks = 100
+					st.credit = qResp.Usage.Credit
+					st.hasCredit = true
+					st.hasUsage = true
+					h.cfg.Pool.NoteModelCost(acct.UID, model, qResp.Usage.Credit, 1000)
+					if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
+						cost := int64(qResp.Usage.Credit)
+						if cost <= 0 && qResp.Usage.Credit > 0 {
+							cost = 1
+						}
+						h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
+					}
+
 					var sb strings.Builder
 					sb.WriteString("\n\n✅ **视频渲染完成！**\n\n")
 					for _, item := range qResp.Data.Data {
@@ -313,7 +343,27 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 							sb.WriteString(fmt.Sprintf("<video src=\"%s\" controls autoplay loop style=\"max-width:100%%;border-radius:8px;\"></video>\n\n", item.URL))
 						}
 					}
+					if qResp.Usage.Credit > 0 {
+						sb.WriteString(fmt.Sprintf("💰 **本次生成消耗**: `%.2f` 积分\n\n", qResp.Usage.Credit))
+					}
 					sendChunk(sb.String(), "", nil)
+					usageChunk := map[string]any{
+						"id":      chunkID,
+						"object":  "chat.completion.chunk",
+						"created": time.Now().Unix(),
+						"model":   model,
+						"choices": []map[string]any{},
+						"usage": map[string]any{
+							"prompt_tokens":     10,
+							"completion_tokens": 100,
+							"total_tokens":      110,
+							"credit":            qResp.Usage.Credit,
+							"cost_credits":      qResp.Usage.Credit,
+						},
+					}
+					if usageBytes, err := json.Marshal(usageChunk); err == nil {
+						fmt.Fprintf(w, "data: %s\n\n", usageBytes)
+					}
 					stop := "stop"
 					sendChunk("", "", &stop)
 					fmt.Fprint(w, "data: [DONE]\n\n")
@@ -322,12 +372,14 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 				}
 
 				if qResp.Data.Status == "failed" {
+					st.status = 500
 					errMsg := qResp.Data.Error.Message
 					if errMsg == "" {
 						errMsg = "上游渲染失败，请调整提示词后重试"
 					} else {
 						errMsg = formatVideoError(errMsg)
 					}
+					st.errDetail = errMsg
 					sendChunk(fmt.Sprintf("\n\n❌ **视频生成失败**: %s\n", errMsg), "", nil)
 					stop := "stop"
 					sendChunk("", "", &stop)
@@ -362,6 +414,20 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 			}
 
 			if qResp.Data.Status == "completed" {
+				st.status = 200
+				st.toks = 100
+				st.credit = qResp.Usage.Credit
+				st.hasCredit = true
+				st.hasUsage = true
+				h.cfg.Pool.NoteModelCost(acct.UID, model, qResp.Usage.Credit, 1000)
+				if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
+					cost := int64(qResp.Usage.Credit)
+					if cost <= 0 && qResp.Usage.Credit > 0 {
+						cost = 1
+					}
+					h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
+				}
+
 				var sb strings.Builder
 				sb.WriteString(fmt.Sprintf("🎬 **视频生成成功！** (`%s`)\n\n", model))
 				for _, item := range qResp.Data.Data {
@@ -369,6 +435,9 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 						sb.WriteString(fmt.Sprintf("🎥 **视频直链**: [点击播放 / 下载 MP4](%s)\n\n", item.URL))
 						sb.WriteString(fmt.Sprintf("<video src=\"%s\" controls autoplay loop style=\"max-width:100%%;border-radius:8px;\"></video>\n\n", item.URL))
 					}
+				}
+				if qResp.Usage.Credit > 0 {
+					sb.WriteString(fmt.Sprintf("💰 **本次生成消耗**: `%.2f` 积分\n\n", qResp.Usage.Credit))
 				}
 				writeJSON(w, http.StatusOK, map[string]any{
 					"id":      chunkID,
@@ -389,18 +458,22 @@ func (h *Handler) chatVideoBridge(w http.ResponseWriter, r *http.Request, body [
 						"prompt_tokens":     10,
 						"completion_tokens": 100,
 						"total_tokens":      110,
+						"credit":            qResp.Usage.Credit,
+						"cost_credits":      qResp.Usage.Credit,
 					},
 				})
 				return
 			}
 
 			if qResp.Data.Status == "failed" {
+				st.status = 500
 				errMsg := qResp.Data.Error.Message
 				if errMsg == "" {
 					errMsg = "video generation failed upstream"
 				} else {
 					errMsg = formatVideoError(errMsg)
 				}
+				st.errDetail = errMsg
 				writeOpenAIError(w, http.StatusInternalServerError, "video_generation_failed", errMsg)
 				return
 			}

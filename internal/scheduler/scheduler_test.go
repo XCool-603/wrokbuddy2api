@@ -750,3 +750,22 @@ func TestCheckinPathIncludesManualDisabled(t *testing.T) {
 		t.Fatalf("签到后应保留手动位且回填余额: %+v", st)
 	}
 }
+
+
+// TestNextFireUTCMachineAlignsWithBeijingTime 验证当宿主机处于 UTC 时区时，
+// 定时任务依然能精准对齐北京时间（Asia/Shanghai / CST）的 09:00 和 21:00 触发，绝无 8 小时时差。
+func TestNextFireUTCMachineAlignsWithBeijingTime(t *testing.T) {
+	// 假设当前北京时间是 2026-10-28 08:30 CST，宿主机读取到的 UTC 时间是 00:30 UTC
+	nowUTC := time.Date(2026, 10, 28, 0, 30, 0, 0, time.UTC)
+	next := nextFire(nowUTC, []int{9, 21})
+
+	// 下次触发点应该是北京时间 09:00 CST，对应 UTC 01:00
+	if next.In(time.UTC).Hour() != 1 || next.In(time.UTC).Minute() != 0 {
+		t.Errorf("next in UTC = %v, want 01:00 UTC (09:00 CST)", next.In(time.UTC))
+	}
+	// 转回 CST 验证正好是 09:00
+	cstLoc := time.FixedZone("CST", 8*3600)
+	if next.In(cstLoc).Hour() != 9 {
+		t.Errorf("next in CST = %v, want 09:00 CST", next.In(cstLoc))
+	}
+}

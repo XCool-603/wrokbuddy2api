@@ -26,8 +26,8 @@ func TestCreateVideoTaskSuccess(t *testing.T) {
 		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 			t.Fatalf("decode request: %v", err)
 		}
-		if req.Model != "kling-v3-t2v" {
-			t.Errorf("model=%s, want kling-v3-t2v", req.Model)
+		if req.Model != "kling-video-v3" {
+			t.Errorf("model=%s, want kling-video-v3", req.Model)
 		}
 		if req.Prompt != "test prompt" {
 			t.Errorf("prompt=%s, want test prompt", req.Prompt)
@@ -57,7 +57,7 @@ func TestCreateVideoTaskSuccess(t *testing.T) {
 
 	enableAudio := true
 	req := &VideoGenRequest{
-		Model:   "kling-v3-t2v",
+		Model:   "kling-video-v3",
 		Prompt:  "test prompt",
 		Seconds: 5,
 		ExtraParams: &VideoExtraParams{
