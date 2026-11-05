@@ -89,7 +89,7 @@ func main() {
 	if *cfgPath == "config.json" {
 		if _, err := os.Stat("config.json"); os.IsNotExist(err) {
 			defaultCfg := Default()
-			defaultCfg.Admin.Enabled = true // 方便单机使用控制台
+			defaultCfg.Admin.Enabled = true        // 方便单机使用控制台
 			defaultCfg.APIKey = "sk-workbuddy2api" // 默认生成 API Key，避免 admin.enabled 导致启动校验冲突
 			if data, err := json.MarshalIndent(defaultCfg, "", "  "); err == nil {
 				_ = os.WriteFile("config.json", data, 0644)
@@ -337,17 +337,20 @@ func main() {
 		// global realm 开关（handler 侧第三道闸：modelList 据此决定是否列 global 名单）。
 		GlobalEnabled: cfg.Global.Enabled,
 		// 运维管理端点开关（config admin.enabled，默认 false）。
-		AdminEnabled: cfg.Admin.Enabled,
-		ConfigPath:   *cfgPath,
-		StateFile:    cfg.StateFile,
-		AuthDir:      cfg.AuthDir,
-		WebPassword:  cfg.WebPassword,
-		UserMgr:      userMgr,
-		DshMgr:       dshManager,
-		StopFunc:     stop,
-		QueueTimeout: time.Duration(cfg.Pool.QueueTimeoutSeconds) * time.Second,
-		ModelAliases: cfg.ModelAliases,
-		AlertMgr:     alertMgr,
+		AdminEnabled:    cfg.Admin.Enabled,
+		ConfigPath:      *cfgPath,
+		StateFile:       cfg.StateFile,
+		AuthDir:         cfg.AuthDir,
+		WebPassword:     cfg.WebPassword,
+		UserMgr:         userMgr,
+		DshMgr:          dshManager,
+		StopFunc:        stop,
+		QueueTimeout:    time.Duration(cfg.Pool.QueueTimeoutSeconds) * time.Second,
+		ModelAliases:    cfg.ModelAliases,
+		ModelRoutes:     cfg.ModelRoutes,
+		FreeModels:      cfg.FreeModels,
+		AutoFreeEnabled: cfg.AutoFreeEnabled,
+		AlertMgr:        alertMgr,
 	})
 
 	go sch.Run(ctx)
@@ -381,7 +384,7 @@ func main() {
 	go func() {
 		<-ctx.Done()
 		server.SaveMetricsSnapshot() // 信号触发：先落盘指标数据
-		p.Flush()                   // 先落盘账号池状态再做优雅停机
+		p.Flush()                    // 先落盘账号池状态再做优雅停机
 		// Flush 已把最后一笔状态快照提交给 Redis（fire-and-forget）；store.Close
 		// 等 Upstash 在途/排队写排空再关连接——最后一笔镜像必须写完才退出（发现 4）。
 		// Noop 的 Close 是空操作；单写上限 5s × 上限 8，Close 内部另有超时兜底。

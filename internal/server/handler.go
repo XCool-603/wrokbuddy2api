@@ -79,6 +79,15 @@ type Config struct {
 	// ModelAliases 虚拟模型别名映射表
 	ModelAliases map[string]string
 
+	// ModelRoutes 虚拟模型路由组映射表（如 "auto-free": ["deepseek-v4.1-flash", "glm-4-flash"]）
+	ModelRoutes map[string][]string
+
+	// FreeModels 自定义免费模型优先级列表
+	FreeModels []string
+
+	// AutoFreeEnabled 是否在 /v1/models 中透出智能免费模型路由池（默认关闭纯测试隔离，生产通过配置默认开启）
+	AutoFreeEnabled bool
+
 	// AlertMgr 运维风控告警通知管理器（可选）
 	AlertMgr *AlertManager
 }
@@ -110,6 +119,7 @@ type Handler struct {
 	wafIP           wafIPGate
 	inFlightTracker *InFlightTracker
 	alertMgr        *AlertManager
+	modelBreaker    *ModelCircuitBreaker
 }
 
 func (h *Handler) getAuthDir() string {
@@ -171,6 +181,7 @@ func NewHandler(cfg Config) *Handler {
 		mux:             http.NewServeMux(),
 		inFlightTracker: NewInFlightTracker(),
 		alertMgr:        cfg.AlertMgr,
+		modelBreaker:    NewModelCircuitBreaker(),
 	}
 	h.mux.HandleFunc("POST /v1/chat/completions", h.withAuth(h.chatCompletions))
 	h.mux.HandleFunc("POST /v1/messages", h.withAuth(h.messagesHandler))

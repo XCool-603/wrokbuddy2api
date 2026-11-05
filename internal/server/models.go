@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"net/http"
 	"strings"
 	"sync"
@@ -241,6 +242,60 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 				"vendor":             "DeepSeek",
 			}
 			out = append(out, dshEntry)
+		}
+	}
+
+	// 免费模型自动路由池注入（当开启 AutoFreeEnabled 或显式配置了 FreeModels / ModelRoutes 时透出）
+	shouldExposeFree := h.cfg.AutoFreeEnabled || len(h.cfg.FreeModels) > 0 || (h.cfg.ModelRoutes != nil && (len(h.cfg.ModelRoutes["auto-free"]) > 0 || len(h.cfg.ModelRoutes["free"]) > 0))
+	if shouldExposeFree {
+		freeCandidates := h.GetFreeModelCandidates()
+		freeDesc := "[x0.00 credit] 仅调用 0 算力免费模型，支持多免费模型自动轮换与智能熔断避让"
+		if len(freeCandidates) > 0 {
+			freeDesc = fmt.Sprintf("[x0.00 credit] 仅调用免费模型 (优先: %s)，支持多模型自动轮换与故障熔断", strings.Join(freeCandidates, " -> "))
+		}
+		out = append(out, map[string]any{
+			"id":                 "auto-free",
+			"name":               "Auto Free (智能免费模型路由池)",
+			"description":        freeDesc,
+			"object":             "model",
+			"created":            1753600000,
+			"owned_by":           "system",
+			"credits":            "x0.00",
+			"context_length":     1000000,
+			"max_output_tokens":  128000,
+			"supports_reasoning": true,
+			"supports_tool_call": true,
+		})
+		out = append(out, map[string]any{
+			"id":                 "free",
+			"name":               "Free (智能免费模型路由池别名)",
+			"description":        freeDesc,
+			"object":             "model",
+			"created":            1753600000,
+			"owned_by":           "system",
+			"credits":            "x0.00",
+			"context_length":     1000000,
+			"max_output_tokens":  128000,
+			"supports_reasoning": true,
+			"supports_tool_call": true,
+		})
+	}
+
+	// 用户自定义路由组注入（ModelRoutes）
+	if len(h.cfg.ModelRoutes) > 0 {
+		for groupName, targetModels := range h.cfg.ModelRoutes {
+			if groupName == "auto-free" || groupName == "free" {
+				continue
+			}
+			out = append(out, map[string]any{
+				"id":             groupName,
+				"name":           groupName + " (自定义模型路由组)",
+				"description":    fmt.Sprintf("智能多模型路由组 (故障转移队列: %s)", strings.Join(targetModels, " -> ")),
+				"object":         "model",
+				"created":        1753600000,
+				"owned_by":       "custom",
+				"context_length": 131072,
+			})
 		}
 	}
 
