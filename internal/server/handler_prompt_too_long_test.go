@@ -163,3 +163,40 @@ func TestPromptTooLongMessageFallback(t *testing.T) {
 		}
 	}
 }
+
+// TestChatPromptTooLongAutoPrunesHistoryAndRetries 验证当历史对话过长遭遇 11115 上下文超限时，
+// 网关自动修剪最早历史轮次并在同一次请求中就地重试成功。
+func TestChatPromptTooLongAutoPrunesHistoryAndRetries(t *testing.T) {
+	callCount := 0
+	up := newFakeUpstream(t, func(authz string) (int, string, bool) {
+		callCount++
+		if callCount == 1 {
+			// 第一次调用返回 11115 上下文超限
+			return 400, `{"code":11115,"msg":"prompt is too long: 100001 tokens > 100000 maximum","requestId":"req-too-long"}`, false
+		}
+		// 第二次重试（裁剪后）成功返回 SSE
+		return 200, sseOK, true
+	})
+	p := testPoolWith(&auth.Auth{UID: "u1", AccessToken: "at1", ExpiresAt: 9999999999})
+	h := NewHandler(Config{Pool: p, Upstream: up})
+
+	reqBody := `{
+		"model":"deepseek-v4.1-flash",
+		"stream":true,
+		"messages":[
+			{"role":"system","content":"sys"},
+			{"role":"user","content":"old user message"},
+			{"role":"assistant","content":"old assistant answer"},
+			{"role":"user","content":"latest question"}
+		]
+	}`
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(reqBody)))
+
+	if rec.Code != http.StatusOK {
+		t.Fatalf("code=%d body=%s want 200 after auto-prune retry", rec.Code, rec.Body)
+	}
+	if callCount != 2 {
+		t.Errorf("callCount=%d want 2 (1 failed + 1 pruned retry)", callCount)
+	}
+}

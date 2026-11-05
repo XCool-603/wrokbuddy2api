@@ -201,6 +201,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 	// 降级裁决：append 在降级期退化为 replace（Rewrite(Degraded)）——append 带
 	// 指纹原文重试是确定性再撞墙，replace 是一次性最小抢救（issue #129 设计 §4）。
 	degradedApplied := false
+	pruneAttempts := 0
 	if h.cfg.PromptMode == "custom" && h.cfg.PromptText != "" {
 		body = prompt.Rewrite(body, h.cfg.PromptText)
 	} else if h.cfg.PromptMode == "append" && h.cfg.PromptText != "" && !h.degrade.Active() {
@@ -606,6 +607,19 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				// 不喂连败），fail 只释放租约。error-passthrough：message 装上游 body 原文
 				// （code/msg/requestId 原样，含真实 token 数与上限值——上游原文是最有价值
 				// 的错误信息，客户端必须看到，禁止固定词覆盖）。
+				// 11115「prompt is too long」：
+				// 若当前请求包含多轮对话历史且尚未达到自动修剪上限，自动修剪最老的一轮历史消息并尝试抢救重试
+				if kind == upstream.ErrPromptTooLong && pruneAttempts < 2 {
+					if newBody, ok := prompt.PruneOldestHistory(candBody); ok {
+						pruneAttempts++
+						candBody = newBody
+						body = newBody
+						releaseHeld()
+						delete(tried, acct.UID)
+						log.Printf("WARN: [server] prompt too long (11115): auto-pruned oldest conversation turn (attempt %d/2) and retrying", pruneAttempts)
+						continue
+					}
+				}
 				if kind == upstream.ErrPromptTooLong {
 					h.applyErrorPolicy(acct.UID, kind, string(respBody), bareModel, uerr)
 					fail(acct.UID)

@@ -474,3 +474,47 @@ func TestAppendRoleVariantStopsRun(t *testing.T) {
 		t.Errorf("role variant changed: %v", msgs[2])
 	}
 }
+
+func TestPruneOldestHistory(t *testing.T) {
+	// 1. 标准多轮对话：裁剪首个历史轮次 (user1 + assistant1)
+	in := []byte(`{
+		"model":"glm-5.2",
+		"messages":[
+			{"role":"system","content":"sys prompt"},
+			{"role":"user","content":"u1"},
+			{"role":"assistant","content":"a1"},
+			{"role":"user","content":"u2"},
+			{"role":"assistant","content":"a2"},
+			{"role":"user","content":"u3"}
+		]
+	}`)
+	out, ok := PruneOldestHistory(in)
+	if !ok {
+		t.Fatalf("PruneOldestHistory failed, want true")
+	}
+	roles := systemRoles(t, out)
+	wantRoles := []string{"system", "user", "assistant", "user"}
+	if len(roles) != len(wantRoles) {
+		t.Fatalf("roles=%v want %v", roles, wantRoles)
+	}
+	var obj map[string]any
+	json.Unmarshal(out, &obj)
+	msgs := obj["messages"].([]any)
+	if msgs[1].(map[string]any)["content"] != "u2" {
+		t.Errorf("first non-system message after prune = %v, want u2", msgs[1])
+	}
+	if msgs[3].(map[string]any)["content"] != "u3" {
+		t.Errorf("last message after prune = %v, want u3", msgs[3])
+	}
+
+	// 2. 消息过少（仅 1 轮或 2 条消息）无法裁剪
+	short := []byte(`{"messages":[{"role":"user","content":"u1"},{"role":"assistant","content":"a1"}]}`)
+	if _, ok := PruneOldestHistory(short); ok {
+		t.Errorf("expected ok=false for short messages")
+	}
+
+	// 3. 空 body / 无效 JSON
+	if _, ok := PruneOldestHistory([]byte("")); ok {
+		t.Errorf("expected ok=false for empty body")
+	}
+}

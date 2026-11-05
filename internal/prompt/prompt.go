@@ -151,3 +151,70 @@ func Rewrite(body []byte, systemPrompt string) []byte {
 	}
 	return out
 }
+
+// PruneOldestHistory 在 prompt 达到或超过上游上下文上限（11115）时，
+// 自动修剪对话历史中最早的对话轮次（user + assistant/tool），保留首部系统提示词和最近的对话上下文。
+// 若成功修剪返回 (newBody, true)；若消息过少或无法修剪返回 (body, false)。
+func PruneOldestHistory(body []byte) ([]byte, bool) {
+	if len(body) == 0 {
+		return body, false
+	}
+	var obj map[string]any
+	if err := json.Unmarshal(body, &obj); err != nil {
+		return body, false
+	}
+	msgs, ok := obj["messages"].([]any)
+	if !ok || len(msgs) <= 2 {
+		return body, false
+	}
+
+	// 找到首部连续 system / developer 消息的结束位置
+	firstNonSystem := 0
+	for firstNonSystem < len(msgs) {
+		mm, ok := msgs[firstNonSystem].(map[string]any)
+		if !ok {
+			break
+		}
+		role, _ := mm["role"].(string)
+		if role != "system" && role != "developer" {
+			break
+		}
+		firstNonSystem++
+	}
+
+	// 可裁剪候选区间在 [firstNonSystem, len(msgs)-1) 之间（保留最后一条消息）
+	if firstNonSystem >= len(msgs)-1 {
+		return body, false
+	}
+
+	// 寻找最老的一整轮对话（从 firstNonSystem 开始，找到下一个 user 消息起始点）
+	// 例如：user, assistant 或 user, assistant, tool...
+	nextTurn := firstNonSystem + 1
+	for nextTurn < len(msgs)-1 {
+		mm, ok := msgs[nextTurn].(map[string]any)
+		if ok {
+			role, _ := mm["role"].(string)
+			if role == "user" {
+				break
+			}
+		}
+		nextTurn++
+	}
+
+	if nextTurn >= len(msgs) {
+		return body, false
+	}
+
+	// 构建修剪后的消息列表：
+	// 保留首部系统提示词 + 从 nextTurn 开始的后续消息
+	pruned := make([]any, 0, len(msgs)-(nextTurn-firstNonSystem))
+	pruned = append(pruned, msgs[:firstNonSystem]...)
+	pruned = append(pruned, msgs[nextTurn:]...)
+
+	obj["messages"] = pruned
+	out, err := json.Marshal(obj)
+	if err != nil {
+		return body, false
+	}
+	return out, true
+}

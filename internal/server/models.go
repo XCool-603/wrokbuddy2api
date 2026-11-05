@@ -261,8 +261,8 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 			"created":            1753600000,
 			"owned_by":           "system",
 			"credits":            "x0.00",
-			"context_length":     1000000,
-			"max_output_tokens":  128000,
+			"context_length":     100000,
+			"max_output_tokens":  16384,
 			"supports_reasoning": true,
 			"supports_tool_call": true,
 		})
@@ -274,8 +274,8 @@ func (h *Handler) modelList(includeBare ...bool) []map[string]any {
 			"created":            1753600000,
 			"owned_by":           "system",
 			"credits":            "x0.00",
-			"context_length":     1000000,
-			"max_output_tokens":  128000,
+			"context_length":     100000,
+			"max_output_tokens":  16384,
 			"supports_reasoning": true,
 			"supports_tool_call": true,
 		})
