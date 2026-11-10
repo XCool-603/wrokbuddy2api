@@ -3,14 +3,21 @@ package scheduler
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"log"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"workbuddy2api/internal/auth"
+	"workbuddy2api/internal/pool"
+	"workbuddy2api/internal/upstream"
 )
 
 // fakeScriptExec 记录命令构建参数并按需模拟执行失败，替代真实 exec 拉起 python3 子进程。
@@ -269,5 +276,46 @@ func TestRunTasksForAccountsTargetsAndFallback(t *testing.T) {
 	}
 	if len(calls) != 2 || calls[0][0] != "python3" || calls[1][0] != "python" {
 		t.Fatalf("calls=%v want fallback python3 -> python", calls)
+	}
+}
+
+func TestRunTasksForAccountsNativeFallbackWhenNoScript(t *testing.T) {
+	origStat := taskScriptStat
+	taskScriptStat = func(string) (os.FileInfo, error) { return nil, os.ErrNotExist }
+	t.Cleanup(func() { taskScriptStat = origStat })
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/v2/activity/growth/tasks":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{
+					"tasks": []map[string]any{
+						{"task_code": "create_canvas", "accept_status": "not_accepted", "progress": map[string]int{"current": 0, "target": 1}},
+					},
+				},
+			})
+		case "/v2/activity/growth/tasks/accept", "/v2/report":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
+		case "/activity/growth/tasks/create_canvas/claim":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"credit": 50, "energy": 5}})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
+		}
+	}))
+	defer srv.Close()
+
+	p := pool.New("")
+	p.Add(&auth.Auth{UID: "u_win_native", AccessToken: "at", FilePath: `D:\work\auths\workbuddy-u_win_native.json`})
+	up := &upstream.Client{HTTP: srv.Client(), ChatBaseCN: srv.URL, BillingBaseCN: srv.URL}
+	s := New(Config{Pool: p, Upstream: up})
+
+	out, err := s.RunTasksForAccounts(context.Background(), []string{`D:\work\auths\workbuddy-u_win_native.json`}, "")
+	if err != nil {
+		t.Fatalf("RunTasksForAccounts native fallback err=%v", err)
+	}
+	if !strings.Contains(out, "内置纯 Go 成长任务引擎") || !strings.Contains(out, "create_canvas: claim ok (+50 credit") {
+		t.Errorf("unexpected native fallback output:\n%s", out)
 	}
 }

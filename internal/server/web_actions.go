@@ -1027,15 +1027,27 @@ func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
 
 	var scriptOut string
 	var runErr error
+	ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+	defer cancel()
 	if h.cfg.RunTasksAccountsFunc != nil {
-		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
-		defer cancel()
 		scriptOut, runErr = h.cfg.RunTasksAccountsFunc(ctx, targets, authDir)
 	} else if h.cfg.RunTasksFunc != nil {
 		h.cfg.RunTasksFunc()
 		scriptOut = "[RunTasksFunc 已执行]\n"
 	} else {
-		runErr = errors.New("未配置任务执行器 RunTasksAccountsFunc")
+		var nsb strings.Builder
+		nsb.WriteString("[内置纯 Go 成长任务引擎执行结果]\n")
+		for _, a := range cnAccts {
+			nres, nerr := up.RunGrowthTasks(ctx, a)
+			for _, line := range nres.Logs {
+				nsb.WriteString(line)
+				nsb.WriteByte('\n')
+			}
+			if nerr != nil && runErr == nil {
+				runErr = nerr
+			}
+		}
+		scriptOut = nsb.String()
 	}
 
 	// 兜底确保无猫 CN 账号自动补对话解锁并领养，并同步实时余额

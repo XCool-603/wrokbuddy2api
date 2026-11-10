@@ -9,6 +9,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
 	"os"
 	"os/exec"
@@ -16,6 +17,7 @@ import (
 	"runtime"
 	"strings"
 
+	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/sysproc"
 )
 
@@ -117,6 +119,14 @@ func (s *Scheduler) RunSchoolNow() {
 // 判定，非窗口期打印 skip 正常退出）。失败只记 WARN。
 func (s *Scheduler) RunCatNow() {
 	root := repoRoot()
+	if _, err := taskScriptStat(filepath.Join(root, "scripts", "task_runner.py")); err != nil {
+		if out, nerr := s.runNativeTasksForTargets(context.Background(), nil, ""); nerr != nil {
+			log.Printf("WARN: cat native fallback: %v", nerr)
+		} else if out != "" {
+			log.Printf("cat(native): ok")
+		}
+		return
+	}
 	runScript("cat", root, [][]string{
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes", "--only", "black_cat"},
 	})
@@ -124,25 +134,35 @@ func (s *Scheduler) RunCatNow() {
 }
 
 // RunTasksNow 立即执行全量成长任务与最新活动任务：task_runner.py ALL --yes。
-// 批量点亮并领取所有常规任务及最新活动任务（如专家联动、买得好、抖音乐园、公众号等）。
+// 若无 scripts/task_runner.py（如 Windows 单文件版），自动切换内置纯 Go 成长任务引擎。
 func (s *Scheduler) RunTasksNow() {
 	root := repoRoot()
+	if _, err := taskScriptStat(filepath.Join(root, "scripts", "task_runner.py")); err != nil {
+		if _, nerr := s.runNativeTasksForTargets(context.Background(), nil, ""); nerr != nil {
+			log.Printf("WARN: tasks native fallback: %v", nerr)
+		} else {
+			log.Printf("tasks(native): ok")
+		}
+		return
+	}
 	runScript("tasks", root, [][]string{
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes"},
 	})
 	s.syncAllCredits()
 }
 
-// RunTasksForAccounts 同步执行指定账号集合的全量成长任务与最新活动，并返回完整脚本输出。
-// targets 为空时执行 ALL；authDir 非空时通过 WB2A_AUTH_DIR 注入目标凭证目录。
+var taskScriptStat = os.Stat
+
+// RunTasksForAccounts 同步执行指定账号集合的全量成长任务与最新活动，并返回完整日志输出。
+// targets 为空时执行 ALL；若无 scripts/task_runner.py 或本机未安装 Python，自动回落纯 Go 内置引擎。
 func (s *Scheduler) RunTasksForAccounts(ctx context.Context, targets []string, authDir string) (string, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	root := repoRoot()
 	scriptPath := filepath.Join(root, "scripts", "task_runner.py")
-	if _, err := os.Stat(scriptPath); err != nil {
-		return "", err
+	if _, err := taskScriptStat(scriptPath); err != nil {
+		return s.runNativeTasksForTargets(ctx, targets, authDir)
 	}
 	args := []string{"scripts/task_runner.py"}
 	if len(targets) > 0 {
@@ -160,10 +180,98 @@ func (s *Scheduler) RunTasksForAccounts(ctx context.Context, targets []string, a
 			out, err = out2, err2
 		}
 	}
+	if err != nil && isMissingPythonErr(err) {
+		return s.runNativeTasksForTargets(ctx, targets, authDir)
+	}
 	if s != nil {
 		s.syncAllCredits()
 	}
 	return out, err
+}
+
+func (s *Scheduler) runNativeTasksForTargets(ctx context.Context, targets []string, authDir string) (string, error) {
+	if s == nil || s.cfg.Upstream == nil {
+		return "", errors.New("未配置 Upstream 客户端，无法执行内置成长任务")
+	}
+	accts := s.resolveNativeTargetAuths(targets, authDir)
+	var sb strings.Builder
+	sb.WriteString("[内置纯 Go 成长任务引擎执行完成（无需 scripts/task_runner.py 与 Python）]\n")
+	if len(accts) == 0 {
+		sb.WriteString("未匹配到可执行成长任务的国内版账号。\n")
+		return sb.String(), nil
+	}
+	var lastErr error
+	okN := 0
+	for _, a := range accts {
+		if ctx.Err() != nil {
+			lastErr = ctx.Err()
+			break
+		}
+		res, err := s.cfg.Upstream.RunGrowthTasks(ctx, a)
+		for _, line := range res.Logs {
+			sb.WriteString(line)
+			sb.WriteByte('\n')
+		}
+		if err != nil {
+			lastErr = err
+			sb.WriteString(fmt.Sprintf("[native_tasks] %s err: %v\n", a.RawUID(), err))
+			continue
+		}
+		okN++
+	}
+	s.syncAllCredits()
+	if okN > 0 {
+		return sb.String(), nil
+	}
+	return sb.String(), lastErr
+}
+
+func (s *Scheduler) resolveNativeTargetAuths(targets []string, authDir string) []*auth.Auth {
+	var poolAuths []*auth.Auth
+	if s.cfg.Pool != nil {
+		for _, st := range s.cfg.Pool.List() {
+			if st.Disabled {
+				continue
+			}
+			if a := s.cfg.Pool.AuthByUID(st.UID); a != nil && !a.IsGlobal() && a.AccessTokenValue() != "" {
+				poolAuths = append(poolAuths, a)
+			}
+		}
+	}
+	if len(poolAuths) == 0 && authDir != "" {
+		if loaded, err := auth.LoadDir(authDir); err == nil {
+			for _, a := range loaded {
+				if !a.IsGlobal() && a.AccessTokenValue() != "" {
+					poolAuths = append(poolAuths, a)
+				}
+			}
+		}
+	}
+	if len(targets) == 0 {
+		return poolAuths
+	}
+	seen := make(map[string]bool)
+	var out []*auth.Auth
+	for _, rawTarget := range targets {
+		tAbs, _ := filepath.Abs(rawTarget)
+		tBase := filepath.Base(rawTarget)
+		tClean := auth.CleanRawUID(rawTarget)
+		for _, a := range poolAuths {
+			if seen[a.UID] {
+				continue
+			}
+			aAbs, _ := filepath.Abs(a.FilePath)
+			if a.FilePath == rawTarget ||
+				(aAbs != "" && tAbs != "" && strings.EqualFold(aAbs, tAbs)) ||
+				(a.FilePath != "" && strings.EqualFold(filepath.Base(a.FilePath), tBase)) ||
+				a.UID == rawTarget ||
+				(tClean != "" && auth.CleanRawUID(a.UID) == tClean) {
+				seen[a.UID] = true
+				out = append(out, a)
+			}
+		}
+	}
+	return out
 }
 
 var execTasksRunner = execTaskRunner
@@ -178,13 +286,13 @@ func execTaskRunner(ctx context.Context, root, authDir, bin string, args []strin
 			absDir = authDir
 		}
 		base := os.Environ()
-		env := make([]string, 0, len(base)+1)
+		env := make([]string, 0, len(base)+2)
 		for _, kv := range base {
-			if !strings.HasPrefix(kv, "WB2A_AUTH_DIR=") {
+			if !strings.HasPrefix(kv, "WB2A_AUTH_DIR=") && !strings.HasPrefix(kv, "WB2A_AUTHS=") {
 				env = append(env, kv)
 			}
 		}
-		env = append(env, "WB2A_AUTH_DIR="+absDir)
+		env = append(env, "WB2A_AUTH_DIR="+absDir, "WB2A_AUTHS="+absDir)
 		cmd.Env = env
 	}
 	raw, err := cmd.CombinedOutput()
