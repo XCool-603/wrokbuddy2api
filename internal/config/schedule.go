@@ -20,6 +20,7 @@ type Schedule struct {
 	KeepaliveHours []int `json:"keepalive_hours"` // [22]
 	SchoolHours    []int `json:"school_hours"`    // [12] 开学季任务（迁移自 school/cat 两条系统 crontab）
 	CatHours       []int `json:"cat_hours"`       // [1] 夜猫窗口 23-08 CST，01:00 窗口内补 1 次
+	TasksHours     []int `json:"tasks_hours"`     // [11] 全量成长任务与最新活动任务
 	// CheckinEnabled/TravelEnabled/ActivityEnabled/KeepaliveEnabled/SchoolEnabled/CatEnabled
 	// 显式禁用开关（缺省 true）。
 	//
@@ -35,6 +36,7 @@ type Schedule struct {
 	KeepaliveEnabled bool `json:"keepalive_enabled"` // 缺省 true；false = 关 token 保活
 	SchoolEnabled    bool `json:"school_enabled"`    // 缺省 true；false = 停开学季任务
 	CatEnabled       bool `json:"cat_enabled"`       // 缺省 true；false = 停夜猫子任务
+	TasksEnabled     bool `json:"tasks_enabled"`     // 缺省 true；false = 停全量成长任务
 	// ActivityReportCount 每号每次活跃上报的条数：领猫前置需 5 次对话，
 	// 默认 5 条把 chat_5 刷满；0/缺省=1 兼容旧行为。
 	ActivityReportCount int `json:"activity_report_count"`
@@ -55,12 +57,14 @@ func DefaultSchedule() Schedule {
 		KeepaliveHours:       []int{22},
 		SchoolHours:          []int{12},
 		CatHours:             []int{1},
+		TasksHours:           []int{11},
 		CheckinEnabled:      true,
 		TravelEnabled:       true,
 		ActivityEnabled:     true,
 		KeepaliveEnabled:    true,
 		SchoolEnabled:       true,
 		CatEnabled:          true,
+		TasksEnabled:        true,
 		ActivityReportCount: 5, // 领猫前置需 5 次对话，5 连发刷满 chat_5
 	}
 }
@@ -92,6 +96,9 @@ func (s *Schedule) Normalize() error {
 	if len(s.CatHours) == 0 {
 		s.CatHours = []int{1}
 	}
+	if len(s.TasksHours) == 0 {
+		s.TasksHours = []int{11}
+	}
 	// 0/负数 → 1 条（兼容旧行为：每号每天 1 条上报点亮连登）。
 	if s.ActivityReportCount <= 0 {
 		s.ActivityReportCount = 1
@@ -118,6 +125,9 @@ func (s *Schedule) validateHours() error {
 		return err
 	}
 	if err := checkHourRange("schedule.school_hours", "school_enabled", s.SchoolHours); err != nil {
+		return err
+	}
+	if err := checkHourRange("schedule.tasks_hours", "tasks_enabled", s.TasksHours); err != nil {
 		return err
 	}
 	return checkHourRange("schedule.cat_hours", "cat_enabled", s.CatHours)

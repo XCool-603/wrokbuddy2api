@@ -90,6 +90,9 @@ type Config struct {
 
 	// AlertMgr 运维风控告警通知管理器（可选）
 	AlertMgr *AlertManager
+
+	// RunTasksFunc 执行全量成长任务与最新活动任务自动化（可选）
+	RunTasksFunc func()
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -102,7 +105,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.32"
+const CurrentVersion = "v1.2.33"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。
 const dumpReqMinBytes = 4 << 20

@@ -29,6 +29,7 @@ type Config struct {
 	KeepaliveHours []int // 默认 [22]
 	SchoolHours    []int // 默认 [12]：开学季任务（迁移自系统 crontab）
 	CatHours       []int // 默认 [1]：夜猫子任务（迁移自系统 crontab）
+	TasksHours     []int // 默认 [11]：全量成长任务与最新活动任务
 	// ActivityReportCount 每号每次活跃上报的条数：领猫前置需 5 次对话，
 	// 默认 5 条同一 conversationId 内多轮上报把 chat_5 刷满；0/缺省=1 兼容旧行为。
 	ActivityReportCount int
@@ -51,6 +52,8 @@ type Config struct {
 	SchoolDisabled bool
 	// CatDisabled 显式关闭夜猫子任务排程（schedule.cat_enabled=false）。
 	CatDisabled bool
+	// TasksDisabled 显式关闭全量成长任务排程（schedule.tasks_enabled=false）。
+	TasksDisabled bool
 }
 
 // Scheduler 调度器。
@@ -91,6 +94,9 @@ func New(cfg Config) *Scheduler {
 	}
 	if len(cfg.CatHours) == 0 {
 		cfg.CatHours = []int{1}
+	}
+	if len(cfg.TasksHours) == 0 {
+		cfg.TasksHours = []int{11}
 	}
 	// 0/缺省 = 1 条（兼容旧行为：每号每天 1 条上报点亮连登）。
 	if cfg.ActivityReportCount <= 0 {
@@ -153,6 +159,7 @@ const (
 	taskKeepalive
 	taskSchool
 	taskCat
+	taskTasks
 )
 
 func (k taskKind) String() string {
@@ -169,6 +176,8 @@ func (k taskKind) String() string {
 		return "school"
 	case taskCat:
 		return "cat"
+	case taskTasks:
+		return "tasks"
 	default:
 		return fmt.Sprintf("task(%d)", int(k))
 	}
@@ -200,6 +209,9 @@ func (s *Scheduler) nextWake(now time.Time) (time.Time, []taskKind) {
 	}
 	if !s.cfg.CatDisabled {
 		slots = append(slots, slot{nextFire(now, s.cfg.CatHours), taskCat})
+	}
+	if !s.cfg.TasksDisabled {
+		slots = append(slots, slot{nextFire(now, s.cfg.TasksHours), taskTasks})
 	}
 	var earliest time.Time
 	for _, sl := range slots {
@@ -309,6 +321,8 @@ func (s *Scheduler) dispatch(ctx context.Context, k taskKind) {
 		s.RunSchoolNow()
 	case taskCat:
 		s.RunCatNow()
+	case taskTasks:
+		s.RunTasksNow()
 	}
 }
 

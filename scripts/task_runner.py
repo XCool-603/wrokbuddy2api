@@ -122,6 +122,13 @@ MAPPING = {
     "Sequential_Tasks_1":     {"kind": "minichat", "target": 1, "src": "无(mini 对话无activityId)"},
     # 同下发口径的「校园日」任务：判据是 school 域 activityId 关联（mini chat + activityId）
     "school_season":          {"kind": "schoolseason", "target": 1, "src": "无(mini chat+activityId)"},
+    # 官方最新活动任务（专家联动、买得好、抖音乐园、公众号等）
+    "expert_use_maidehao":          {"kind": "fixed_expert", "target": 1, "src": "买得好", "expertId": "ex_GDl31WahyIH0"},
+    "expert_use_douyinyin":        {"kind": "fixed_expert", "target": 1, "src": "抖音乐园", "expertId": "ex_FbY5nlWTqDod"},
+    "expert_use_shangjia_xuanchuan": {"kind": "fixed_expert", "target": 1, "src": "商家宣传", "expertId": "ex_Weo3x2EZuSDm"},
+    "expert_use_bowangwang":        {"kind": "fixed_expert", "target": 1, "src": "博汪汪", "expertId": "ex_WZY136wV5aMt"},
+    "WorkBuddy_Valorant":           {"kind": "fixed_expert", "target": 1, "src": "无畏契约拼豆专家", "expertId": "ex_xQHHD1u5Jkua"},
+    "wb_wechat_oa_subscribe_task":  {"unforgeable": True, "reason": "关注微信公众号需外部回调/24小时"},
     # 不可伪造（真实业务副作用）
     "Expert_Philanthropy":    {"unforgeable": True, "reason": "真实捐款动作(M8)"},
 }
@@ -446,9 +453,23 @@ SCHOOL_REPORT_KIND = {
 MP_PLATFORM_HEADER = {"X-Client-Platform": "miniprogram"}
 
 
-def ids_for(kind, auth, need, offset=0):
+FIXED_EXPERTS = {
+    "expert_use_maidehao": ("ex_GDl31WahyIH0", "买得好"),
+    "expert_use_douyinyin": ("ex_FbY5nlWTqDod", "抖音乐园"),
+    "expert_use_shangjia_xuanchuan": ("ex_Weo3x2EZuSDm", "商家宣传"),
+    "expert_use_bowangwang": ("ex_WZY136wV5aMt", "博汪汪"),
+    "WorkBuddy_Valorant": ("ex_xQHHD1u5Jkua", "无畏契约拼豆专家"),
+}
+
+
+def ids_for(kind, auth, need, offset=0, code=None):
     """返回需要上报的对象 id 列表 [(obj_id, meta)]（按源顺序，偏移 cur 避免复用）。"""
     if need <= 0:
+        return []
+    if kind == "fixed_expert":
+        if code and code in FIXED_EXPERTS:
+            eid, name = FIXED_EXPERTS[code]
+            return [(eid, {"name": name, "expertType": "agent"}) for _ in range(need)]
         return []
     if kind == "canvas":
         base = int(time.time() * 1000)
@@ -645,7 +666,7 @@ def build_event(auth, kind, obj_id, meta, idx):
                 "reportDelay": 0, "isCustomModel": True, "id": str(obj_id),
                 "name": m or "", "requestId": rid, "conversationId": cid, "userId": uid}
 
-    if kind == "expert":
+    if kind in ("expert", "fixed_expert"):
         return {"eventCode": "expert_actual_use", "timestamp": now, "reportDelay": 0,
                 "mode": "CLOUD", "id": obj_id, "name": m.get("name") or obj_id,
                 "expertTitle": m.get("name") or "", "type": m.get("category") or "",
@@ -1080,8 +1101,10 @@ def process_task(auth, code, t, opts, stats):
     target = prog.get("target") or spec.get("target") or 1
     stats["total"] += 1
 
-    # 不可伪造任务：跳过并如实标注
+    # 不可伪造任务：若未接，自动 accept；未完成则跳过并如实标注
     if spec.get("unforgeable"):
+        if ast == "not_accepted" and opts.yes and not opts.only_claim:
+            _accept_with_verify(auth, code, uid8, opts.gap)
         print(f"[task_runner] {uid8} {code}: query {ast}({cur}/{target}) -> 不可伪造({spec['reason']})，skip")
         stats["skip"] += 1
         return
@@ -1142,7 +1165,7 @@ def process_task(auth, code, t, opts, stats):
         return
 
     if not opts.yes:
-        ids = ids_for(spec["kind"], auth, need, offset=cur)
+        ids = ids_for(spec["kind"], auth, need, offset=cur, code=code)
         shown = [i for i, _ in ids][:6]
         print(f"[task_runner] {uid8} {code}: query {ast}({cur}/{target}) -> 可点亮 need={need} "
               f"id源={spec['src']} ids={shown}，dry-run 跳过")
@@ -1268,7 +1291,7 @@ def light_up(auth, code, spec, cur, target, uid8, opts, stats, cap=0):
                 time.sleep(opts.gap)
         time.sleep(2.0)  # 服务端归账可能异步
     else:
-        ids = ids_for(spec["kind"], auth, need, offset=cur)
+        ids = ids_for(spec["kind"], auth, need, offset=cur, code=code)
         if not ids:
             print(f"[task_runner] {uid8} {code}: report 无可用对象 id，skip")
             stats["fail"] += 1

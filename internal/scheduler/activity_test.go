@@ -549,6 +549,7 @@ func TestNextWakeActivityDisabled(t *testing.T) {
 		KeepaliveHours:   []int{22},
 		SchoolDisabled:   true,
 		CatDisabled:      true,
+		TasksDisabled:    true,
 	})
 	at, kinds := s.nextWake(time.Date(2026, 9, 11, 9, 30, 0, 0, time.Local))
 	if want := time.Date(2026, 9, 11, 21, 0, 0, 0, time.Local); !at.Equal(want) {
@@ -589,6 +590,7 @@ func TestAllFourDisabledNoSpin(t *testing.T) {
 		KeepaliveDisabled: true,
 		SchoolDisabled:    true,
 		CatDisabled:       true,
+		TasksDisabled:     true,
 		CheckinHours:      []int{9, 21},
 		TravelHours:       []int{9},
 		ActivityHours:     []int{10},

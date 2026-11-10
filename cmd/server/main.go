@@ -250,6 +250,7 @@ func main() {
 		KeepaliveHours:      cfg.Schedule.KeepaliveHours,
 		SchoolHours:         cfg.Schedule.SchoolHours,
 		CatHours:            cfg.Schedule.CatHours,
+		TasksHours:          cfg.Schedule.TasksHours,
 		ActivityReportCount: cfg.Schedule.ActivityReportCount,
 		ExpiringSoonWindow:  cfg.ExpiringSoonDur, // 快过期积分优先消耗（issue:积分过期）
 		CheckinDisabled:     !cfg.Schedule.CheckinEnabled,
@@ -258,6 +259,7 @@ func main() {
 		KeepaliveDisabled:   !cfg.Schedule.KeepaliveEnabled,
 		SchoolDisabled:      !cfg.Schedule.SchoolEnabled,
 		CatDisabled:         !cfg.Schedule.CatEnabled,
+		TasksDisabled:       !cfg.Schedule.TasksEnabled,
 	})
 	switch {
 	case !cfg.Schedule.CheckinEnabled:
@@ -291,6 +293,11 @@ func main() {
 		log.Printf("夜猫子任务已禁用（schedule.cat_enabled=false）")
 	} else {
 		log.Printf("夜猫子任务已启用：%v 点（task_runner.py ALL --yes --only black_cat）", cfg.Schedule.CatHours)
+	}
+	if !cfg.Schedule.TasksEnabled {
+		log.Printf("全量任务已禁用（schedule.tasks_enabled=false）")
+	} else {
+		log.Printf("全量任务已启用：%v 点（task_runner.py ALL --yes）", cfg.Schedule.TasksHours)
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

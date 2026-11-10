@@ -118,3 +118,12 @@ func (s *Scheduler) RunCatNow() {
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes", "--only", "black_cat"},
 	})
 }
+
+// RunTasksNow 立即执行全量成长任务与最新活动任务：task_runner.py ALL --yes。
+// 批量点亮并领取所有常规任务及最新活动任务（如专家联动、买得好、抖音乐园、公众号等）。
+func (s *Scheduler) RunTasksNow() {
+	root := repoRoot()
+	runScript("tasks", root, [][]string{
+		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes"},
+	})
+}

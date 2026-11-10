@@ -96,6 +96,7 @@ func TestNextWakeSchoolCatDisabled(t *testing.T) {
 		CatHours:          []int{1},
 		SchoolDisabled:    true,
 		CatDisabled:       true,
+		TasksDisabled:     true,
 	})
 	at, kinds := s.nextWake(time.Date(2026, 9, 14, 8, 0, 0, 0, time.Local))
 	if want := time.Date(2026, 9, 14, 21, 0, 0, 0, time.Local); !at.Equal(want) {
@@ -199,5 +200,41 @@ func TestPythonCmd(t *testing.T) {
 	t.Setenv("WB2A_PYTHON", "  /usr/bin/python3.10  ")
 	if got := pythonCmd(); got != "/usr/bin/python3.10" {
 		t.Errorf("trim pythonCmd()=%q want /usr/bin/python3.10", got)
+	}
+}
+
+// TestRunTasksNowBuildsCommand RunTasksNow 构造
+// python3 scripts/task_runner.py ALL --yes，工作目录为仓库根。
+func TestRunTasksNowBuildsCommand(t *testing.T) {
+	t.Setenv("WB2A_PYTHON", "")
+	f := installFakeExec(t)
+	s := New(Config{})
+	s.RunTasksNow()
+	want := []string{"scripts/task_runner.py", "ALL", "--yes"}
+	if f.lastName != "python3" || !equalArgs(f.lastArgs, want) {
+		t.Errorf("cmd=%s %v want python3 %v", f.lastName, f.lastArgs, want)
+	}
+	if f.lastDir != repoRoot() {
+		t.Errorf("dir=%q want repo root %q", f.lastDir, repoRoot())
+	}
+}
+
+// TestNextWakeTasksSlot 全量任务在 tasks_hours（默认 10 点）处有独立时点。
+func TestNextWakeTasksSlot(t *testing.T) {
+	s := New(Config{
+		CheckinHours:      []int{9},
+		TravelDisabled:    true,
+		ActivityDisabled:  true,
+		KeepaliveDisabled: true,
+		SchoolDisabled:    true,
+		CatDisabled:       true,
+		TasksHours:        []int{11},
+	})
+	at, kinds := s.nextWake(time.Date(2026, 9, 14, 10, 30, 0, 0, time.Local))
+	if want := time.Date(2026, 9, 14, 11, 0, 0, 0, time.Local); !at.Equal(want) {
+		t.Errorf("next=%v want %v（tasks 11:00 独立时点）", at, want)
+	}
+	if len(kinds) != 1 || kinds[0] != taskTasks {
+		t.Errorf("kinds=%v want [tasks]", kinds)
 	}
 }

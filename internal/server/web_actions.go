@@ -583,6 +583,11 @@ func (h *Handler) handleActionWelfare(w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(fmt.Sprintf("\n总计账号: %d | 新手礼包到账: %d | 签到成功: %d | 试用到账: %d | 本轮累计到账算力: +%d\n",
 		len(results), giftSuccessN, checkinSuccessN, trialSuccessN, totalNewCredits))
 
+	if h.cfg.RunTasksFunc != nil {
+		go h.cfg.RunTasksFunc()
+		sb.WriteString("\n[已联动触发后台全量成长任务与最新活动自动点亮领奖 (买得好/抖音乐园/商家宣传/博汪汪/无畏契约拼豆等)]\n")
+	}
+
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":           true,
 		"total_new_credits": totalNewCredits,
