@@ -177,12 +177,21 @@ func (h *Handler) handlePortalHTML(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
 	w.Write([]byte(portalHTML))
 }
 
 func (h *Handler) handleDashboardHTML(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+	w.Header().Set("Pragma", "no-cache")
 	w.Write([]byte(dashboardHTML))
+}
+
+// WarmupCreditsAsync 服务启动后异步全量同步全池账号（含 CN 与 GLOBAL）最新积分余额
+func (h *Handler) WarmupCreditsAsync() {
+	go h.syncPoolCreditsWithTimeout(15 * time.Second)
 }
 
 func (h *Handler) handlePublicStatus(w http.ResponseWriter, r *http.Request) {

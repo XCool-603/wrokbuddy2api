@@ -364,6 +364,15 @@ func main() {
 
 	go sch.Run(ctx)
 
+	// 服务启动后 1 秒全量拉取所有 CN 与 GLOBAL 账号的真实积分余额（避免重启后显示历史旧值或 0）
+	go func() {
+		select {
+		case <-time.After(1 * time.Second):
+			h.WarmupCreditsAsync()
+		case <-ctx.Done():
+		}
+	}()
+
 	// 服务启动自检：如果启用了自动签到与猫猫旅行，服务启动后延迟 3~5 秒异步执行一次自检，
 	// 避免桌面用户/按需运行用户因非整点启动而必须等待半天甚至全天无法触发签到与派猫。
 	if cfg.Schedule.CheckinEnabled {
