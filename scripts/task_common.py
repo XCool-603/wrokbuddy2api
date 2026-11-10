@@ -48,32 +48,173 @@ PATH_CHAT           = "/v2/chat/completions"
 CLIENT_UA = "CLI/2.63.2 CodeBuddy/2.63.2"
 
 
-def load_auth(uid_or_file: str) -> dict:
-    """从 auths/ 加载账号凭证，uid_or_file 为 uid 前缀或 auths 文件名。
+def clean_raw_uid(uid: str) -> str:
+    """清理 UID 前缀（cn-/global-/personal-/google- 等），还原真实原始 UID。"""
+    if not uid:
+        return ""
+    for p in ("cn-", "global-", "cn:", "global:"):
+        if uid.lower().startswith(p):
+            uid = uid[len(p):]
+            break
+    for p in ("google-", "twitter-", "github-", "copilot-", "personal-", "wechat-", "qq-", "phone-", "email-"):
+        if uid.lower().startswith(p):
+            uid = uid[len(p):]
+            break
+    if "#" in uid:
+        uid = uid.split("#", 1)[0]
+    return uid
 
-    返回 {token, uid, domain, nick, file, realm} 六元组。
-    realm 读取兼容嵌套形（`auth.realm`，login.sh --realm=global 落盘形态）与
-    扁平形（顶层 `realm`）；两种都缺省 → "cn"（老 CN 凭证零回归）。
+
+def _extract_token_fields(d: dict) -> tuple:
+    """兼容嵌套格式 ({auth, account}) 与扁平格式读取凭证字段。"""
+    a = d.get("auth") if isinstance(d.get("auth"), dict) else d
+    acc = d.get("account") if isinstance(d.get("account"), dict) else d
+    token = a.get("accessToken") or a.get("access_token") or d.get("accessToken") or d.get("access_token") or ""
+    rt = a.get("refreshToken") or a.get("refresh_token") or d.get("refreshToken") or d.get("refresh_token") or ""
+    exp = a.get("expiresAt") or a.get("expires_at") or d.get("expiresAt") or d.get("expires_at") or 0
+    try:
+        exp = int(exp)
+    except Exception:
+        exp = 0
+    uid = acc.get("uid") or d.get("uid") or ""
+    nick = acc.get("nickname") or d.get("nickname") or ""
+    domain = a.get("domain") or d.get("domain") or ""
+    realm = a.get("realm") or d.get("realm") or ""
+    return token, rt, exp, uid, nick, domain, realm
+
+
+def list_all_auth_files() -> list:
+    """扫描 AUTHS 目录下所有有效账号凭证 JSON 文件的完整路径（不限于 workbuddy-*.json 前缀）。"""
+    skip_names = {"state.json", "users.json", "settings.json", "config.json", "metrics.json", "web_sessions.json"}
+    out = []
+    if not os.path.isdir(AUTHS):
+        return out
+    for p in sorted(glob.glob(os.path.join(AUTHS, "*.json"))):
+        if os.path.basename(p).lower() in skip_names:
+            continue
+        try:
+            with open(p, encoding="utf-8") as f:
+                d = json.load(f)
+            token, rt, _, uid, _, _, _ = _extract_token_fields(d)
+            if token or rt or uid:
+                out.append(p)
+        except Exception:
+            continue
+    return out
+
+
+def refresh_auth(auth: dict) -> bool:
+    """若账号配有 refresh_token，主动向 /v2/plugin/auth/token/refresh 刷新 accessToken 并落盘。"""
+    rt = auth.get("refresh_token") or ""
+    if not rt or auth_is_global(auth):
+        return False
+    url = chat_base(auth) + "/v2/plugin/auth/token/refresh"
+    hdr = {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "User-Agent": CLIENT_UA,
+        "Origin": "https://www.codebuddy.cn",
+        "Referer": "https://www.codebuddy.cn/",
+        "X-Requested-With": "XMLHttpRequest",
+        "X-CodeBuddy-Request": "1",
+        "X-Refresh-Token": rt,
+        "X-Auth-Refresh-Source": "plugin",
+    }
+    req = urllib.request.Request(url, data=None, headers=hdr, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=15) as r:
+            res = json.loads(r.read().decode("utf-8", "replace"))
+        data = res.get("data") or res
+        new_at = data.get("accessToken") or ""
+        if not new_at:
+            return False
+        auth["token"] = new_at
+        if data.get("refreshToken"):
+            auth["refresh_token"] = data["refreshToken"]
+        exp_in = int(data.get("expiresIn") or 7200)
+        new_exp = int(time.time()) + exp_in
+        auth["expires_at"] = new_exp
+        # 原子更新磁盘凭证文件
+        fp = auth.get("_path")
+        if fp and os.path.isfile(fp):
+            try:
+                with open(fp, encoding="utf-8") as f:
+                    d = json.load(f)
+                if isinstance(d.get("auth"), dict):
+                    d["auth"]["accessToken"] = new_at
+                    if data.get("refreshToken"):
+                        d["auth"]["refreshToken"] = data["refreshToken"]
+                    d["auth"]["expiresAt"] = new_exp
+                else:
+                    d["accessToken"] = new_at
+                    if "access_token" in d:
+                        d["access_token"] = new_at
+                    if data.get("refreshToken"):
+                        d["refreshToken"] = data["refreshToken"]
+                    d["expiresAt"] = new_exp
+                tmp = fp + ".tmp"
+                with open(tmp, "w", encoding="utf-8") as f:
+                    json.dump(d, f, indent=2, ensure_ascii=False)
+                os.replace(tmp, fp)
+            except Exception:
+                pass
+        return True
+    except Exception:
+        return False
+
+
+def load_auth(uid_or_file: str) -> dict:
+    """从 auths/ 加载账号凭证，uid_or_file 为文件路径、文件名、uid 或 uid 前缀。
+
+    返回字典含 {token, uid, domain, nick, file, realm, refresh_token, expires_at, _path}。
+    支持嵌套形与扁平形 JSON，自动剥离 cn-/personal- 前缀还原干净 uid，并在过期时自动刷新 token。
     """
-    if os.path.sep in uid_or_file or uid_or_file.endswith(".json"):
+    if os.path.sep in uid_or_file or "/" in uid_or_file or uid_or_file.endswith(".json"):
         p = uid_or_file
         if not os.path.isabs(p):
             p = os.path.join(AUTHS, p)
+        if not os.path.isfile(p):
+            raise SystemExit(f"no auth file: {p}")
     else:
-        pre = uid_or_file
-        hits = glob.glob(os.path.join(AUTHS, f"workbuddy-{pre}*.json"))
+        pre = uid_or_file.lower()
+        hits = []
+        for cand in list_all_auth_files():
+            bname = os.path.basename(cand).lower()
+            if pre in bname:
+                hits.append(cand)
+                continue
+            try:
+                with open(cand, encoding="utf-8") as f:
+                    raw = json.load(f)
+                _, _, _, cuid, _, _, _ = _extract_token_fields(raw)
+                if cuid and (cuid.lower().startswith(pre) or clean_raw_uid(cuid).lower().startswith(pre)):
+                    hits.append(cand)
+            except Exception:
+                pass
         if not hits:
-            raise SystemExit(f"no auth for {pre}")
+            raise SystemExit(f"no auth for {uid_or_file}")
         p = hits[0]
-    # encoding="utf-8" 必须显式指定：Windows 上 open() 默认用 locale 代码页
-    # （中文系统为 GBK），而 auth 文件是 UTF-8 写入的，非 ASCII 昵称会触发
-    # UnicodeDecodeError，使所有脚本类任务（school/cat/trial 等）直接中断。
-    d = json.load(open(p, encoding="utf-8"))
-    a, acc = d["auth"], d["account"]
-    realm = a.get("realm") or d.get("realm") or ""
-    return {"token": a["accessToken"], "domain": a.get("domain") or "",
-            "uid": acc["uid"], "nick": acc.get("nickname", ""),
-            "file": os.path.basename(p), "realm": realm}
+
+    with open(p, encoding="utf-8") as f:
+        d = json.load(f)
+    token, rt, exp, uid, nick, domain, realm = _extract_token_fields(d)
+    if not token and not rt:
+        raise SystemExit(f"no accessToken in {os.path.basename(p)}")
+    clean_uid = clean_raw_uid(uid) or uid
+    info = {
+        "token": token,
+        "refresh_token": rt,
+        "expires_at": exp,
+        "domain": domain,
+        "uid": clean_uid,
+        "nick": nick,
+        "file": os.path.basename(p),
+        "realm": realm,
+        "_path": p,
+    }
+    if not auth_is_global(info) and rt and (not token or (exp > 0 and time.time() >= exp - 1800)):
+        refresh_auth(info)
+    return info
 
 
 def auth_is_global(auth: dict) -> bool:
@@ -111,7 +252,7 @@ def _headers(auth: dict) -> dict:
     return hdr
 
 
-def _request(auth, method, base, path, body=None, headers=None, timeout=30):
+def _request(auth, method, base, path, body=None, headers=None, timeout=30, _retried=False):
     url = path if path.startswith("http") else base + path
     hdr = _headers(auth)
     if headers:
@@ -122,6 +263,8 @@ def _request(auth, method, base, path, body=None, headers=None, timeout=30):
         with urllib.request.urlopen(req, timeout=timeout) as r:
             return r.status, json.loads(r.read().decode("utf-8", "replace"))
     except urllib.error.HTTPError as e:
+        if e.code == 401 and not _retried and auth.get("refresh_token") and refresh_auth(auth):
+            return _request(auth, method, base, path, body, headers, timeout, _retried=True)
         t = e.read().decode("utf-8", "replace")
         try:
             return e.code, json.loads(t)

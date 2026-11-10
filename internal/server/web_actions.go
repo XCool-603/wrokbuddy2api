@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/logfmt"
@@ -716,6 +717,12 @@ func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// 优先使用内存中最新鲜的凭证对象
+		if h.cfg.Pool != nil {
+			if live := h.cfg.Pool.AuthByUID(a.UID); live != nil {
+				a = live
+			}
+		}
 		// token 临近过期时刷新
 		if a.NeedsRefresh(2 * 3600) {
 			if err := up.RefreshToken(a); err == nil {
@@ -729,21 +736,37 @@ func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
 		var action = "无动作"
 		var rewardEarned int64 = 0
 
-		// 1. 查猫档案
+		// 1. 查猫档案（若遇 401 自动强制刷新并重试一次）
 		buddy, bErr := up.BuddyInfo(a)
+		if bErr != nil && a.RefreshTokenValue() != "" {
+			if rerr := up.RefreshToken(a); rerr == nil {
+				a.BackfillRealm()
+				_ = a.SaveAtomic()
+				buddy, bErr = up.BuddyInfo(a)
+			}
+		}
 		if bErr != nil {
 			action = "查猫失败: " + bErr.Error()
 		} else if buddy == nil {
-			// 无猫：尝试领养
+			// 无猫：尝试领养；若未满足 5 次对话门槛，自动补发 5 次活跃对话后再领养
 			_ = up.BuddyAgreement(a)
-			if err := up.BuddyFirst(a); err == nil {
+			err := up.BuddyFirst(a)
+			if err != nil && upstream.IsBuddyTaskIncomplete(err) {
+				cid := fmt.Sprintf("wb2api-%d", time.Now().UnixMilli())
+				for k := 1; k <= 5; k++ {
+					_ = up.ReportChatActivity(a, cid, fmt.Sprintf("%s-r%d", cid, k))
+					time.Sleep(200 * time.Millisecond)
+				}
+				err = up.BuddyFirst(a)
+			}
+			if err == nil {
 				catName = "新领养"
 				action = "领养成功(+300)"
 				rewardEarned += 300
 				adoptN++
 			} else {
 				catName = "未领养"
-				action = "对话门槛未达"
+				action = "领养跳过: " + logfmt.Truncate(err.Error(), 24)
 			}
 		} else {
 			catName = buddy.Name
@@ -815,9 +838,7 @@ func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(fmt.Sprintf("\n总计处理: %d | 派出旅行: %d | 领奖成功: %d | 领养成功: %d | 跳过/待归: %d | 本轮到账积分: +%d\n",
 		departN+claimN+adoptN+skipN, departN, claimN, adoptN, skipN, totalReward))
 
-	if h.cfg.RunTravelFunc != nil {
-		go h.cfg.RunTravelFunc()
-	}
+
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success":           true,

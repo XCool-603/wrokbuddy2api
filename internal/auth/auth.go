@@ -378,8 +378,8 @@ func CleanRawUID(uid string) string {
 			break
 		}
 	}
-	// 如果带有 provider 前缀（例如 "google-" 或 "twitter-"），去掉 provider 前缀
-	for _, p := range []string{"google-", "twitter-", "github-", "copilot-"} {
+	// 如果带有 provider 前缀（例如 "google-"、"twitter-"、"personal-" 等），去掉 provider 前缀
+	for _, p := range []string{"google-", "twitter-", "github-", "copilot-", "personal-", "wechat-", "qq-", "phone-", "email-"} {
 		if strings.HasPrefix(strings.ToLower(uid), p) {
 			uid = uid[len(p):]
 			break

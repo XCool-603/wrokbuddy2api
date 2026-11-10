@@ -373,38 +373,33 @@ func main() {
 		}
 	}()
 
-	// 服务启动自检：如果启用了自动签到与猫猫旅行，服务启动后延迟 3~5 秒异步执行一次自检，
-	// 避免桌面用户/按需运行用户因非整点启动而必须等待半天甚至全天无法触发签到与派猫。
-	if cfg.Schedule.CheckinEnabled {
-		go func() {
-			select {
-			case <-time.After(3 * time.Second):
-				log.Printf("[scheduler] 服务启动自检：立即执行首次自动签到与余额刷新...")
-				sch.RunCheckinNow()
-			case <-ctx.Done():
-			}
-		}()
-	}
-	if cfg.Schedule.TravelEnabled {
-		go func() {
-			select {
-			case <-time.After(5 * time.Second):
-				log.Printf("[scheduler] 服务启动自检：立即执行猫猫旅行巡检（领养/派出/领奖）...")
-				sch.RunTravelNow()
-			case <-ctx.Done():
-			}
-		}()
-	}
-	if cfg.Schedule.TasksEnabled {
-		go func() {
-			select {
-			case <-time.After(8 * time.Second):
-				log.Printf("[scheduler] 服务启动自检：立即自动执行全量成长任务与最新活动积分流水线...")
-				sch.RunTasksNow()
-			case <-ctx.Done():
-			}
-		}()
-	}
+	// 服务启动自检：按「签到 -> 成长任务(含5连对话解锁领猫) -> 猫猫旅行(领养/派出/领奖)」顺序联动执行，
+	// 避免新号还没解锁对话门槛时派猫失败并被当日防抖跳过。
+	go func() {
+		select {
+		case <-time.After(3 * time.Second):
+		case <-ctx.Done():
+			return
+		}
+		if cfg.Schedule.CheckinEnabled {
+			log.Printf("[scheduler] 服务启动自检：1/3 执行首次自动签到与余额刷新...")
+			sch.RunCheckinNow()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if cfg.Schedule.TasksEnabled {
+			log.Printf("[scheduler] 服务启动自检：2/3 执行全量成长任务与最新活动积分流水线...")
+			sch.RunTasksNow()
+		}
+		if ctx.Err() != nil {
+			return
+		}
+		if cfg.Schedule.TravelEnabled {
+			log.Printf("[scheduler] 服务启动自检：3/3 执行猫猫旅行巡检（领养/派出/领奖）...")
+			sch.RunTravelNow()
+		}
+	}()
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,

@@ -76,7 +76,7 @@ func (s *Scheduler) runTravel(ctx context.Context) {
 			continue
 		}
 		a := s.cfg.Pool.AuthByUID(st.UID)
-		if a == nil || a.RefreshTokenValue() == "" {
+		if a == nil || (a.AccessTokenValue() == "" && a.RefreshTokenValue() == "") {
 			continue
 		}
 		if a.IsGlobal() {
@@ -94,6 +94,12 @@ func (s *Scheduler) runTravel(ctx context.Context) {
 
 // travelOne 单账号单趟状态机：查有无猫 + 查状态 + 最多一个动作，不轮询不等待。
 func (s *Scheduler) travelOne(a *auth.Auth) {
+	if a.NeedsRefresh(30*time.Minute) && a.RefreshTokenValue() != "" {
+		if err := s.cfg.Upstream.RefreshToken(a); err == nil {
+			a.BackfillRealm()
+			_ = a.SaveAtomic()
+		}
+	}
 	buddy, err := s.cfg.Upstream.BuddyInfo(a)
 	if err != nil {
 		log.Printf("travel %s: buddy-info: %v", logfmt.Label(a.UID, a.Nickname), err)

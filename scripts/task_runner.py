@@ -1436,11 +1436,10 @@ def main():
     prefixes = []
     for acc in a.accounts:
         if acc.upper() == "ALL":
-            prefixes += [os.path.basename(p)[10:18]
-                         for p in sorted(glob.glob(tc.AUTHS + "/workbuddy-*.json"))]
+            prefixes += tc.list_all_auth_files()
         else:
             prefixes.append(acc)
-    # 去重保序
+    # 去重保序（按完整路径/前缀去重，彻底避免 workbuddy-cn-personal- 前 8 位撞车漏号）
     seen, prefixes2 = set(), []
     for p in prefixes:
         if p not in seen:
@@ -1448,25 +1447,28 @@ def main():
             prefixes2.append(p)
 
     mode = "REAL" if a.yes else "DRY-RUN"
-    print(f"mode={mode} accounts={prefixes2} only={a.only_codes or 'all'} "
+    disp_accts = [os.path.basename(p) for p in prefixes2]
+    print(f"mode={mode} accounts={disp_accts} only={a.only_codes or 'all'} "
           f"only_claim={a.only_claim} gap={a.gap}")
-    if a.yes and len(prefixes2) > 2 and not a.only_codes and not a.only_claim:
-        print("WARN: 全量批量 + --yes 未限定 --only，注意 54 号批量——请确认 Hermes 决策后再跑")
 
     for p in prefixes2:
         try:
             c = tc.load_auth(p)
-        except SystemExit as e:
-            print(f"ERR: {e}")
+        except (SystemExit, Exception) as e:
+            print(f"ERR: load_auth({os.path.basename(p)}): {e}")
             continue
         stats["accounts"] += 1
         # global realm 不适用 CN 任务中心：明确跳过、不发起任何请求（P2 门控结论）。
         if tc.auth_is_global(c):
             uid8 = (c.get("uid") or "")[:8] or "?"
-            print(f"[skip] {uid8} global realm 不适用 CN 任务")
+            print(f"[skip] {uid8} ({c.get('nick')}) global realm 不适用 CN 任务")
             stats["skip"] += 1
             continue
-        process_account(c, a, stats)
+        try:
+            process_account(c, a, stats)
+        except Exception as e:
+            uid8 = (c.get("uid") or "")[:8] or "?"
+            print(f"ERR: process_account({uid8}): {e}")
 
     print_summary(stats)
 

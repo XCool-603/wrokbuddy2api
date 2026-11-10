@@ -807,8 +807,7 @@ def main():
     else:
         prefixes = []
         if not a.accounts or (len(a.accounts) == 1 and a.accounts[0].upper() == "ALL"):
-            prefixes = [os.path.basename(p)[10:18]
-                        for p in sorted(glob.glob(tc.AUTHS + "/workbuddy-*.json"))]
+            prefixes = tc.list_all_auth_files()
         else:
             prefixes = a.accounts
         seen, prefixes2 = set(), []
@@ -819,7 +818,7 @@ def main():
         for p in prefixes2:
             try:
                 auths.append(tc.load_auth(p))
-            except SystemExit as e:
+            except (SystemExit, Exception) as e:
                 print(f"ERR: {e}")
 
     if not auths:
