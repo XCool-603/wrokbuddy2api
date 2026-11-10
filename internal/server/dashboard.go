@@ -21,6 +21,71 @@ var (
 	creditFetching = make(map[string]time.Time)
 )
 
+// fetchAndSyncCredit 安全地拉取单账号最新真实积分并更新池（自带 Token 过期自动续期、401 重试及精确分桶计算）
+func (h *Handler) fetchAndSyncCredit(a *auth.Auth, uid string) bool {
+	if h == nil || h.cfg.Upstream == nil || h.cfg.Pool == nil {
+		return false
+	}
+	// 优先使用内存中最新鲜的凭证对象（已包含运行期刷新过的 Token）
+	if live := h.cfg.Pool.AuthByUID(uid); live != nil {
+		a = live
+	}
+	if a == nil || a.AccessTokenValue() == "" {
+		return false
+	}
+	if a.NeedsRefresh(2 * 3600) {
+		if err := h.cfg.Upstream.RefreshToken(a); err == nil {
+			a.BackfillRealm()
+			_ = a.SaveAtomic()
+		}
+	}
+	remain, buckets, err := h.cfg.Upstream.UserResourceDetailed(a, 7*24*time.Hour)
+	if err != nil && a.RefreshTokenValue() != "" {
+		// 若遇过期 401，强制刷新一次 Token 后重试
+		if rerr := h.cfg.Upstream.RefreshToken(a); rerr == nil {
+			a.BackfillRealm()
+			_ = a.SaveAtomic()
+			remain, buckets, err = h.cfg.Upstream.UserResourceDetailed(a, 7*24*time.Hour)
+		}
+	}
+	if err != nil {
+		return false
+	}
+	h.cfg.Pool.SetCreditsDetailed(uid, remain, buckets.Expiring)
+	if h.alertMgr != nil && remain < int64(h.alertMgr.cfg.MinCredit) {
+		h.alertMgr.NotifyLowCredit(uid, a.Nickname, remain)
+	}
+	return true
+}
+
+// syncPoolCreditsWithTimeout 并发刷新所有在池账号的实时积分（带超时兜底），用于强制刷新时直接输出最新账单
+func (h *Handler) syncPoolCreditsWithTimeout(timeout time.Duration) {
+	if h == nil || h.cfg.Pool == nil || h.cfg.Upstream == nil {
+		return
+	}
+	var wg sync.WaitGroup
+	for _, st := range h.cfg.Pool.List() {
+		a := h.cfg.Pool.AuthByUID(st.UID)
+		if a == nil || a.AccessTokenValue() == "" {
+			continue
+		}
+		wg.Add(1)
+		go func(authObj *auth.Auth, uid string) {
+			defer wg.Done()
+			h.fetchAndSyncCredit(authObj, uid)
+		}(a, st.UID)
+	}
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(timeout):
+	}
+}
+
 func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string, force bool) {
 	if a == nil || a.AccessTokenValue() == "" || h.cfg.Upstream == nil || h.cfg.Pool == nil {
 		return
@@ -36,12 +101,7 @@ func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string, force bool) 
 	creditFetchMu.Unlock()
 
 	go func() {
-		if remain, expiring, _, _, err := h.cfg.Upstream.ResourceSummary(a); err == nil {
-			h.cfg.Pool.SetCreditsDetailed(uid, remain, expiring)
-			if h.alertMgr != nil && remain < int64(h.alertMgr.cfg.MinCredit) {
-				h.alertMgr.NotifyLowCredit(uid, a.Nickname, remain)
-			}
-		}
+		h.fetchAndSyncCredit(a, uid)
 	}()
 }
 
@@ -191,6 +251,9 @@ func (h *Handler) isAccountVisibleTo(a *auth.Auth, user *usermgr.User) bool {
 
 func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	isFresh := r.URL.Query().Get("fresh") == "1" || r.URL.Query().Get("force") == "1"
+	if isFresh {
+		h.syncPoolCreditsWithTimeout(4 * time.Second)
+	}
 	total, healthy, cooling, disabled, inFlightFull := h.cfg.Pool.CountsDetailed()
 	sticky := 0
 	if h.cfg.StickyCount != nil {
