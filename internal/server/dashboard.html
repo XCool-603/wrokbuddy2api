@@ -2348,7 +2348,12 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           body: JSON.stringify({ realm }),
           signal: oauthAbortController.signal
         });
-        const data = await res.json();
+        const data = await res.json().catch(() => ({}));
+        if (res.status === 401 || data.need_login) {
+          closeOAuthModal();
+          showLoginModal(true, true);
+          return;
+        }
         // 检查弹窗是否已被关闭
         const modal = document.getElementById('oauthModal');
         if (!modal || modal.classList.contains('hidden')) {

@@ -7,6 +7,8 @@ import (
 	"encoding/json"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -126,7 +128,65 @@ type webSessionInfo struct {
 }
 
 // webSessions 存储已登录的 Web 会话 (token -> webSessionInfo)
-var webSessions sync.Map
+var (
+	webSessions         sync.Map
+	webSessionsLoadOnce sync.Once
+	webSessionsSaveMu   sync.Mutex
+)
+
+func (h *Handler) webSessionsFilePath() string {
+	if h == nil || h.cfg.StateFile == "" {
+		return ""
+	}
+	return filepath.Join(filepath.Dir(h.cfg.StateFile), "web_sessions.json")
+}
+
+func (h *Handler) ensureWebSessionsLoaded() {
+	fp := h.webSessionsFilePath()
+	if fp == "" {
+		return
+	}
+	webSessionsLoadOnce.Do(func() {
+		raw, err := os.ReadFile(fp)
+		if err != nil {
+			return
+		}
+		var m map[string]webSessionInfo
+		if err := json.Unmarshal(raw, &m); err != nil {
+			return
+		}
+		now := time.Now()
+		for tok, s := range m {
+			if now.Before(s.ExpiresAt) {
+				webSessions.Store(tok, s)
+			}
+		}
+	})
+}
+
+func (h *Handler) saveWebSessions() {
+	fp := h.webSessionsFilePath()
+	if fp == "" {
+		return
+	}
+	webSessionsSaveMu.Lock()
+	defer webSessionsSaveMu.Unlock()
+
+	_ = os.MkdirAll(filepath.Dir(fp), 0755)
+	m := make(map[string]webSessionInfo)
+	now := time.Now()
+	webSessions.Range(func(k, v any) bool {
+		if tok, ok := k.(string); ok {
+			if s, ok := v.(webSessionInfo); ok && now.Before(s.ExpiresAt) {
+				m[tok] = s
+			}
+		}
+		return true
+	})
+	if raw, err := json.MarshalIndent(m, "", "  "); err == nil {
+		_ = os.WriteFile(fp, raw, 0600)
+	}
+}
 
 // cleanExpiredSessions 清理已过期的 Web 会话，防止长期运行内存泄漏
 func cleanExpiredSessions() {
@@ -148,6 +208,7 @@ func generateSessionToken() string {
 }
 
 func (h *Handler) getWebSessionUser(r *http.Request) *usermgr.User {
+	h.ensureWebSessionsLoaded()
 	cookie, err := r.Cookie(webSessionCookieName)
 	if err == nil && cookie.Value != "" {
 		if val, ok := webSessions.Load(cookie.Value); ok {
@@ -211,6 +272,7 @@ func (h *Handler) getWebSessionUser(r *http.Request) *usermgr.User {
 }
 
 func (h *Handler) checkWebAuth(r *http.Request) bool {
+	h.ensureWebSessionsLoaded()
 	pw := h.GetWebPassword()
 
 	// 1. 支持 Header 鉴权: X-Web-Password
@@ -347,6 +409,7 @@ func (h *Handler) handleWebLogin(w http.ResponseWriter, r *http.Request) {
 		User:      loggedUser,
 		ExpiresAt: exp,
 	})
+	go h.saveWebSessions()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     webSessionCookieName,
@@ -404,6 +467,7 @@ func (h *Handler) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 		User:      u,
 		ExpiresAt: exp,
 	})
+	go h.saveWebSessions()
 
 	http.SetCookie(w, &http.Cookie{
 		Name:     webSessionCookieName,
@@ -423,6 +487,7 @@ func (h *Handler) handleWebRegister(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) handleWebLogout(w http.ResponseWriter, r *http.Request) {
 	if cookie, err := r.Cookie(webSessionCookieName); err == nil && cookie.Value != "" {
 		webSessions.Delete(cookie.Value)
+		go h.saveWebSessions()
 	}
 
 	http.SetCookie(w, &http.Cookie{
