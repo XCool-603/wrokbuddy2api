@@ -386,6 +386,16 @@ func main() {
 			}
 		}()
 	}
+	if cfg.Schedule.TasksEnabled {
+		go func() {
+			select {
+			case <-time.After(8 * time.Second):
+				log.Printf("[scheduler] 服务启动自检：立即自动执行全量成长任务与最新活动积分流水线...")
+				sch.RunTasksNow()
+			case <-ctx.Done():
+			}
+		}()
+	}
 
 	srv := &http.Server{
 		Addr:              cfg.Listen,
