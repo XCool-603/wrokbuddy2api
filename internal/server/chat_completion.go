@@ -739,6 +739,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					log.Printf("WARN: [server] stream usage without credit acct=%s model=%s (no cost observation)", logfmt.Label(acct.UID, acct.Nickname), bareModel)
 				}
 				rc.Close()
+				if st.status == http.StatusOK {
+					h.triggerAsyncCreditFetch(acct, acct.UID, false)
+				}
 				return
 			}
 			resp, err := upstream.Aggregate(rc)
@@ -772,6 +775,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			writeJSON(w, http.StatusOK, resp)
 			st.status = http.StatusOK
 			st.toks = completionTokens(resp)
+			h.triggerAsyncCreditFetch(acct, acct.UID, false)
 			return
 		}
 

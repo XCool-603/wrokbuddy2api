@@ -117,6 +117,7 @@ func (s *Scheduler) RunCatNow() {
 	runScript("cat", root, [][]string{
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes", "--only", "black_cat"},
 	})
+	s.syncAllCredits()
 }
 
 // RunTasksNow 立即执行全量成长任务与最新活动任务：task_runner.py ALL --yes。
@@ -126,4 +127,24 @@ func (s *Scheduler) RunTasksNow() {
 	runScript("tasks", root, [][]string{
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes"},
 	})
+	s.syncAllCredits()
+}
+
+// syncAllCredits 任务执行完毕后同步池内所有可用账号的最新积分余额，保证最新到账实时呈现。
+func (s *Scheduler) syncAllCredits() {
+	if s == nil || s.cfg.Pool == nil || s.cfg.Upstream == nil {
+		return
+	}
+	for _, st := range s.cfg.Pool.List() {
+		if st.Disabled {
+			continue
+		}
+		a := s.cfg.Pool.AuthByUID(st.UID)
+		if a == nil || a.AccessTokenValue() == "" {
+			continue
+		}
+		if remain, expiring, _, _, err := s.cfg.Upstream.ResourceSummary(a); err == nil {
+			s.cfg.Pool.SetCreditsDetailed(st.UID, remain, expiring)
+		}
+	}
 }

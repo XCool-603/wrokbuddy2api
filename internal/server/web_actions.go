@@ -445,7 +445,7 @@ func (h *Handler) handleAccountUpdateToken(w http.ResponseWriter, r *http.Reques
 	}
 
 	// 异步刷新一次该号资产明细
-	h.triggerAsyncCreditFetch(a, req.UID)
+	h.triggerAsyncCreditFetch(a, req.UID, true)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,
@@ -648,7 +648,7 @@ func (h *Handler) handleActionBindInvite(w http.ResponseWriter, r *http.Request)
 	}
 
 	// 绑定成功后刷新资产
-	h.triggerAsyncCreditFetch(a, a.UID)
+	h.triggerAsyncCreditFetch(a, a.UID, true)
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"success": true,

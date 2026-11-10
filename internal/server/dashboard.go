@@ -21,13 +21,14 @@ var (
 	creditFetching = make(map[string]time.Time)
 )
 
-func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string) {
+func (h *Handler) triggerAsyncCreditFetch(a *auth.Auth, uid string, force bool) {
 	if a == nil || a.AccessTokenValue() == "" || h.cfg.Upstream == nil || h.cfg.Pool == nil {
 		return
 	}
 	creditFetchMu.Lock()
 	last, fetching := creditFetching[uid]
-	if fetching && time.Since(last) < 2*time.Minute {
+	// 默认防抖大幅优化为 15 秒（大幅增强积分实时性），force 为 true 时允许立即穿透强制拉取
+	if !force && fetching && time.Since(last) < 15*time.Second {
 		creditFetchMu.Unlock()
 		return
 	}
@@ -189,6 +190,7 @@ func (h *Handler) isAccountVisibleTo(a *auth.Auth, user *usermgr.User) bool {
 }
 
 func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
+	isFresh := r.URL.Query().Get("fresh") == "1" || r.URL.Query().Get("force") == "1"
 	total, healthy, cooling, disabled, inFlightFull := h.cfg.Pool.CountsDetailed()
 	sticky := 0
 	if h.cfg.StickyCount != nil {
@@ -327,9 +329,9 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			matchedFP := fmt.Sprintf("%s:%s:%s", matched.Realm, matched.Provider, strings.ToLower(auth.CleanRawUID(matched.UID)))
 			seenAccount[matchedFP] = true
 		}
-		// 若池内积分为 0 或未初始化，后台异步向上游查询真实积分并回填到账号池，绝不阻塞 Web 控制台响应
-		if item.Credits == 0 && a.AccessTokenValue() != "" {
-			h.triggerAsyncCreditFetch(a, item.UID)
+		// 实时积分自动同步：若当前账号有 token，异步拉取最新真实积分与即将到期积分（带 15s 平滑防抖，前端传 fresh=1 时强制立即拉取），绝不阻塞 Web 控制台响应！
+		if a.AccessTokenValue() != "" {
+			h.triggerAsyncCreditFetch(a, item.UID, isFresh)
 		}
 		accounts = append(accounts, item)
 	}
@@ -428,7 +430,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			InviteURL:         poolInviteURL,
 		}
 		if item.Credits == 0 && authObj != nil && authObj.AccessTokenValue() != "" {
-			h.triggerAsyncCreditFetch(authObj, p.UID)
+			h.triggerAsyncCreditFetch(authObj, p.UID, isFresh)
 		}
 		accounts = append(accounts, item)
 	}
