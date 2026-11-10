@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"workbuddy2api/internal/auth"
 	"workbuddy2api/internal/pool"
@@ -89,7 +90,7 @@ func TestHandleActionWelfareAndInvite(t *testing.T) {
 	if !welfareResp.Success {
 		t.Errorf("expected success true")
 	}
-	if welfareResp.TotalNewCredits != 86 { // 66 (gift) + 20 (comp) = 86
+	if welfareResp.TotalNewCredits != 386 { // 66 (gift) + 20 (comp) + 300 (buddy adopt) = 386
 		t.Errorf("expected 86 total credits, got %d", welfareResp.TotalNewCredits)
 	}
 
@@ -114,5 +115,43 @@ func TestHandleActionWelfareAndInvite(t *testing.T) {
 	}
 	if bindResp.Reward != 50 {
 		t.Errorf("expected 50 reward credits, got %d", bindResp.Reward)
+	}
+
+	// 测试派猫猫旅行 handleActionTravel
+	travelReq := httptest.NewRequest(http.MethodPost, "/ui/action/travel", bytes.NewReader([]byte(`{}`)))
+	travelW := httptest.NewRecorder()
+	h.handleActionTravel(travelW, travelReq)
+	if travelW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for travel, got %d", travelW.Code)
+	}
+	var travelResp struct {
+		Success bool   `json:"success"`
+		Output  string `json:"output"`
+	}
+	if err := json.Unmarshal(travelW.Body.Bytes(), &travelResp); err != nil {
+		t.Fatalf("unmarshal travel response failed: %v", err)
+	}
+	if !travelResp.Success {
+		t.Errorf("expected travel success true")
+	}
+
+	// 测试一键活动任务 handleActionTasks
+	tasksDone := make(chan struct{}, 1)
+	h.cfg.RunTasksFunc = func() {
+		select {
+		case tasksDone <- struct{}{}:
+		default:
+		}
+	}
+	tasksReq := httptest.NewRequest(http.MethodPost, "/ui/action/tasks", bytes.NewReader([]byte(`{}`)))
+	tasksW := httptest.NewRecorder()
+	h.handleActionTasks(tasksW, tasksReq)
+	if tasksW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for tasks, got %d", tasksW.Code)
+	}
+	select {
+	case <-tasksDone:
+	case <-time.After(500 * time.Millisecond):
+		t.Errorf("expected RunTasksFunc to be called")
 	}
 }

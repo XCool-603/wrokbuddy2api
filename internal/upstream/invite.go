@@ -301,12 +301,45 @@ func (c *Client) ClaimAllWelfare(a *auth.Auth) *WelfareResult {
 			}
 		}
 
-		// D. 激活新手猫猫成长旅途与协议（buddy first / agreement）
-		_ = c.BuddyAgreement(a)
-		if err := c.BuddyFirst(a); err == nil {
-			res.BuddyStatus = "OK"
+		// D. 激活新手猫猫成长旅途与协议，并自动派出或领奖
+		buddy, _ := c.BuddyInfo(a)
+		if buddy == nil {
+			_ = c.BuddyAgreement(a)
+			if err := c.BuddyFirst(a); err == nil {
+				res.BuddyStatus = "ADOPTED"
+				res.TotalNewCredits += 300
+			} else {
+				res.BuddyStatus = "NO_CAT"
+			}
 		} else {
-			res.BuddyStatus = "OK" // 幂等跳过
+			res.BuddyStatus = "READY"
+		}
+
+		// 检查猫猫旅行状态机并自动派猫或领奖
+		if ts, err := c.TravelStatus(a); err == nil && ts != nil {
+			switch ts.State {
+			case "arrived":
+				if ts.RecordID > 0 {
+					if reward, err := c.TravelClaim(a, ts.RecordID); err == nil {
+						res.BuddyStatus = "CLAIMED"
+						res.TotalNewCredits += reward
+					}
+				}
+			case "idle":
+				if !ts.DailyLimitReached {
+					if err := c.TravelDepart(a, 4); err == nil {
+						res.BuddyStatus = "DEPARTED"
+					}
+				} else {
+					if res.BuddyStatus != "ADOPTED" {
+						res.BuddyStatus = "LIMIT"
+					}
+				}
+			case "traveling":
+				if res.BuddyStatus != "ADOPTED" {
+					res.BuddyStatus = "TRAVELING"
+				}
+			}
 		}
 	}
 

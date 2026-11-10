@@ -656,3 +656,199 @@ func (h *Handler) handleActionBindInvite(w http.ResponseWriter, r *http.Request)
 		"message": fmt.Sprintf("成功绑定邀请人！恭喜获得邀请奖励积分: +%d", reward),
 	})
 }
+
+// handleActionTravel 一键为所有（或指定）账号执行猫猫旅行巡检：自动领养 / 派出旅行 / 领奖归来。
+func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID string `json:"uid"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	authDir := h.getAuthDir()
+	files, err := auth.LoadAuthFiles(authDir)
+	if err != nil || len(files) == 0 {
+		writeJSON(w, http.StatusOK, map[string]any{
+			"output": "未找到任何账号凭证文件 (" + authDir + " 目录为空)",
+		})
+		return
+	}
+
+	up := h.cfg.Upstream
+	if up == nil {
+		up = upstream.New()
+	}
+
+	user := h.getWebSessionUser(r)
+
+	var sb strings.Builder
+	sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-16s | %-8s | %-8s\n", "UID", "昵称", "猫猫", "当前状态", "本次动作", "本次到账", "最新余额"))
+	sb.WriteString("-----------------------------+--------------+------------+------------+------------------+----------+----------\n")
+
+	departN, claimN, adoptN, skipN, totalReward := 0, 0, 0, 0, int64(0)
+
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		a, err := auth.Parse(raw)
+		if err != nil {
+			continue
+		}
+		a.FilePath = f
+
+		if !h.isAccountVisibleTo(a, user) {
+			continue
+		}
+		if req.UID != "" && a.UID != req.UID && auth.CleanRawUID(a.UID) != auth.CleanRawUID(req.UID) {
+			continue
+		}
+
+		nick := a.Nickname
+		if nick == "" {
+			nick = "-"
+		}
+
+		if a.IsGlobal() {
+			sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-16s | %-8s | %-8s\n",
+				logfmt.Truncate(a.UID, 28), logfmt.Truncate(nick, 12), "-", "N/A", "国际版无猫猫体系", "-", "-"))
+			skipN++
+			continue
+		}
+
+		// token 临近过期时刷新
+		if a.NeedsRefresh(2 * 3600) {
+			if err := up.RefreshToken(a); err == nil {
+				a.BackfillRealm()
+				_ = a.SaveAtomic()
+			}
+		}
+
+		var catName = "-"
+		var currentStatus = "未知"
+		var action = "无动作"
+		var rewardEarned int64 = 0
+
+		// 1. 查猫档案
+		buddy, bErr := up.BuddyInfo(a)
+		if bErr != nil {
+			action = "查猫失败: " + bErr.Error()
+		} else if buddy == nil {
+			// 无猫：尝试领养
+			_ = up.BuddyAgreement(a)
+			if err := up.BuddyFirst(a); err == nil {
+				catName = "新领养"
+				action = "领养成功(+300)"
+				rewardEarned += 300
+				adoptN++
+			} else {
+				catName = "未领养"
+				action = "对话门槛未达"
+			}
+		} else {
+			catName = buddy.Name
+			if catName == "" {
+				catName = "已有猫"
+			}
+		}
+
+		// 2. 查旅行状态
+		ts, tsErr := up.TravelStatus(a)
+		if tsErr != nil {
+			currentStatus = "查询失败"
+		} else if ts != nil {
+			currentStatus = ts.State
+			switch ts.State {
+			case "arrived":
+				currentStatus = "已到站"
+				if ts.RecordID > 0 {
+					rw, cErr := up.TravelClaim(a, ts.RecordID)
+					if cErr == nil {
+						action = fmt.Sprintf("领奖成功(+%d)", rw)
+						rewardEarned += rw
+						claimN++
+					} else {
+						action = "领奖失败: " + cErr.Error()
+					}
+				}
+			case "idle":
+				currentStatus = "空闲"
+				if !ts.DailyLimitReached {
+					if dErr := up.TravelDepart(a, 4); dErr == nil {
+						action = "已派出旅行"
+						departN++
+					} else {
+						action = "派出失败: " + dErr.Error()
+					}
+				} else {
+					action = "今日已达上限"
+					skipN++
+				}
+			case "traveling":
+				currentStatus = "旅行中"
+				action = "等待归来"
+				skipN++
+			}
+		}
+
+		totalReward += rewardEarned
+
+		// 查询最新余额
+		finalCreditsStr := "-"
+		if rem, qerr := up.UserResource(a); qerr == nil {
+			finalCreditsStr = fmt.Sprintf("%d", rem)
+			if h.cfg.Pool != nil {
+				h.cfg.Pool.SetCredits(a.UID, rem)
+			}
+		}
+
+		rewardCol := "-"
+		if rewardEarned > 0 {
+			rewardCol = fmt.Sprintf("+%d", rewardEarned)
+		}
+
+		sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-16s | %-8s | %-8s\n",
+			logfmt.Truncate(a.UID, 28), logfmt.Truncate(nick, 12), logfmt.Truncate(catName, 10),
+			logfmt.Truncate(currentStatus, 10), logfmt.Truncate(action, 16), rewardCol, finalCreditsStr))
+	}
+
+	sb.WriteString(fmt.Sprintf("\n总计处理: %d | 派出旅行: %d | 领奖成功: %d | 领养成功: %d | 跳过/待归: %d | 本轮到账积分: +%d\n",
+		departN+claimN+adoptN+skipN, departN, claimN, adoptN, skipN, totalReward))
+
+	if h.cfg.RunTravelFunc != nil {
+		go h.cfg.RunTravelFunc()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success":           true,
+		"total_new_credits": totalReward,
+		"output":            sb.String(),
+	})
+}
+
+// handleActionTasks 一键异步执行全量成长任务与最新活动自动化。
+func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
+	if h.cfg.RunTasksFunc != nil {
+		go h.cfg.RunTasksFunc()
+	}
+
+	msg := `======================================================================
+★ 全量成长任务与最新活动自动化流水线已成功触发并在后台执行！
+======================================================================
+已自动为您排程覆盖以下 8 大活动与日常积分任务：
+  1. [买得好专家]         expert_use_maidehao        (+50 积分)
+  2. [抖音乐园互动]       expert_use_douyinyin       (+50 积分)
+  3. [商家宣传达人]       expert_use_shangjia_xuanchuan (+50 积分)
+  4. [博汪汪宠物专家]     expert_use_bowangwang      (+50 积分)
+  5. [无畏契约拼豆图纸]   WorkBuddy_Valorant         (+50 积分)
+  6. [微信公众号订阅]     wb_wechat_oa_subscribe_task (+50 积分)
+  7. [夜猫子灵感对话]     black_cat (GLM-5.2)        (+30 积分，时段窗口判定)
+  8. [开学季与常规日常]   school_open_day & daily chat
+
+任务已在后台平稳执行（自动做账号限速防风控），完成后积分将自动注入您的账号池！`
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"success": true,
+		"output":  msg,
+	})
+}

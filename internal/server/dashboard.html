@@ -349,9 +349,17 @@
               <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
               <span>一键全量导出</span>
             </a>
-                        <button onclick="runBatchWelfare()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键领取所有账号的新手大礼包、活动补偿与签到（多开新号必备）">
+                        <button onclick="runBatchWelfare()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键领取所有账号的新手大礼包、活动补偿、签到并联动派猫与后台活动（多开新号必备）">
               <span>🎁</span>
               <span>一键吃满新手福利</span>
+            </button>
+            <button onclick="runBatchTravel()" class="px-3 py-1.5 bg-gradient-to-r from-pink-500/20 to-rose-500/20 hover:from-pink-500/30 hover:to-rose-500/30 text-pink-300 hover:text-pink-200 border border-pink-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键对所有账号执行猫猫巡检：自动领养第一只猫、派出猫猫去旅行、旅行归来到站领奖">
+              <span>🐱</span>
+              <span>一键派猫猫旅行</span>
+            </button>
+            <button onclick="runBatchTasks()" class="px-3 py-1.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 hover:text-cyan-200 border border-cyan-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键后台执行买得好、抖音乐园、商家宣传、博汪汪宠物、无畏契约拼豆等最新活动积分任务">
+              <span>⚡</span>
+              <span>最新活动成长任务</span>
             </button>
             <button onclick="openInviteModal()" class="px-3 py-1.5 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 border border-purple-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="查看专属邀请链接与邀请码，新号注册吃福利指南">
               <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
@@ -2175,6 +2183,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               </td>
               <td class="px-6 py-4 text-right font-sans space-x-2">
                 <button onclick="runSingleWelfare('${a.uid}')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="为此账号单独领取全套新手礼包、签到与活动福利">领福利</button>
+                <button onclick="runSingleTravel('${a.uid}')" class="text-xs text-pink-400 hover:text-pink-300 hover:underline" title="为该账号领养/派出猫猫旅行/领奖">派猫猫</button>
                 ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
                 ${isCooling ? `<button onclick="controlAccount('${a.uid}', 'clear_cooling')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="上游已恢复时可直接解除冷却">解除冷却</button>` : ''}
                 <button onclick="openUpdateTokenModal('${a.uid}', '${escapeHtml(a.nickname || a.uid)}')" class="text-xs text-sky-400 hover:text-sky-300 hover:underline" title="更换/更新 Token 并一键解封">重填Token</button>
@@ -2955,6 +2964,78 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         refreshData();
       } catch (err) {
         alert('领取福利失败: ' + err.message);
+      }
+    }
+
+    async function runBatchTravel() {
+      const btn = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+      let origText = '';
+      if (btn) {
+        origText = btn.innerHTML;
+        btn.innerHTML = '<span>⏳</span><span>正在巡检派猫中...</span>';
+        btn.disabled = true;
+      }
+      try {
+        const res = await fetch('/ui/action/travel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        document.getElementById('welfareRawOutput').textContent = data.output || '无输出';
+        document.getElementById('welfareModal').classList.remove('hidden');
+        refreshData();
+      } catch (err) {
+        alert('派猫猫旅行失败: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.innerHTML = origText;
+          btn.disabled = false;
+        }
+      }
+    }
+
+    async function runSingleTravel(uid) {
+      try {
+        const res = await fetch('/ui/action/travel', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ uid: uid })
+        });
+        const data = await res.json();
+        document.getElementById('welfareRawOutput').textContent = data.output || '无输出';
+        document.getElementById('welfareModal').classList.remove('hidden');
+        refreshData();
+      } catch (err) {
+        alert('派猫猫失败: ' + err.message);
+      }
+    }
+
+    async function runBatchTasks() {
+      const btn = (typeof event !== 'undefined' && event) ? event.currentTarget : null;
+      let origText = '';
+      if (btn) {
+        origText = btn.innerHTML;
+        btn.innerHTML = '<span>⏳</span><span>正在触发任务...</span>';
+        btn.disabled = true;
+      }
+      try {
+        const res = await fetch('/ui/action/tasks', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({})
+        });
+        const data = await res.json();
+        document.getElementById('welfareRawOutput').textContent = data.output || '无输出';
+        document.getElementById('welfareModal').classList.remove('hidden');
+        refreshData();
+      } catch (err) {
+        alert('触发活动任务失败: ' + err.message);
+      } finally {
+        if (btn) {
+          btn.innerHTML = origText;
+          btn.disabled = false;
+        }
       }
     }
 

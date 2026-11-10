@@ -76,6 +76,8 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/action/signin", h.withWebAuth(h.handleActionSignin))
 	h.mux.HandleFunc("POST /ui/action/trial", h.withWebAuth(h.handleActionTrial))
 	h.mux.HandleFunc("POST /ui/action/welfare", h.withWebAuth(h.handleActionWelfare))
+	h.mux.HandleFunc("POST /ui/action/travel", h.withWebAuth(h.handleActionTravel))
+	h.mux.HandleFunc("POST /ui/action/tasks", h.withWebAuth(h.handleActionTasks))
 	h.mux.HandleFunc("POST /ui/action/bind_invite", h.withWebAuth(h.handleActionBindInvite))
 	h.mux.HandleFunc("POST /ui/action/delete", h.withWebAuth(h.handleActionDelete))
 	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))

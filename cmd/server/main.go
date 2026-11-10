@@ -358,18 +358,30 @@ func main() {
 		FreeModels:      cfg.FreeModels,
 		AutoFreeEnabled: cfg.AutoFreeEnabled,
 		AlertMgr:        alertMgr,
+		RunTasksFunc:    sch.RunTasksNow,
+		RunTravelFunc:   sch.RunTravelNow,
 	})
 
 	go sch.Run(ctx)
 
-	// 服务启动自检补签：如果启用了自动签到，服务启动后延迟 3 秒异步执行一次签到检查与余额刷新，
-	// 避免桌面用户/按需运行用户因非整点（9:00/21:00）启动而必须等待半天甚至全天无法触发自动签到。
+	// 服务启动自检：如果启用了自动签到与猫猫旅行，服务启动后延迟 3~5 秒异步执行一次自检，
+	// 避免桌面用户/按需运行用户因非整点启动而必须等待半天甚至全天无法触发签到与派猫。
 	if cfg.Schedule.CheckinEnabled {
 		go func() {
 			select {
 			case <-time.After(3 * time.Second):
 				log.Printf("[scheduler] 服务启动自检：立即执行首次自动签到与余额刷新...")
 				sch.RunCheckinNow()
+			case <-ctx.Done():
+			}
+		}()
+	}
+	if cfg.Schedule.TravelEnabled {
+		go func() {
+			select {
+			case <-time.After(5 * time.Second):
+				log.Printf("[scheduler] 服务启动自检：立即执行猫猫旅行巡检（领养/派出/领奖）...")
+				sch.RunTravelNow()
 			case <-ctx.Done():
 			}
 		}()
