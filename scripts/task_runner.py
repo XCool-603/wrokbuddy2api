@@ -1234,6 +1234,12 @@ def light_up(auth, code, spec, cur, target, uid8, opts, stats, cap=0):
         time.sleep(opts.gap)
         st_b, bf = tc.do_post(auth, tc.chat_base(auth), tc.PATH_BUDDY_FIRST, {})
         msg = bf.get("msg") if isinstance(bf, dict) else bf
+        if st_b != 200 and isinstance(msg, str) and "first_buddy task not completed yet" in msg.lower():
+            print(f"[task_runner] {uid8} {code}: 对话门槛未达，自动补发 5 次对话上报再重试领养...")
+            tc.report_activity(auth, count=5, gap=opts.gap)
+            time.sleep(2.0)
+            st_b, bf = tc.do_post(auth, tc.chat_base(auth), tc.PATH_BUDDY_FIRST, {})
+            msg = bf.get("msg") if isinstance(bf, dict) else bf
         data = bf.get("data") or {} if isinstance(bf, dict) else {}
         cred = data.get("credit") or 0 if isinstance(data, dict) else 0
         energy = data.get("energy") or 0

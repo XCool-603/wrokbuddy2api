@@ -204,11 +204,12 @@ func (h *Handler) handleOAuthImport(w http.ResponseWriter, r *http.Request) {
 		log.Printf("WARN: [import] single import save failed: uid=%s err=%v (仍载入内存池)", uid, err)
 	}
 
-	// 立即将新账号同步入账号池并清除历史冷却与禁用状态
+	// 立即将新账号同步入账号池并清除历史冷却与禁用状态，并异步回填积分与自动领猫
 	if h.cfg.Pool != nil {
 		h.cfg.Pool.Add(a)
 		h.cfg.Pool.ReviveDisabled(a.UID)
 		h.cfg.Pool.ClearCooling(a.UID)
+		h.onboardNewAccountAsync(a)
 	}
 	log.Printf("INFO: [import] single import success: uid=%s owner=%s realm=%s provider=%s file=%s", uid, a.Owner, a.Realm(), a.Provider(), filepath.Base(targetFile))
 
@@ -446,14 +447,8 @@ func (h *Handler) handleOAuthBatchImport(w http.ResponseWriter, r *http.Request)
 			h.cfg.Pool.Add(a)
 			h.cfg.Pool.ReviveDisabled(a.UID)
 			h.cfg.Pool.ClearCooling(a.UID)
-			// 异步回填积分
-			if h.cfg.Upstream != nil && a.AccessTokenValue() != "" {
-				go func(acct *auth.Auth, u string) {
-					if rem, _, _, _, e := h.cfg.Upstream.ResourceSummary(acct); e == nil {
-						h.cfg.Pool.SetCredits(u, rem)
-					}
-				}(a, a.UID)
-			}
+			// 异步回填积分并自动领养第一只猫
+			h.onboardNewAccountAsync(a)
 		}
 		successCount++
 		successUIDs = append(successUIDs, a.UID)

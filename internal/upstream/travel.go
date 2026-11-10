@@ -6,9 +6,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
+	"time"
 
 	"workbuddy2api/internal/auth"
 )
@@ -163,4 +165,23 @@ func IsBuddyTaskIncomplete(err error) bool {
 		return false
 	}
 	return strings.Contains(strings.ToLower(ue.Msg), buddyTaskIncompleteMarker)
+}
+
+// AdoptBuddyWithUnlock 领养第一只猫：同意协议 → BuddyFirst；
+// 若命中 5 次对话前置门槛未达，自动补发 5 次活跃对话上报后再重试一次。
+func (c *Client) AdoptBuddyWithUnlock(a *auth.Auth) error {
+	if a == nil || a.IsGlobal() {
+		return fmt.Errorf("adopt buddy: only cn accounts")
+	}
+	_ = c.BuddyAgreement(a)
+	err := c.BuddyFirst(a)
+	if err != nil && IsBuddyTaskIncomplete(err) {
+		cid := fmt.Sprintf("wb2api-%d", time.Now().UnixMilli())
+		for k := 1; k <= 5; k++ {
+			_ = c.ReportChatActivity(a, cid, fmt.Sprintf("%s-r%d", cid, k))
+			time.Sleep(200 * time.Millisecond)
+		}
+		err = c.BuddyFirst(a)
+	}
+	return err
 }

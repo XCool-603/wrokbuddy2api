@@ -7,10 +7,13 @@
 package scheduler
 
 import (
+	"context"
+	"errors"
 	"log"
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 
 	"workbuddy2api/internal/sysproc"
@@ -128,6 +131,75 @@ func (s *Scheduler) RunTasksNow() {
 		{pythonCmd(), "scripts/task_runner.py", "ALL", "--yes"},
 	})
 	s.syncAllCredits()
+}
+
+// RunTasksForAccounts 同步执行指定账号集合的全量成长任务与最新活动，并返回完整脚本输出。
+// targets 为空时执行 ALL；authDir 非空时通过 WB2A_AUTH_DIR 注入目标凭证目录。
+func (s *Scheduler) RunTasksForAccounts(ctx context.Context, targets []string, authDir string) (string, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	root := repoRoot()
+	scriptPath := filepath.Join(root, "scripts", "task_runner.py")
+	if _, err := os.Stat(scriptPath); err != nil {
+		return "", err
+	}
+	args := []string{"scripts/task_runner.py"}
+	if len(targets) > 0 {
+		args = append(args, targets...)
+	} else {
+		args = append(args, "ALL")
+	}
+	args = append(args, "--yes")
+
+	bin := pythonCmd()
+	out, err := execTasksRunner(ctx, root, authDir, bin, args)
+	if err != nil && strings.TrimSpace(os.Getenv("WB2A_PYTHON")) == "" && isMissingPythonErr(err) && bin != "python" {
+		out2, err2 := execTasksRunner(ctx, root, authDir, "python", args)
+		if err2 == nil || len(out2) > len(out) {
+			out, err = out2, err2
+		}
+	}
+	if s != nil {
+		s.syncAllCredits()
+	}
+	return out, err
+}
+
+var execTasksRunner = execTaskRunner
+
+func execTaskRunner(ctx context.Context, root, authDir, bin string, args []string) (string, error) {
+	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd.Dir = root
+	sysproc.HideWindow(cmd)
+	if authDir != "" {
+		absDir, err := filepath.Abs(authDir)
+		if err != nil {
+			absDir = authDir
+		}
+		base := os.Environ()
+		env := make([]string, 0, len(base)+1)
+		for _, kv := range base {
+			if !strings.HasPrefix(kv, "WB2A_AUTH_DIR=") {
+				env = append(env, kv)
+			}
+		}
+		env = append(env, "WB2A_AUTH_DIR="+absDir)
+		cmd.Env = env
+	}
+	raw, err := cmd.CombinedOutput()
+	return string(raw), err
+}
+
+func isMissingPythonErr(err error) bool {
+	if errors.Is(err, exec.ErrNotFound) {
+		return true
+	}
+	var exitErr *exec.ExitError
+	if runtime.GOOS == "windows" && errors.As(err, &exitErr) && exitErr.ExitCode() == 9009 {
+		return true
+	}
+	return false
 }
 
 // syncAllCredits 任务执行完毕后同步池内所有可用账号的最新积分余额，保证最新到账实时呈现。

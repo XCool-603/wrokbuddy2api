@@ -1,9 +1,12 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -749,16 +752,7 @@ func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
 			action = "查猫失败: " + bErr.Error()
 		} else if buddy == nil {
 			// 无猫：尝试领养；若未满足 5 次对话门槛，自动补发 5 次活跃对话后再领养
-			_ = up.BuddyAgreement(a)
-			err := up.BuddyFirst(a)
-			if err != nil && upstream.IsBuddyTaskIncomplete(err) {
-				cid := fmt.Sprintf("wb2api-%d", time.Now().UnixMilli())
-				for k := 1; k <= 5; k++ {
-					_ = up.ReportChatActivity(a, cid, fmt.Sprintf("%s-r%d", cid, k))
-					time.Sleep(200 * time.Millisecond)
-				}
-				err = up.BuddyFirst(a)
-			}
+			err := up.AdoptBuddyWithUnlock(a)
 			if err == nil {
 				catName = "新领养"
 				action = "领养成功(+300)"
@@ -847,13 +841,99 @@ func (h *Handler) handleActionTravel(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleActionTasks 一键异步执行全量成长任务与最新活动自动化。
-func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
-	if h.cfg.RunTasksFunc != nil {
-		go h.cfg.RunTasksFunc()
+// onboardNewAccountAsync 新账号入池后异步同步实时余额，并为国内版无猫账号自动解锁并领养第一只猫。
+func (h *Handler) onboardNewAccountAsync(a *auth.Auth) {
+	if h == nil || h.cfg.Upstream == nil || a == nil || a.AccessTokenValue() == "" {
+		return
 	}
+	go func(acct *auth.Auth) {
+		up := h.cfg.Upstream
+		if rem, expiring, _, _, err := up.ResourceSummary(acct); err == nil && h.cfg.Pool != nil {
+			h.cfg.Pool.SetCreditsDetailed(acct.UID, rem, expiring)
+		}
+		if acct.IsGlobal() {
+			return
+		}
+		buddy, err := up.BuddyInfo(acct)
+		if err != nil || buddy != nil {
+			return
+		}
+		if err := up.AdoptBuddyWithUnlock(acct); err == nil {
+			log.Printf("INFO: [onboard] auto adopted buddy for new account %s (+300)", logfmt.Label(acct.UID, acct.Nickname))
+			if rem, expiring, _, _, qerr := up.ResourceSummary(acct); qerr == nil && h.cfg.Pool != nil {
+				h.cfg.Pool.SetCreditsDetailed(acct.UID, rem, expiring)
+			}
+		}
+	}(a)
+}
 
-	msg := `======================================================================
+func (h *Handler) resolveTargetAccounts(authDir string, user *usermgr.User, targetUID string) []*auth.Auth {
+	files, _ := auth.LoadAuthFiles(authDir)
+	seen := make(map[string]bool)
+	var out []*auth.Auth
+	for _, f := range files {
+		raw, err := os.ReadFile(f)
+		if err != nil {
+			continue
+		}
+		a, err := auth.Parse(raw)
+		if err != nil {
+			continue
+		}
+		a.FilePath = f
+		if !h.isAccountVisibleTo(a, user) {
+			continue
+		}
+		if targetUID != "" && a.UID != targetUID && auth.CleanRawUID(a.UID) != auth.CleanRawUID(targetUID) {
+			continue
+		}
+		if h.cfg.Pool != nil {
+			if live := h.cfg.Pool.AuthByUID(a.UID); live != nil {
+				if live.FilePath == "" {
+					live.FilePath = f
+				}
+				a = live
+			}
+		}
+		if seen[a.UID] {
+			continue
+		}
+		seen[a.UID] = true
+		out = append(out, a)
+	}
+	// 若磁盘尚未落盘（例如纯内存测试池），兜底从 Pool 补充
+	if len(out) == 0 && h.cfg.Pool != nil {
+		for _, st := range h.cfg.Pool.List() {
+			a := h.cfg.Pool.AuthByUID(st.UID)
+			if a == nil || !h.isAccountVisibleTo(a, user) {
+				continue
+			}
+			if targetUID != "" && a.UID != targetUID && auth.CleanRawUID(a.UID) != auth.CleanRawUID(targetUID) {
+				continue
+			}
+			out = append(out, a)
+		}
+	}
+	return out
+}
+
+// handleActionTasks 手动触发单账号或全部可控账号的成长任务、最新活动与自动领猫，并同步返回执行日志与到账增量。
+func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UID string `json:"uid"`
+	}
+	if r.Body != nil {
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil && !errors.Is(err, io.EOF) {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"success": false, "error": "请求参数解析失败"})
+			return
+		}
+	}
+	req.UID = strings.TrimSpace(req.UID)
+
+	// 兼容仅配置了 RunTasksFunc 且未传 UID 的旧调用/单测路径
+	if req.UID == "" && h.cfg.RunTasksAccountsFunc == nil && h.cfg.RunTasksFunc != nil {
+		go h.cfg.RunTasksFunc()
+		msg := `======================================================================
 ★ 全量成长任务与最新活动自动化流水线已成功触发并在后台执行！
 ======================================================================
 已自动为您排程覆盖以下 8 大活动与日常积分任务：
@@ -867,9 +947,167 @@ func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
   8. [开学季与常规日常]   school_open_day & daily chat
 
 任务已在后台平稳执行（自动做账号限速防风控），完成后积分将自动注入您的账号池！`
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": true,
+			"output":  msg,
+		})
+		return
+	}
 
-	writeJSON(w, http.StatusOK, map[string]any{
-		"success": true,
-		"output":  msg,
-	})
+	user := h.getWebSessionUser(r)
+	authDir := h.getAuthDir()
+	accts := h.resolveTargetAccounts(authDir, user, req.UID)
+	if len(accts) == 0 {
+		msg := "未找到任何可控账号凭证"
+		if req.UID != "" {
+			msg = "未找到指定账号或无权限操作"
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success": false,
+			"error":   msg,
+			"output":  msg,
+		})
+		return
+	}
+
+	up := h.cfg.Upstream
+	if up == nil {
+		up = upstream.New()
+		up.GlobalEnabled = true
+	}
+
+	var cnAccts []*auth.Auth
+	var targets []string
+	var globalSkipped []*auth.Auth
+	beforeCredits := make(map[string]int64, len(accts))
+
+	for _, a := range accts {
+		if a.IsGlobal() {
+			globalSkipped = append(globalSkipped, a)
+			continue
+		}
+		if a.NeedsRefresh(2*time.Hour) && a.RefreshTokenValue() != "" {
+			if err := up.RefreshToken(a); err == nil {
+				a.BackfillRealm()
+				_ = a.SaveAtomic()
+			}
+		}
+		if rem, _, err := up.UserResourceDetailed(a, 0); err == nil {
+			beforeCredits[a.UID] = rem
+		} else if h.cfg.Pool != nil {
+			if st, ok := h.cfg.Pool.Status(a.UID); ok {
+				beforeCredits[a.UID] = st.Credits
+			}
+		}
+		cnAccts = append(cnAccts, a)
+		if a.FilePath != "" {
+			targets = append(targets, a.FilePath)
+		} else {
+			targets = append(targets, a.UID)
+		}
+	}
+
+	if len(cnAccts) == 0 {
+		var sb strings.Builder
+		sb.WriteString("国际版账号无国内版成长任务体系，已跳过：\n")
+		for _, a := range globalSkipped {
+			sb.WriteString(fmt.Sprintf("  - %s (%s)\n", a.UID, a.Nickname))
+		}
+		writeJSON(w, http.StatusOK, map[string]any{
+			"success":           true,
+			"total_new_credits": 0,
+			"output":            sb.String(),
+		})
+		return
+	}
+
+	var scriptOut string
+	var runErr error
+	if h.cfg.RunTasksAccountsFunc != nil {
+		ctx, cancel := context.WithTimeout(r.Context(), 3*time.Minute)
+		defer cancel()
+		scriptOut, runErr = h.cfg.RunTasksAccountsFunc(ctx, targets, authDir)
+	} else if h.cfg.RunTasksFunc != nil {
+		h.cfg.RunTasksFunc()
+		scriptOut = "[RunTasksFunc 已执行]\n"
+	} else {
+		runErr = errors.New("未配置任务执行器 RunTasksAccountsFunc")
+	}
+
+	// 兜底确保无猫 CN 账号自动补对话解锁并领养，并同步实时余额
+	var sb strings.Builder
+	sb.WriteString("=== 手动成长任务与最新活动执行报告 ===\n")
+	sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-10s\n", "UID", "昵称", "猫猫状态", "本轮到账", "最新积分"))
+	sb.WriteString("-----------------------------+--------------+------------+------------+-----------\n")
+
+	var totalNew int64
+	for _, a := range cnAccts {
+		nick := a.Nickname
+		if nick == "" {
+			nick = "-"
+		}
+		catState := "-"
+		if buddy, berr := up.BuddyInfo(a); berr == nil {
+			if buddy == nil {
+				if aerr := up.AdoptBuddyWithUnlock(a); aerr == nil {
+					catState = "新领养"
+				} else {
+					catState = "未领养"
+				}
+			} else {
+				catState = buddy.Name
+				if catState == "" {
+					catState = "已有猫"
+				}
+			}
+		}
+		after := beforeCredits[a.UID]
+		if rem, buckets, qerr := up.UserResourceDetailed(a, 0); qerr == nil {
+			after = rem
+			if h.cfg.Pool != nil {
+				h.cfg.Pool.SetCreditsDetailed(a.UID, rem, buckets.Expiring)
+			}
+		}
+		delta := after - beforeCredits[a.UID]
+		if delta < 0 {
+			delta = 0
+		}
+		totalNew += delta
+		deltaStr := "-"
+		if delta > 0 {
+			deltaStr = fmt.Sprintf("+%d", delta)
+		}
+		sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-10d\n",
+			logfmt.Truncate(a.UID, 28), logfmt.Truncate(nick, 12), logfmt.Truncate(catState, 10), deltaStr, after))
+	}
+	for _, a := range globalSkipped {
+		nick := a.Nickname
+		if nick == "" {
+			nick = "-"
+		}
+		sb.WriteString(fmt.Sprintf("%-28s | %-12s | %-10s | %-10s | %-10s\n",
+			logfmt.Truncate(a.UID, 28), logfmt.Truncate(nick, 12), "SKIP(国际)", "-", "-"))
+	}
+	sb.WriteString(fmt.Sprintf("\n国内版处理: %d | 国际版跳过: %d | 本轮净增积分: +%d\n",
+		len(cnAccts), len(globalSkipped), totalNew))
+	if runErr != nil {
+		sb.WriteString(fmt.Sprintf("脚本执行异常: %v\n", runErr))
+	}
+	if strings.TrimSpace(scriptOut) != "" {
+		sb.WriteString("\n--- task_runner 详细输出 ---\n")
+		sb.WriteString(scriptOut)
+		if !strings.HasSuffix(scriptOut, "\n") {
+			sb.WriteString("\n")
+		}
+	}
+
+	resp := map[string]any{
+		"success":           runErr == nil,
+		"total_new_credits": totalNew,
+		"output":            sb.String(),
+	}
+	if runErr != nil {
+		resp["error"] = runErr.Error()
+	}
+	writeJSON(w, http.StatusOK, resp)
 }

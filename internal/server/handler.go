@@ -94,6 +94,9 @@ type Config struct {
 	// RunTasksFunc 执行全量成长任务与最新活动任务自动化（可选）
 	RunTasksFunc func()
 
+	// RunTasksAccountsFunc 对指定账号同步执行全量成长任务与最新活动并返回日志（可选）
+	RunTasksAccountsFunc func(ctx context.Context, targets []string, authDir string) (string, error)
+
 	// RunTravelFunc 执行猫猫旅行巡检自动化（领养 / 派出 / 领奖）（可选）
 	RunTravelFunc func()
 }
@@ -108,7 +111,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.41"
+const CurrentVersion = "v1.2.42"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。
 const dumpReqMinBytes = 4 << 20

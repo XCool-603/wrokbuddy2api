@@ -325,14 +325,8 @@ func (h *Handler) handleOAuthPoll(w http.ResponseWriter, r *http.Request) {
 			h.cfg.Pool.Add(newAuth)
 			h.cfg.Pool.ReviveDisabled(newAuth.UID)
 			h.cfg.Pool.ClearCooling(newAuth.UID)
-			// 异步回填积分
-			if h.cfg.Upstream != nil {
-				go func(a *auth.Auth, u string) {
-					if rem, _, _, _, e := h.cfg.Upstream.ResourceSummary(a); e == nil {
-						h.cfg.Pool.SetCredits(u, rem)
-					}
-				}(newAuth, newAuth.UID)
-			}
+			// 异步回填积分并自动为国内版新号领养第一只猫
+			h.onboardNewAccountAsync(newAuth)
 		}
 	}
 	log.Printf("INFO: [oauth] successfully authenticated account: uid=%s, nickname=%s, provider=%s, realm=%s, owner=%s, file=%s",

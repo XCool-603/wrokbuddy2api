@@ -304,8 +304,7 @@ func (c *Client) ClaimAllWelfare(a *auth.Auth) *WelfareResult {
 		// D. 激活新手猫猫成长旅途与协议，并自动派出或领奖
 		buddy, _ := c.BuddyInfo(a)
 		if buddy == nil {
-			_ = c.BuddyAgreement(a)
-			if err := c.BuddyFirst(a); err == nil {
+			if err := c.AdoptBuddyWithUnlock(a); err == nil {
 				res.BuddyStatus = "ADOPTED"
 				res.TotalNewCredits += 300
 			} else {

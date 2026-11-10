@@ -225,3 +225,32 @@ func TestTravel401ClassifiedSessionDead(t *testing.T) {
 		t.Fatalf("err=%v want ErrSessionDead", err)
 	}
 }
+
+// TestAdoptBuddyWithUnlockRetriesAfterFiveReports 领养门槛未达（400 first_buddy）时自动补 5 次对话上报后重试领养。
+func TestAdoptBuddyWithUnlockRetriesAfterFiveReports(t *testing.T) {
+	var firstCalls, agreeCalls, reportCalls int
+	c := testClient(func(r *http.Request) (*http.Response, error) {
+		switch r.URL.Path {
+		case "/activity/growth/buddy/agreement":
+			agreeCalls++
+			return jsonResp(200, `{"code":0,"msg":"ok","data":{}}`), nil
+		case "/v2/report":
+			reportCalls++
+			return jsonResp(200, `{"code":0,"msg":"ok","data":{}}`), nil
+		case "/activity/growth/buddy/first":
+			firstCalls++
+			if firstCalls == 1 {
+				return jsonResp(400, `{"code":400,"msg":"first_buddy task not completed yet"}`), nil
+			}
+			return jsonResp(200, `{"code":0,"msg":"ok","data":{"buddy":{"id":1}}}`), nil
+		default:
+			return nil, errors.New("unexpected path: " + r.URL.Path)
+		}
+	})
+	if err := c.AdoptBuddyWithUnlock(&auth.Auth{AccessToken: "at", UID: "u1"}); err != nil {
+		t.Fatalf("AdoptBuddyWithUnlock failed: %v", err)
+	}
+	if agreeCalls != 1 || reportCalls != 5 || firstCalls != 2 {
+		t.Errorf("agree=%d report=%d first=%d want 1/5/2", agreeCalls, reportCalls, firstCalls)
+	}
+}

@@ -2,11 +2,13 @@ package server
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -153,5 +155,95 @@ func TestHandleActionWelfareAndInvite(t *testing.T) {
 	case <-tasksDone:
 	case <-time.After(500 * time.Millisecond):
 		t.Errorf("expected RunTasksFunc to be called")
+	}
+
+	// 测试单账号手动做任务：支持按 UID 精确筛选、同步返回真实输出与到账增量、无猫自动补 5 次对话领养
+	var gotTargets []string
+	var creditsAfter int64 = 186
+	var firstCalls, reportCalls int
+	upTasksSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		switch r.URL.Path {
+		case "/billing/meter/get-user-resource", "/v2/billing/meter/get-user-resource":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{
+					"Response": map[string]any{
+						"Data": map[string]any{
+							"Accounts": []map[string]any{
+								{
+									"CapacityRemain":      creditsAfter,
+									"CapacitySize":        creditsAfter,
+									"CycleCapacityRemain": creditsAfter,
+									"CycleCapacitySize":   creditsAfter,
+								},
+							},
+						},
+					},
+				},
+			})
+		case "/activity/growth/buddy/info":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"buddy": nil}})
+		case "/activity/growth/buddy/agreement":
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
+		case "/v2/report":
+			reportCalls++
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
+		case "/activity/growth/buddy/first":
+			firstCalls++
+			if firstCalls == 1 {
+				w.WriteHeader(http.StatusBadRequest)
+				_ = json.NewEncoder(w).Encode(map[string]any{"code": 400, "msg": "first_buddy task not completed yet"})
+				return
+			}
+			creditsAfter += 300
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{"buddy": map[string]any{"id": 99}}})
+		default:
+			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
+		}
+	}))
+	defer upTasksSrv.Close()
+
+	up2 := upstream.New()
+	up2.ChatBaseCN = upTasksSrv.URL
+	up2.BillingBaseCN = upTasksSrv.URL
+	h2 := NewHandler(Config{
+		Pool:     p,
+		Upstream: up2,
+		AuthDir:  tmpDir,
+		RunTasksAccountsFunc: func(ctx context.Context, targets []string, authDir string) (string, error) {
+			gotTargets = targets
+			creditsAfter += 50
+			return "task_runner done: accounts=1 ok=1 credit=+50", nil
+		},
+	})
+	singleTaskReq := httptest.NewRequest(http.MethodPost, "/ui/action/tasks", bytes.NewReader([]byte(`{"uid":"wb_user_welfare_1"}`)))
+	singleTaskW := httptest.NewRecorder()
+	h2.handleActionTasks(singleTaskW, singleTaskReq)
+	if singleTaskW.Code != http.StatusOK {
+		t.Fatalf("expected 200 OK for single tasks, got %d", singleTaskW.Code)
+	}
+	var singleResp struct {
+		Success         bool   `json:"success"`
+		TotalNewCredits int64  `json:"total_new_credits"`
+		Output          string `json:"output"`
+	}
+	if err := json.Unmarshal(singleTaskW.Body.Bytes(), &singleResp); err != nil {
+		t.Fatalf("unmarshal single task resp failed: %v", err)
+	}
+	if !singleResp.Success {
+		t.Errorf("expected single task success true, output=%s", singleResp.Output)
+	}
+	if len(gotTargets) != 1 || gotTargets[0] != authFile {
+		t.Errorf("targets=%v want [%s]", gotTargets, authFile)
+	}
+	if singleResp.TotalNewCredits != 350 { // +50 task +300 auto-adopt
+		t.Errorf("total_new_credits=%d want 350", singleResp.TotalNewCredits)
+	}
+	if !strings.Contains(singleResp.Output, "新领养") || !strings.Contains(singleResp.Output, "credit=+50") {
+		t.Errorf("output missing expected summary/script text: %s", singleResp.Output)
+	}
+	if reportCalls != 5 || firstCalls != 2 {
+		t.Errorf("reportCalls=%d firstCalls=%d want 5/2", reportCalls, firstCalls)
 	}
 }

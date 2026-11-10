@@ -6,6 +6,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -236,5 +237,37 @@ func TestNextWakeTasksSlot(t *testing.T) {
 	}
 	if len(kinds) != 1 || kinds[0] != taskTasks {
 		t.Errorf("kinds=%v want [tasks]", kinds)
+	}
+}
+
+func TestRunTasksForAccountsTargetsAndFallback(t *testing.T) {
+	t.Setenv("WB2A_PYTHON", "")
+	orig := execTasksRunner
+	t.Cleanup(func() { execTasksRunner = orig })
+
+	var calls [][]string
+	var gotAuthDir string
+	execTasksRunner = func(ctx context.Context, root, authDir, bin string, args []string) (string, error) {
+		gotAuthDir = authDir
+		calls = append(calls, append([]string{bin}, args...))
+		if bin == "python3" {
+			return "", exec.ErrNotFound
+		}
+		return "task_runner done: accounts=1 ok=2 credit=+100", nil
+	}
+
+	s := New(Config{})
+	out, err := s.RunTasksForAccounts(context.Background(), []string{"/tmp/auths/workbuddy-u1.json"}, "/tmp/auths")
+	if err != nil {
+		t.Fatalf("RunTasksForAccounts err=%v", err)
+	}
+	if gotAuthDir != "/tmp/auths" {
+		t.Errorf("authDir=%q want /tmp/auths", gotAuthDir)
+	}
+	if !strings.Contains(out, "credit=+100") {
+		t.Errorf("out=%q missing script output", out)
+	}
+	if len(calls) != 2 || calls[0][0] != "python3" || calls[1][0] != "python" {
+		t.Fatalf("calls=%v want fallback python3 -> python", calls)
 	}
 }

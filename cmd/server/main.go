@@ -357,9 +357,10 @@ func main() {
 		ModelRoutes:     cfg.ModelRoutes,
 		FreeModels:      cfg.FreeModels,
 		AutoFreeEnabled: cfg.AutoFreeEnabled,
-		AlertMgr:        alertMgr,
-		RunTasksFunc:    sch.RunTasksNow,
-		RunTravelFunc:   sch.RunTravelNow,
+		AlertMgr:             alertMgr,
+		RunTasksFunc:         sch.RunTasksNow,
+		RunTasksAccountsFunc: sch.RunTasksForAccounts,
+		RunTravelFunc:        sch.RunTravelNow,
 	})
 
 	go sch.Run(ctx)
