@@ -171,8 +171,9 @@ def load_auth(uid_or_file: str) -> dict:
     """
     if os.path.sep in uid_or_file or "/" in uid_or_file or uid_or_file.endswith(".json"):
         p = uid_or_file
-        if not os.path.isabs(p):
-            p = os.path.join(AUTHS, p)
+        if not os.path.isabs(p) and not os.path.isfile(p):
+            cand = os.path.join(AUTHS, p)
+            p = cand if os.path.isfile(cand) else os.path.join(AUTHS, os.path.basename(p))
         if not os.path.isfile(p):
             raise SystemExit(f"no auth file: {p}")
     else:

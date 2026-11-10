@@ -1001,7 +1001,11 @@ func (h *Handler) handleActionTasks(w http.ResponseWriter, r *http.Request) {
 		}
 		cnAccts = append(cnAccts, a)
 		if a.FilePath != "" {
-			targets = append(targets, a.FilePath)
+			if abs, err := filepath.Abs(a.FilePath); err == nil {
+				targets = append(targets, abs)
+			} else {
+				targets = append(targets, filepath.Base(a.FilePath))
+			}
 		} else {
 			targets = append(targets, a.UID)
 		}
