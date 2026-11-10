@@ -171,11 +171,27 @@ func (h *Handler) GetFreeModelCandidates() []string {
 	}
 
 	// 5. 按照「健康优先、可用优先、避开熔断」动态分级排序
+	result := h.SortCandidatesByHealth(deduped)
+	if len(result) == 0 {
+		return builtinDefaults
+	}
+	return result
+}
+
+// SortCandidatesByHealth 对候选模型列表按照「当前有健康在线账号 > 备用无熔断 > 处于熔断冷却」动态分级排序。
+func (h *Handler) SortCandidatesByHealth(candidates []string) []string {
 	var healthyActive []string
 	var backupNormal []string
 	var coolingModels []string
 
-	for _, m := range deduped {
+	seen := make(map[string]bool)
+	for _, m := range candidates {
+		m = strings.TrimSpace(m)
+		if m == "" || seen[m] {
+			continue
+		}
+		seen[m] = true
+
 		// 若该模型当前正在熔断冷却中，移至末尾
 		if h != nil && h.modelBreaker != nil && h.modelBreaker.IsCooling(m) {
 			coolingModels = append(coolingModels, m)
@@ -199,14 +215,37 @@ func (h *Handler) GetFreeModelCandidates() []string {
 		}
 	}
 
-	// 合并优先级：有健康账号且无熔断 > 备用无熔断 > 熔断中
 	result := append(healthyActive, backupNormal...)
 	result = append(result, coolingModels...)
-
-	if len(result) == 0 {
-		return builtinDefaults
-	}
 	return result
+}
+
+// ResolveHunyuanFreeCandidates 解析混元等免费模型的跨域同名等价候选列表。
+func (h *Handler) ResolveHunyuanFreeCandidates(model string) []string {
+	clean := strings.ToLower(strings.TrimSpace(model))
+	clean = strings.TrimPrefix(clean, "global:")
+	clean = strings.TrimPrefix(clean, "cn:")
+	switch clean {
+	case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4free-preview":
+		base := []string{
+			"global:hy4-preview",
+			"cn:hy4-preview",
+			"global:hy4-preview-f",
+			"cn:hy4-preview-f",
+			"hy4-preview",
+		}
+		return h.SortCandidatesByHealth(base)
+	case "hy3free", "hy3-free", "hunyuan3-free":
+		base := []string{
+			"global:hy3",
+			"cn:hy3",
+			"global:hy3-preview",
+			"cn:hy3-preview",
+			"hy3",
+		}
+		return h.SortCandidatesByHealth(base)
+	}
+	return nil
 }
 
 // ResolveModelCandidates 解析客户端请求的模型名，若命中路由组或别名列表，返回有序的候选模型切片。
@@ -219,6 +258,11 @@ func (h *Handler) ResolveModelCandidates(model string) []string {
 	// 1. 命中内置免费模型别名 -> 自动返回动态免费模型候选池
 	if IsFreeRouteAlias(clean) {
 		return h.GetFreeModelCandidates()
+	}
+
+	// 1.5 命中混元专属免费模型别名 -> 返回带跨域健康排序的混元候选池
+	if hyCands := h.ResolveHunyuanFreeCandidates(clean); len(hyCands) > 0 {
+		return hyCands
 	}
 
 	// 2. 命中用户在 ModelRoutes 中自定义的路由组
@@ -254,11 +298,13 @@ func (h *Handler) ResolveModelCandidates(model string) []string {
 				}
 			} else if IsFreeRouteAlias(targetStr) {
 				return h.GetFreeModelCandidates()
+			} else if hyCands := h.ResolveHunyuanFreeCandidates(targetStr); len(hyCands) > 0 {
+				return hyCands
 			}
 		}
 	}
 
-	// 4. 普通单模型别名解析
+	// 4. 普通单模型别名解析与跨域自动补位
 	realm, bare := h.resolveModelWithAliases(clean)
 	if bare == "auto" || bare == "default-model" || bare == "" {
 		bare = "deepseek-v4.1-flash"
@@ -267,5 +313,21 @@ func (h *Handler) ResolveModelCandidates(model string) []string {
 	if realm != "" {
 		full = realm + ":" + bare
 	}
-	return []string{full}
+
+	var cands []string
+	cands = append(cands, full)
+
+	// 若请求带明确域前缀且该域在池中有账号配置，当该域故障或全死时，自动生成对端等价模型作为后备候选进行补位
+	if h != nil && h.cfg.Pool != nil {
+		totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+		if totalInRealm > 0 {
+			if realm == "global" {
+				cands = append(cands, "cn:"+bare, bare)
+			} else if realm == "cn" && strings.HasPrefix(clean, "cn:") {
+				cands = append(cands, "global:"+bare, bare)
+			}
+		}
+	}
+
+	return h.SortCandidatesByHealth(cands)
 }

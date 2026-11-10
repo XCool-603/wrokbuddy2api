@@ -306,31 +306,38 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				}
 			}
 			if acct == nil {
-				// 模型感知 + realm 感知 + 用户隔离选号：模型非空时启用 6004 模型级冷却豁免
-				// （healthyForModel），realm 谓词过滤跨域账号。
-				acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
-				// 双域动态容灾互补：当首选 realm 无可用健康账号时（全在冷却中或占满），
-				// 自动尝试在另一个域选号（global <-> cn），实现跨域容灾互补与高可用。
+				// 1. 优先尝试从首选 realm 挑选健康正常的在线账号（排除全冷却死号）
+				acct = h.cfg.Pool.PickHealthyOnlyExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
+
+				// 2. 双域动态容灾与自动补位：
+				// 当首选 realm 无可用健康账号时（全在冷却中、限流或失效）：
+				// 判定是否允许故障转移：若未带显式域前缀，或者该域本身配置了账号但当前全部不可用（限流/冷却/死号），
+				// 则动态故障转移到另一个域（如 cn <-> global），实现双域容灾互补。
+				// 仅在显式指定了域前缀且池中根本没有任何该域账号时，严格返回 503（测试 TestChatRealmGlobalAbortedNoGlobalAccount 保险契约）。
+				totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+				hasExplicitPrefix := strings.HasPrefix(peek.Model, "cn:") || strings.HasPrefix(peek.Model, "global:")
+				canFailover := !hasExplicitPrefix || totalInRealm > 0
+				otherRealm := "global"
+				if realm == "global" {
+					otherRealm = "cn"
+				}
+
+				if acct == nil && canFailover {
+					// 尝试在对端域挑选健康账号自动补位
+					acct = h.cfg.Pool.PickHealthyOnlyExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
+					if acct != nil {
+						log.Printf("INFO: [server] realm failover %s -> %s for model=%s (acct=%s, owner=%s)",
+							realm, acct.Realm(), bareModel, acct.UID, acct.OwnerValue())
+					}
+				}
+
+				// 3. 全冷却兜底：若两个域均无任何健康账号，才落入最早到期的冷却账号碰运气
 				if acct == nil {
-					totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
-					hasExplicitPrefix := strings.HasPrefix(peek.Model, "cn:") || strings.HasPrefix(peek.Model, "global:")
-					// 若未带显式域前缀，或者该域本身配置了账号但当前全部不可用（限流/冷却/占满），
-					// 则动态故障转移到另一个域（如 cn <-> global），实现双域容灾互补。
-					// 仅在显式指定了域前缀且池中根本没有任何该域账号时，严格返回 503（测试 TestChatRealmGlobalAbortedNoGlobalAccount 保险契约）。
-					if !hasExplicitPrefix || totalInRealm > 0 {
-						otherRealm := "global"
-						if realm == "global" {
-							otherRealm = "cn"
-						}
-						// 尝试在另一个域选号
+					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
+					if acct == nil && canFailover {
 						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
 						if acct == nil {
-							// 兜底：全池任意可用健康号（仍受 reqOwner 隔离限制）
 							acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
-						}
-						if acct != nil {
-							log.Printf("INFO: [server] realm failover %s -> %s for model=%s (acct=%s, owner=%s)",
-								realm, acct.Realm(), bareModel, acct.UID, acct.OwnerValue())
 						}
 					}
 				}

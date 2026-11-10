@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"workbuddy2api/internal/auth"
+	"workbuddy2api/internal/pool"
 	"workbuddy2api/internal/upstream"
 )
 
@@ -240,5 +241,58 @@ func TestChatDualRealmFailoverCNToGlobal(t *testing.T) {
 	cf.mu.Unlock()
 	if gotAuthz != "Bearer at_gl" {
 		t.Errorf("failover should route to global account at_gl, got %s", gotAuthz)
+	}
+}
+
+// TestChatDualRealmFailoverWhenGlobalAccountDeadForHy4Free 验证：当 global 账号整体冷却/挂掉时，
+// 客户端无论使用 hy4free 还是 global:hy4-preview，均能自动由国内健康的 hy4-preview 账号无缝补位！
+func TestChatDualRealmFailoverWhenGlobalAccountDeadForHy4Free(t *testing.T) {
+	cf := newRealmFake(t)
+	p := testPoolWith(
+		&auth.Auth{UID: "cn1", AccessToken: "at_cn", Domain: "www.codebuddy.cn", ExpiresAt: 9999999999},
+		&auth.Auth{UID: "gl1", AccessToken: "at_gl", Domain: "www.workbuddy.ai", ExpiresAt: 9999999999},
+	)
+	// 模拟 global 账号全挂（整机冷却）
+	p.Cooldown("gl1", pool.CoolSoft, 2*time.Hour, "test-dead")
+	h := NewHandler(Config{Pool: p, Upstream: cf.up, GlobalEnabled: true})
+
+	// 1. 测试 hy4free 别名自动跨域补位
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"hy4free","messages":[{"role":"user","content":"hi"}]}`)))
+	if rec.Code != http.StatusOK {
+		t.Fatalf("hy4free failover should succeed: code=%d body=%s", rec.Code, rec.Body)
+	}
+	cf.mu.Lock()
+	gotAuthz := cf.authz
+	gotModel := cf.model
+	cf.mu.Unlock()
+	if gotAuthz != "Bearer at_cn" {
+		t.Errorf("hy4free failover should route to cn1 at_cn, got %s", gotAuthz)
+	}
+	if gotModel != "hy4-preview" {
+		t.Errorf("hy4free outbound model should be hy4-preview, got %s", gotModel)
+	}
+
+	// 2. 测试 global:hy4-preview 在 global 账号全挂时自动由国内补位
+	cf.mu.Lock()
+	cf.authz = ""
+	cf.model = ""
+	cf.mu.Unlock()
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"global:hy4-preview","messages":[{"role":"user","content":"hi"}]}`)))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("global:hy4-preview failover should succeed: code=%d body=%s", rec2.Code, rec2.Body)
+	}
+	cf.mu.Lock()
+	gotAuthz = cf.authz
+	gotModel = cf.model
+	cf.mu.Unlock()
+	if gotAuthz != "Bearer at_cn" {
+		t.Errorf("global:hy4-preview failover should route to cn1 at_cn, got %s", gotAuthz)
+	}
+	if gotModel != "hy4-preview" {
+		t.Errorf("global:hy4-preview outbound model should be hy4-preview, got %s", gotModel)
 	}
 }

@@ -21,6 +21,12 @@ func (p *Pool) PickExcludingForRealmAndOwner(tried map[string]bool, reqModel, re
 	return p.pick(tried, reqModel, realm, owner)
 }
 
+// PickHealthyOnlyExcludingForRealmAndOwner 仅在候选账号处于健康正常状态时选号；
+// 若当前域所有账号全在冷却或不可用，返回 nil（不触发全冷却死号兜底），供跨域容灾或多模型补位使用。
+func (p *Pool) PickHealthyOnlyExcludingForRealmAndOwner(tried map[string]bool, reqModel, realm, owner string) *auth.Auth {
+	return p.pickInternal(tried, reqModel, realm, owner, false)
+}
+
 // AvailableUIDsForRealm 同 AvailableUIDs，但仅返回 Realm()==realm 的账号。
 // DeptestOnly: 仅 realm_test.go 引用；生产经 wiring.go 走
 // AvailableUIDsForModelRealm。保留作 ForModelRealm 的模型维度退化

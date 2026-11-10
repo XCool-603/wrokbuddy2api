@@ -76,6 +76,10 @@ func IsOwnerMatch(acctOwner, reqOwner string) bool {
 // 注意：模型豁免只进 normal 选号（候选 healthy 判定）；全冷却兜底不参与模型豁免——
 // 兜底本来就是在"无任何 direct 可用"时的降级，切模型可用性已在 normal 阶段体现。
 func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string) *auth.Auth {
+	return p.pickInternal(tried, reqModel, realm, owner, true)
+}
+
+func (p *Pool) pickInternal(tried map[string]bool, reqModel, realm string, owner string, allowCooldownFallback bool) *auth.Auth {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	now := time.Now()
@@ -121,6 +125,9 @@ func (p *Pool) pick(tried map[string]bool, reqModel, realm string, owner string)
 		if hasHealthyInFlight {
 			// 修复并发排队：池中有健康的账号，只是正在处理在途请求（名额满载）。
 			// 此时绝不能降级去捞正在冷却的账号送死，返回 nil 让上层并发队列排队等待健康账号释放！
+			return nil
+		}
+		if !allowCooldownFallback {
 			return nil
 		}
 		// 全冷却兜底：无 healthy 候选时，从冷却账号里选 until 最早到期的一个

@@ -334,16 +334,24 @@ func (h *Handler) handleSystemUpdateDo(w http.ResponseWriter, r *http.Request) {
 		}
 
 		// 本地桌面或独立进程模式：启动新进程并退出旧进程
+		if h.cfg.StopFunc != nil {
+			h.cfg.StopFunc()
+		}
+
+		if runtime.GOOS == "windows" {
+			// Windows 下延迟 1 秒启动新进程，确保原进程完全退出并释放网络端口
+			spawnCmd := fmt.Sprintf("ping 127.0.0.1 -n 2 >nul & start \"\" %q", currentExe)
+			cmd := sysproc.HideWindow(exec.Command("cmd", "/c", spawnCmd))
+			_ = cmd.Start()
+			os.Exit(0)
+			return
+		}
+
 		cmd := sysproc.HideWindow(exec.Command(currentExe, os.Args[1:]...))
 		cmd.Dir = filepath.Dir(currentExe)
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
 		_ = cmd.Start()
-
-		if h.cfg.StopFunc != nil {
-			h.cfg.StopFunc()
-		} else {
-			os.Exit(0)
-		}
+		os.Exit(0)
 	}()
 }
