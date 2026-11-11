@@ -39,7 +39,7 @@ func (h *Handler) resolveModelWithAliases(model string) (realm, bare string) {
 	case "hailuo", "hailuo-video", "minimax-video", "海螺", "海螺视频":
 		reqBare = "minimax-video-h3"
 	case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4", "hy4free-preview":
-		reqBare = "hy4-preview"
+		reqBare = "hy4free"
 	case "hy3free", "hy3-free", "hunyuan3-free":
 		reqBare = "hy3"
 	}

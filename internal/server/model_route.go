@@ -226,13 +226,24 @@ func (h *Handler) ResolveHunyuanFreeCandidates(model string) []string {
 	clean = strings.TrimPrefix(clean, "global:")
 	clean = strings.TrimPrefix(clean, "cn:")
 	switch clean {
-	case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4free-preview":
+	case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4", "hy4free-preview":
 		base := []string{
-			"global:hy4-preview",
-			"cn:hy4-preview",
-			"global:hy4-preview-f",
-			"cn:hy4-preview-f",
-			"hy4-preview",
+			"global:hy4free",
+			"cn:hy4free",
+			"cn:hy4flash-exp1",
+			"cn:hy4flash-exp2",
+			"cn:hy4flash-exp3",
+			"cn:hy4flash-exp4",
+		}
+		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "cn:") {
+			base = []string{
+				"cn:hy4free",
+				"cn:hy4flash-exp1",
+				"cn:hy4flash-exp2",
+				"cn:hy4flash-exp3",
+				"cn:hy4flash-exp4",
+				"global:hy4free",
+			}
 		}
 		return h.SortCandidatesByHealth(base)
 	case "hy3free", "hy3-free", "hunyuan3-free":

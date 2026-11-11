@@ -56,7 +56,8 @@ var contextCapFallback = map[string]contextCap{
 	"minimax-m3":   {context: 512000, maxOutput: 512000},  // 实测（CN 512K）；输出 models.dev 共识 512000
 	"hy3":          {context: 192000, maxOutput: 64000},   // 实测（CN 192K/64K，repo hy3 抓取样本同值）
 	"hy3-preview":  {context: 262144, maxOutput: 64000},   // models.dev（共识 262144/64000）
-	"hy4-preview":  {context: 1000000, maxOutput: 64000},  // 实测外推 + models.dev（~1M/64000）
+	"hy4free":       {context: 1000000, maxOutput: 64000}, // 实测混元4免费档同族 1M/64000
+	"hy4-preview":   {context: 1000000, maxOutput: 64000}, // 实测外推 + models.dev（~1M/64000）
 	"hy4-preview-x": {context: 1000000, maxOutput: 64000}, // 实测外推（1M）；输出同族 hy4-preview 估算
 
 	// ---- DeepSeek 家族 ----

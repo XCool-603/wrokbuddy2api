@@ -270,11 +270,35 @@ func TestChatDualRealmFailoverWhenGlobalAccountDeadForHy4Free(t *testing.T) {
 	if gotAuthz != "Bearer at_cn" {
 		t.Errorf("hy4free failover should route to cn1 at_cn, got %s", gotAuthz)
 	}
-	if gotModel != "hy4-preview" {
-		t.Errorf("hy4free outbound model should be hy4-preview, got %s", gotModel)
+	if gotModel != "hy4free" {
+		t.Errorf("hy4free outbound model should be hy4free (0 credit), got %s", gotModel)
+	}
+
+	// 1.5 测试 global:hy4free 在 global 账号健康时直出 hy4free，不误映射成收费的 hy4-preview
+	p.ClearCooling("gl1")
+	cf.mu.Lock()
+	cf.authz = ""
+	cf.model = ""
+	cf.mu.Unlock()
+	recFree := httptest.NewRecorder()
+	h.ServeHTTP(recFree, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"global:hy4free","messages":[{"role":"user","content":"hi"}]}`)))
+	if recFree.Code != http.StatusOK {
+		t.Fatalf("global:hy4free should succeed: code=%d body=%s", recFree.Code, recFree.Body)
+	}
+	cf.mu.Lock()
+	gotAuthz = cf.authz
+	gotModel = cf.model
+	cf.mu.Unlock()
+	if gotAuthz != "Bearer at_gl" {
+		t.Errorf("global:hy4free should route to gl1 at_gl, got %s", gotAuthz)
+	}
+	if gotModel != "hy4free" {
+		t.Errorf("global:hy4free outbound model should be hy4free (not paid hy4-preview), got %s", gotModel)
 	}
 
 	// 2. 测试 global:hy4-preview 在 global 账号全挂时自动由国内补位
+	p.Cooldown("gl1", pool.CoolSoft, 2*time.Hour, "test-dead")
 	cf.mu.Lock()
 	cf.authz = ""
 	cf.model = ""
