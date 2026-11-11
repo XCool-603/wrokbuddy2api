@@ -237,11 +237,6 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 		logf("%s: query %s -> 未映射任务，跳过", code, t.AcceptStatus)
 		return
 	}
-	if spec.SkipNote != "" {
-		res.Skipped++
-		logf("%s: %s，跳过", code, spec.SkipNote)
-		return
-	}
 	if t.AcceptStatus == "claimed" {
 		res.Already++
 		logf("%s: already_claimed", code)
@@ -250,6 +245,15 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 
 	if t.AcceptStatus == "completed" {
 		c.claimGrowthTask(ctx, a, code, mp, res, logf)
+		return
+	}
+
+	if spec.SkipNote != "" {
+		if code == "wb_wechat_oa_subscribe_task" && (t.AcceptStatus == "not_accepted" || t.AcceptStatus == "") {
+			_ = c.acceptGrowthTaskWithVerify(ctx, a, code, mp)
+		}
+		res.Skipped++
+		logf("%s: %s，跳过", code, spec.SkipNote)
 		return
 	}
 
