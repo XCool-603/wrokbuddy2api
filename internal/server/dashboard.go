@@ -3,9 +3,11 @@ package server
 import (
 	_ "embed"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -19,7 +21,229 @@ import (
 var (
 	creditFetchMu  sync.Mutex
 	creditFetching = make(map[string]time.Time)
+
+	creditDetailMu    sync.RWMutex
+	creditDetailCache = make(map[string]upstream.CreditBreakdown)
 )
+
+func getCachedCreditBreakdown(uid string) *upstream.CreditBreakdown {
+	creditDetailMu.RLock()
+	defer creditDetailMu.RUnlock()
+	bd, ok := creditDetailCache[uid]
+	if !ok {
+		return nil
+	}
+	cp := bd
+	if len(bd.Packs) > 0 {
+		cp.Packs = append([]upstream.CreditPackDetail(nil), bd.Packs...)
+	}
+	return &cp
+}
+
+// ModelQuotaSummary 聚合单模型在域内的限流/耗尽状态与实测积分单价。
+type ModelQuotaSummary struct {
+	Model        string  `json:"model"`
+	LimitedCount int     `json:"limited_count"`
+	Reason       string  `json:"reason,omitempty"`
+	CostPer1k    float64 `json:"cost_per_1k,omitempty"`
+	Samples      int     `json:"samples,omitempty"`
+}
+
+// RealmCreditSummary 全池或单域（cn / global）的积分总额度与模型额度明细。
+type RealmCreditSummary struct {
+	Remain                 float64             `json:"remain"`
+	Total                  float64             `json:"total"`
+	Used                   float64             `json:"used"`
+	ActiveTotal            float64             `json:"active_total"`
+	BaseRemain             float64             `json:"base_remain"`
+	BonusRemain            float64             `json:"bonus_remain"`
+	PurchasedRemain        float64             `json:"purchased_remain"`
+	ExpiringRemain         float64             `json:"expiring_remain"`
+	PackCount              int                 `json:"pack_count"`
+	ActivePackCount        int                 `json:"active_pack_count"`
+	AccountCount           int                 `json:"account_count"`
+	HealthyCount           int                 `json:"healthy_count"`
+	CoolingCount           int                 `json:"cooling_count"`
+	DisabledCount          int                 `json:"disabled_count"`
+	DetailAccountCount     int                 `json:"detail_account_count"`
+	RateLimitedModelsCount int                 `json:"rate_limited_models_count"`
+	RateLimitedModels      []string            `json:"rate_limited_models,omitempty"`
+	ModelQuotas            []ModelQuotaSummary `json:"model_quotas,omitempty"`
+}
+
+// CreditSummaryPayload 控制台展示的全池、国内版、国际版三栏总额度汇总。
+type CreditSummaryPayload struct {
+	All    RealmCreditSummary `json:"all"`
+	CN     RealmCreditSummary `json:"cn"`
+	Global RealmCreditSummary `json:"global"`
+}
+
+type realmQuotaAcc struct {
+	summary    RealmCreditSummary
+	limitedMap map[string]int
+	reasonMap  map[string]string
+	costSumMap map[string]float64
+	costWgtMap map[string]int
+	samplesMap map[string]int
+}
+
+func newRealmQuotaAcc() *realmQuotaAcc {
+	return &realmQuotaAcc{
+		limitedMap: make(map[string]int),
+		reasonMap:  make(map[string]string),
+		costSumMap: make(map[string]float64),
+		costWgtMap: make(map[string]int),
+		samplesMap: make(map[string]int),
+	}
+}
+
+func roundSummary2(v float64) float64 {
+	return math.Round(v*100) / 100
+}
+
+func (a *realmQuotaAcc) add(disabled, manualDisabled, cooling bool, credits, expiring int64, bd *upstream.CreditBreakdown, rl []pool.RateLimitedModel, costs []pool.ModelCostStatus) {
+	a.summary.AccountCount++
+	if disabled || manualDisabled {
+		a.summary.DisabledCount++
+	} else if cooling {
+		a.summary.CoolingCount++
+	} else {
+		a.summary.HealthyCount++
+	}
+
+	if bd != nil {
+		a.summary.DetailAccountCount++
+		a.summary.Remain += bd.Remain
+		a.summary.Total += bd.Total
+		a.summary.Used += bd.Used
+		a.summary.ActiveTotal += bd.ActiveTotal
+		a.summary.BaseRemain += bd.BaseRemain
+		a.summary.BonusRemain += bd.BonusRemain
+		a.summary.PurchasedRemain += bd.PurchasedRemain
+		a.summary.ExpiringRemain += bd.ExpiringRemain
+		a.summary.PackCount += bd.PackCount
+		a.summary.ActivePackCount += bd.ActivePackCount
+	} else if credits >= 0 {
+		a.summary.Remain += float64(credits)
+		if expiring > 0 {
+			a.summary.ExpiringRemain += float64(expiring)
+		}
+	}
+
+	for _, rm := range rl {
+		m := strings.TrimSpace(rm.Model)
+		if m == "" {
+			continue
+		}
+		a.summary.RateLimitedModelsCount++
+		a.limitedMap[m]++
+		if a.reasonMap[m] == "" && rm.Reason != "" {
+			a.reasonMap[m] = rm.Reason
+		}
+	}
+	for _, mc := range costs {
+		m := strings.TrimSpace(mc.Model)
+		if m == "" {
+			continue
+		}
+		w := mc.Samples
+		if w <= 0 {
+			w = 1
+		}
+		a.costSumMap[m] += mc.CostPer1k * float64(w)
+		a.costWgtMap[m] += w
+		a.samplesMap[m] += mc.Samples
+	}
+}
+
+func (a *realmQuotaAcc) finalize() RealmCreditSummary {
+	out := a.summary
+	out.Remain = roundSummary2(out.Remain)
+	out.Total = roundSummary2(out.Total)
+	out.Used = roundSummary2(out.Used)
+	out.ActiveTotal = roundSummary2(out.ActiveTotal)
+	out.BaseRemain = roundSummary2(out.BaseRemain)
+	out.BonusRemain = roundSummary2(out.BonusRemain)
+	out.PurchasedRemain = roundSummary2(out.PurchasedRemain)
+	out.ExpiringRemain = roundSummary2(out.ExpiringRemain)
+
+	modelSet := make(map[string]struct{})
+	for m := range a.limitedMap {
+		modelSet[m] = struct{}{}
+	}
+	for m := range a.costWgtMap {
+		modelSet[m] = struct{}{}
+	}
+	if len(a.limitedMap) > 0 {
+		limitedNames := make([]string, 0, len(a.limitedMap))
+		for m := range a.limitedMap {
+			limitedNames = append(limitedNames, m)
+		}
+		sort.Strings(limitedNames)
+		out.RateLimitedModels = make([]string, 0, len(limitedNames))
+		for _, m := range limitedNames {
+			if cnt := a.limitedMap[m]; cnt > 1 {
+				out.RateLimitedModels = append(out.RateLimitedModels, fmt.Sprintf("%s (×%d)", m, cnt))
+			} else {
+				out.RateLimitedModels = append(out.RateLimitedModels, m)
+			}
+		}
+	}
+	if len(modelSet) > 0 {
+		names := make([]string, 0, len(modelSet))
+		for m := range modelSet {
+			names = append(names, m)
+		}
+		sort.Strings(names)
+		out.ModelQuotas = make([]ModelQuotaSummary, 0, len(names))
+		for _, m := range names {
+			avgCost := 0.0
+			if w := a.costWgtMap[m]; w > 0 {
+				avgCost = roundSummary2(a.costSumMap[m] / float64(w))
+			}
+			out.ModelQuotas = append(out.ModelQuotas, ModelQuotaSummary{
+				Model:        m,
+				LimitedCount: a.limitedMap[m],
+				Reason:       a.reasonMap[m],
+				CostPer1k:    avgCost,
+				Samples:      a.samplesMap[m],
+			})
+		}
+	}
+	return out
+}
+
+type creditSummaryBuilder struct {
+	all    *realmQuotaAcc
+	cn     *realmQuotaAcc
+	global *realmQuotaAcc
+}
+
+func newCreditSummaryBuilder() *creditSummaryBuilder {
+	return &creditSummaryBuilder{
+		all:    newRealmQuotaAcc(),
+		cn:     newRealmQuotaAcc(),
+		global: newRealmQuotaAcc(),
+	}
+}
+
+func (b *creditSummaryBuilder) add(realm string, disabled, manualDisabled, cooling bool, credits, expiring int64, bd *upstream.CreditBreakdown, rl []pool.RateLimitedModel, costs []pool.ModelCostStatus) {
+	b.all.add(disabled, manualDisabled, cooling, credits, expiring, bd, rl, costs)
+	switch strings.ToLower(strings.TrimSpace(realm)) {
+	case "cn":
+		b.cn.add(disabled, manualDisabled, cooling, credits, expiring, bd, rl, costs)
+	case "global":
+		b.global.add(disabled, manualDisabled, cooling, credits, expiring, bd, rl, costs)
+	}
+}
+
+func (b *creditSummaryBuilder) build() CreditSummaryPayload {
+	return CreditSummaryPayload{
+		All:    b.all.finalize(),
+		CN:     b.cn.finalize(),
+		Global: b.global.finalize(),
+	}
+}
 
 // fetchAndSyncCredit 安全地拉取单账号最新真实积分并更新池（自带 Token 过期自动续期、401 重试及精确分桶计算）
 func (h *Handler) fetchAndSyncCredit(a *auth.Auth, uid string) bool {
@@ -39,19 +263,24 @@ func (h *Handler) fetchAndSyncCredit(a *auth.Auth, uid string) bool {
 			_ = a.SaveAtomic()
 		}
 	}
-	remain, buckets, err := h.cfg.Upstream.UserResourceDetailed(a, 7*24*time.Hour)
+	bd, err := h.cfg.Upstream.UserResourceBreakdown(a, 7*24*time.Hour)
 	if err != nil && a.RefreshTokenValue() != "" {
 		// 若遇过期 401，强制刷新一次 Token 后重试
 		if rerr := h.cfg.Upstream.RefreshToken(a); rerr == nil {
 			a.BackfillRealm()
 			_ = a.SaveAtomic()
-			remain, buckets, err = h.cfg.Upstream.UserResourceDetailed(a, 7*24*time.Hour)
+			bd, err = h.cfg.Upstream.UserResourceBreakdown(a, 7*24*time.Hour)
 		}
 	}
 	if err != nil {
 		return false
 	}
-	h.cfg.Pool.SetCreditsDetailed(uid, remain, buckets.Expiring)
+	creditDetailMu.Lock()
+	creditDetailCache[uid] = bd
+	creditDetailMu.Unlock()
+
+	remain := int64(bd.Remain)
+	h.cfg.Pool.SetCreditsDetailed(uid, remain, int64(bd.ExpiringRemain))
 	if h.alertMgr != nil && remain < int64(h.alertMgr.cfg.MinCredit) {
 		h.alertMgr.NotifyLowCredit(uid, a.Nickname, remain)
 	}
@@ -274,13 +503,14 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	authDir := h.getAuthDir()
 	files, _ := auth.LoadAuthFiles(authDir)
 	type AccountItem struct {
-		UID               string                  `json:"uid"`
-		Realm             string                  `json:"realm"`
-		Nickname          string                  `json:"nickname"`
-		Provider          string                  `json:"provider,omitempty"`
-		Filename          string                  `json:"filename"`
-		Credits           int64                   `json:"credits"`
-		CreditsExpiring   int64                   `json:"credits_expiring,omitempty"`
+		UID               string                    `json:"uid"`
+		Realm             string                    `json:"realm"`
+		Nickname          string                    `json:"nickname"`
+		Provider          string                    `json:"provider,omitempty"`
+		Filename          string                    `json:"filename"`
+		Credits           int64                     `json:"credits"`
+		CreditsExpiring   int64                     `json:"credits_expiring,omitempty"`
+		CreditDetail      *upstream.CreditBreakdown `json:"credit_detail,omitempty"`
 		Disabled          bool                    `json:"disabled"`
 		DisabledReason    string                  `json:"disabled_reason"`
 		ManualDisabled    bool                    `json:"manual_disabled"`
@@ -501,7 +731,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			InviteCode:        poolInviteCode,
 			InviteURL:         poolInviteURL,
 		}
-		if item.Credits == 0 && authObj != nil && authObj.AccessTokenValue() != "" {
+		if (item.Credits == 0 || getCachedCreditBreakdown(p.UID) == nil) && authObj != nil && authObj.AccessTokenValue() != "" {
 			h.triggerAsyncCreditFetch(authObj, p.UID, isFresh)
 		}
 		accounts = append(accounts, item)
@@ -511,6 +741,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	dedupedAccounts := make([]AccountItem, 0, len(accounts))
 	finalSeenUID := make(map[string]bool)
 	finalSeenFP := make(map[string]bool)
+	creditSummary := newCreditSummaryBuilder()
 	for _, item := range accounts {
 		fp := fmt.Sprintf("%s:%s:%s", item.Realm, item.Provider, strings.ToLower(auth.CleanRawUID(item.UID)))
 		if finalSeenUID[item.UID] || (item.Provider != "" && finalSeenFP[fp]) {
@@ -520,6 +751,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		if item.Provider != "" {
 			finalSeenFP[fp] = true
 		}
+		if bd := getCachedCreditBreakdown(item.UID); bd != nil {
+			item.CreditDetail = bd
+		}
+		creditSummary.add(item.Realm, item.Disabled, item.ManualDisabled, item.Cooling, item.Credits, item.CreditsExpiring, item.CreditDetail, item.RateLimitedModels, item.ModelCosts)
 		dedupedAccounts = append(dedupedAccounts, item)
 	}
 	accounts = dedupedAccounts
@@ -562,6 +797,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 			"sticky_sessions": sticky,
 		},
 		"accounts":       accounts,
+		"creditSummary":  creditSummary.build(),
 		"models":         models,
 		"apiKey":         displayAPIKey,
 		"hasPassword":    h.GetWebPassword() != "",

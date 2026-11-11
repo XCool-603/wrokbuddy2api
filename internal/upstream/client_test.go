@@ -1034,3 +1034,111 @@ func TestRefreshTokenExpiresInWithinCapApplied(t *testing.T) {
 		t.Errorf("ExpiresAt=%d want ~%d (60d 正常推进)", a.ExpiresAt, want)
 	}
 }
+
+func TestUserResourceBreakdown(t *testing.T) {
+	soonEnd := time.Now().Add(48 * time.Hour).In(softRateResetLoc).Format(packageEndLayout)
+	laterEnd := time.Now().Add(20 * 24 * time.Hour).In(softRateResetLoc).Format(packageEndLayout)
+	expiredEnd := time.Now().Add(-48 * time.Hour).In(softRateResetLoc).Format(packageEndLayout)
+
+	c := testClient(func(r *http.Request) (*http.Response, error) {
+		return jsonResp(200, fmt.Sprintf(`{"code":0,"data":{"Response": {
+				"Data": {
+					"TotalDosage": 4800,
+					"Accounts": [
+						{
+							"PackageCode": "pkg_expired",
+							"PackageName": "CodeBuddy个人版拉新权益包",
+							"SubProductCode": "sp_tcaca_codebuddyide_bonus_pack",
+							"Status": 3,
+							"CycleEndTime": "%s",
+							"CapacitySize": 100,
+							"CapacityRemain": 0,
+							"CapacityUsed": 100,
+							"CapacitySizePrecise": "100",
+							"CapacityRemainPrecise": "0",
+							"CapacityUsedPrecise": "100"
+						},
+						{
+							"PackageCode": "pkg_base",
+							"PackageName": "Free Plan Subscription",
+							"SubProductCode": "sp_tcaca_codebuddy_ide",
+							"Status": 0,
+							"CycleEndTime": "%s",
+							"CycleCapacitySize": 200,
+							"CycleCapacityRemain": 150,
+							"CycleCapacityUsed": 49,
+							"CycleCapacitySizePrecise": "200.5",
+							"CycleCapacityRemainPrecise": "150.25",
+							"CycleCapacityUsedPrecise": "50.25"
+						},
+						{
+							"PackageCode": "pkg_bonus_soon",
+							"PackageName": "Bonus Pack",
+							"SubProductCode": "sp_tcaca_codebuddyide_bonus_pack",
+							"Status": 0,
+							"CycleEndTime": "%s",
+							"CapacitySize": 500,
+							"CapacityRemain": 400,
+							"CapacityUsed": 99,
+							"CapacitySizePrecise": "500",
+							"CapacityRemainPrecise": "400.75",
+							"CapacityUsedPrecise": "99.25"
+						},
+						{
+							"PackageCode": "pkg_purchased",
+							"PackageName": "Pro TopUp Pack",
+							"SubProductCode": "sp_tcaca_addon",
+							"Status": 0,
+							"CapacitySize": 1000,
+							"CapacityRemain": 800,
+							"CapacityUsed": 200,
+							"CapacitySizePrecise": "1000",
+							"CapacityRemainPrecise": "800.5",
+							"CapacityUsedPrecise": "199.5"
+						}
+					]
+				}
+		}}}`, expiredEnd, laterEnd, soonEnd)), nil
+	})
+
+	a := &auth.Auth{AccessToken: "at", UID: "u1"}
+	a.SetRealm("cn")
+	bd, err := c.UserResourceBreakdown(a, 7*24*time.Hour)
+	if err != nil {
+		t.Fatalf("UserResourceBreakdown failed: %v", err)
+	}
+	if bd.Remain != 1351.5 {
+		t.Errorf("Remain = %v, want 1351.5", bd.Remain)
+	}
+	if bd.Total != 1800.5 {
+		t.Errorf("Total = %v, want 1800.5", bd.Total)
+	}
+	if bd.ActiveTotal != 1700.5 {
+		t.Errorf("ActiveTotal = %v, want 1700.5", bd.ActiveTotal)
+	}
+	if bd.Used != 449 {
+		t.Errorf("Used = %v, want 449", bd.Used)
+	}
+	if bd.BaseRemain != 150.25 || bd.BonusRemain != 400.75 || bd.PurchasedRemain != 800.5 {
+		t.Errorf("buckets mismatch: base=%v bonus=%v purchased=%v", bd.BaseRemain, bd.BonusRemain, bd.PurchasedRemain)
+	}
+	if bd.ExpiringRemain != 400.75 {
+		t.Errorf("ExpiringRemain = %v, want 400.75", bd.ExpiringRemain)
+	}
+	if bd.PackCount != 4 || bd.ActivePackCount != 3 || len(bd.Packs) != 4 {
+		t.Fatalf("pack counts mismatch: total=%d active=%d len=%d", bd.PackCount, bd.ActivePackCount, len(bd.Packs))
+	}
+	// Active packs come first sorted by soonest expiry (pkg_bonus_soon -> pkg_base -> pkg_purchased), expired pack last.
+	if bd.Packs[0].PackageCode != "pkg_bonus_soon" || !bd.Packs[0].IsExpiringSoon || bd.Packs[0].Category != "bonus" {
+		t.Errorf("first pack = %+v, want pkg_bonus_soon", bd.Packs[0])
+	}
+	if bd.Packs[1].PackageCode != "pkg_base" || bd.Packs[1].Category != "base" {
+		t.Errorf("second pack = %+v, want pkg_base", bd.Packs[1])
+	}
+	if bd.Packs[2].PackageCode != "pkg_purchased" || bd.Packs[2].Category != "purchased" {
+		t.Errorf("third pack = %+v, want pkg_purchased", bd.Packs[2])
+	}
+	if bd.Packs[3].PackageCode != "pkg_expired" || bd.Packs[3].IsActive {
+		t.Errorf("fourth pack = %+v, want inactive pkg_expired", bd.Packs[3])
+	}
+}

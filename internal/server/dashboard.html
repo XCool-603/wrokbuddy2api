@@ -319,6 +319,30 @@
         </div>
       </section>
 
+      <!-- 总积分与双域额度明细 (Credits & Quota Breakdown) -->
+      <section class="glass-panel rounded-2xl border border-slate-800/90 p-5 shadow-glass space-y-4">
+        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-800/80">
+          <div>
+            <h2 class="text-sm font-bold text-white flex items-center gap-2">
+              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+              <span>总积分与双域额度明细 (CN / Global)</span>
+            </h2>
+            <p class="text-[11px] text-slate-400 mt-0.5">实时汇总全池、国内版及国际版精确小数积分构成（套餐基础 / 平台奖励 / 购买包 / 即将到期）与模型额度限流状态</p>
+          </div>
+          <div class="flex items-center gap-2">
+            <span id="creditDetailCoverageBadge" class="text-[11px] font-mono text-slate-400 bg-slate-900/80 border border-slate-800 px-2.5 py-1 rounded-lg">已同步明细: 0 / 0</span>
+            <button onclick="refreshData(true)" class="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-medium transition cursor-pointer">
+              ↻ 拉取实时包明细
+            </button>
+          </div>
+        </div>
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div id="creditCardAll" class="rounded-2xl bg-slate-900/70 border border-indigo-500/25 p-4 space-y-3"></div>
+          <div id="creditCardCN" class="rounded-2xl bg-slate-900/70 border border-blue-500/25 p-4 space-y-3"></div>
+          <div id="creditCardGlobal" class="rounded-2xl bg-slate-900/70 border border-emerald-500/25 p-4 space-y-3"></div>
+        </div>
+      </section>
+
       <!-- Account Pool Card -->
       <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-glass">
         <div class="px-6 py-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/30">
@@ -1449,6 +1473,33 @@ eyJhbGciOi...----refresh_token_here'></textarea>
     </div>
   </div>
 
+  <!-- Account Credit & Quota Detail Modal -->
+  <div id="creditDetailModal" onclick="if(event.target===this) closeAccountDetailModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-indigo-500/30 rounded-3xl max-w-4xl w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>📊</span>
+            <span id="accDetailTitle">账号积分与额度明细</span>
+          </h3>
+          <p id="accDetailSub" class="text-[11px] text-slate-400 font-mono mt-0.5">-</p>
+        </div>
+        <button onclick="closeAccountDetailModal()" class="relative z-10 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer" title="关闭">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="accDetailBody" class="py-4 space-y-5 max-h-[75vh] overflow-y-auto pr-1"></div>
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
+        <button onclick="refreshData(true).then(() => { if(window._activeDetailUid) openAccountDetailModal(window._activeDetailUid); })" class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium rounded-xl transition cursor-pointer">
+          ↻ 刷新最新数据
+        </button>
+        <button onclick="closeAccountDetailModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition cursor-pointer">
+          关闭
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- Change Web Password Modal -->
   <div id="changePasswordModal" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
     <div class="glass-panel border border-slate-700/80 rounded-3xl max-w-md w-full p-6 shadow-2xl relative overflow-hidden">
@@ -1759,6 +1810,8 @@ eyJhbGciOi...----refresh_token_here'></textarea>
         }
 
         window.cachedAccounts = data.accounts || [];
+        window.cachedCreditSummary = data.creditSummary || null;
+        renderCreditSummary(data.creditSummary, data.accounts || []);
         window.cachedModels = data.models || [];
         renderAccounts(data.accounts || []);
         renderModels(data.models || [], data.accounts || []);
@@ -2180,9 +2233,10 @@ eyJhbGciOi...----refresh_token_here'></textarea>
               </td>
               <td class="px-6 py-4">${statusBadge}</td>
               <td class="px-6 py-4 font-mono font-medium text-slate-200">
-                ${a.credits !== undefined && a.credits >= 0 ? a.credits + (a.credits_expiring && a.credits_expiring > 0 ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="即将过期积分">(${a.credits_expiring} 将到期)</span>` : '') : '<span class="text-slate-500">-</span>'}
+                ${renderAccountCreditsCell(a)}
               </td>
               <td class="px-6 py-4 text-right font-sans space-x-2">
+                <button onclick="openAccountDetailModal('${a.uid}')" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline font-semibold" title="查看该账号全部积分资源包与模型额度明细">明细</button>
                 <button onclick="runSingleWelfare('${a.uid}')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="为此账号单独领取全套新手礼包、签到与活动福利">领福利</button>
                 <button onclick="runSingleTasks('${a.uid}', this)" class="text-xs text-cyan-400 hover:text-cyan-300 hover:underline" title="为此账号手动执行全量成长任务、最新活动与领猫">做任务</button>
                 <button onclick="runSingleTravel('${a.uid}')" class="text-xs text-pink-400 hover:text-pink-300 hover:underline" title="为该账号领养/派出猫猫旅行/领奖">派猫猫</button>
@@ -3095,6 +3149,313 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
       document.getElementById('welfareRawOutput').textContent = data.output || '无输出';
       document.getElementById('welfareModal').classList.remove('hidden');
+    }
+
+    function fmtCredit(v) {
+      const n = Number(v || 0);
+      if (!isFinite(n)) return '0';
+      return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+    }
+
+    function renderAccountCreditsCell(a) {
+      const cd = a && a.credit_detail;
+      if (cd) {
+        const pct = cd.total > 0 ? Math.max(0, Math.min(100, (cd.remain / cd.total) * 100)) : (cd.remain > 0 ? 100 : 0);
+        const expTag = cd.expiring_remain > 0
+          ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="7天内将过期">(${fmtCredit(cd.expiring_remain)} 将到期)</span>`
+          : '';
+        const rlTag = (a.rate_limited_models && a.rate_limited_models.length > 0)
+          ? `<span class="text-[10px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">${a.rate_limited_models.length} 模型限流</span>`
+          : '';
+        return `
+          <div class="space-y-1 min-w-[165px]">
+            <div class="flex items-baseline flex-wrap gap-1">
+              <span class="text-emerald-300 font-bold">${fmtCredit(cd.remain)}</span>
+              <span class="text-[11px] text-slate-500">/ ${fmtCredit(cd.total)}</span>
+              ${expTag}
+            </div>
+            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-full" style="width:${pct.toFixed(1)}%"></div>
+            </div>
+            <div class="flex flex-wrap items-center gap-1 text-[10px] font-sans">
+              <span class="px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">基础 ${fmtCredit(cd.base_remain)}</span>
+              <span class="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">奖励 ${fmtCredit(cd.bonus_remain)}</span>
+              ${cd.purchased_remain > 0 ? `<span class="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">购买 ${fmtCredit(cd.purchased_remain)}</span>` : ''}
+              ${rlTag}
+            </div>
+          </div>`;
+      }
+      if (a && a.credits !== undefined && a.credits >= 0) {
+        return `${fmtCredit(a.credits)}${a.credits_expiring && a.credits_expiring > 0 ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="即将过期积分">(${fmtCredit(a.credits_expiring)} 将到期)</span>` : ''}`;
+      }
+      return '<span class="text-slate-500">-</span>';
+    }
+
+    function renderCreditSummaryCard(elId, title, badgeText, accentColor, s) {
+      const el = document.getElementById(elId);
+      if (!el) return;
+      const d = s || {};
+      const remain = Number(d.remain || 0);
+      const total = Number(d.total || 0);
+      const used = Number(d.used || 0);
+      const activeTotal = Number(d.active_total || 0);
+      const pct = total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : (remain > 0 ? 100 : 0);
+      const barCls = accentColor === 'blue' ? 'from-blue-500 to-cyan-400'
+        : (accentColor === 'emerald' ? 'from-emerald-500 to-teal-400' : 'from-indigo-500 to-purple-400');
+      const badgeCls = accentColor === 'blue' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
+        : (accentColor === 'emerald' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30');
+
+      const mq = d.model_quotas || [];
+      let quotaHtml = '<span class="text-[11px] text-slate-500">当前无模型限流或消耗记录</span>';
+      if (mq.length > 0) {
+        quotaHtml = `<div class="flex flex-wrap gap-1.5">` + mq.slice(0, 6).map(m => {
+          const isLim = (m.limited_count || 0) > 0;
+          const cls = isLim
+            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
+            : 'bg-slate-800/80 text-slate-300 border-slate-700/70';
+          const costPart = m.cost_per_1k > 0 ? ` · ${fmtCredit(m.cost_per_1k)}/1K` : (m.samples > 0 ? ' · 免费' : '');
+          const limPart = isLim ? ` · 限流${m.limited_count}号` : '';
+          return `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}" title="${escapeHtml(m.reason || m.model)}">${escapeHtml(m.model)}${limPart}${costPart}</span>`;
+        }).join('') + (mq.length > 6 ? `<span class="text-[10px] text-slate-500 font-mono">+${mq.length - 6}</span>` : '') + `</div>`;
+      }
+
+      el.innerHTML = `
+        <div class="flex items-center justify-between gap-2">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-bold text-white">${title}</span>
+            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${badgeCls}">${badgeText}</span>
+          </div>
+          <span class="text-[11px] font-mono text-slate-400">可用 ${d.healthy_count || 0}/${d.account_count || 0} 号 · 包 ${d.active_pack_count || 0}/${d.pack_count || 0}</span>
+        </div>
+        <div>
+          <div class="flex items-baseline justify-between gap-2">
+            <div class="font-mono">
+              <span class="text-2xl font-bold text-white">${fmtCredit(remain)}</span>
+              <span class="text-xs text-slate-400 ml-1">/ ${total > 0 ? fmtCredit(total) : '-'}</span>
+            </div>
+            <div class="text-right text-[11px] font-mono text-slate-400">
+              已用 <span class="text-slate-200">${fmtCredit(used)}</span>
+              ${activeTotal > 0 ? `<span class="ml-1.5 text-slate-500">(生效包 ${fmtCredit(activeTotal)})</span>` : ''}
+            </div>
+          </div>
+          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mt-2">
+            <div class="h-full bg-gradient-to-r ${barCls} rounded-full transition-all" style="width:${pct.toFixed(1)}%"></div>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
+          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400">套餐基础</div>
+            <div class="font-mono font-semibold text-sky-300 mt-0.5">${fmtCredit(d.base_remain)}</div>
+          </div>
+          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400">平台奖励</div>
+            <div class="font-mono font-semibold text-purple-300 mt-0.5">${fmtCredit(d.bonus_remain)}</div>
+          </div>
+          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400">购买积分</div>
+            <div class="font-mono font-semibold text-amber-300 mt-0.5">${fmtCredit(d.purchased_remain)}</div>
+          </div>
+          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
+            <div class="text-[10px] text-slate-400">7日内到期</div>
+            <div class="font-mono font-semibold ${(d.expiring_remain || 0) > 0 ? 'text-rose-300' : 'text-slate-400'} mt-0.5">${fmtCredit(d.expiring_remain)}</div>
+          </div>
+        </div>
+        <div class="pt-2 border-t border-slate-800/70 space-y-1.5">
+          <div class="flex items-center justify-between text-[10px] text-slate-400">
+            <span>模型额度 / 限流明细</span>
+            <span class="font-mono ${(d.rate_limited_models_count || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}">限流记录 ${d.rate_limited_models_count || 0} 条</span>
+          </div>
+          ${quotaHtml}
+        </div>
+      `;
+    }
+
+    function renderCreditSummary(summary, accounts) {
+      const s = summary || {};
+      const all = s.all || {};
+      const badge = document.getElementById('creditDetailCoverageBadge');
+      if (badge) {
+        const tot = all.account_count || (accounts ? accounts.length : 0);
+        const det = all.detail_account_count || 0;
+        badge.innerText = `已同步包明细: ${det} / ${tot}`;
+      }
+      renderCreditSummaryCard('creditCardAll', '🌐 全池总额度明细', 'ALL', 'indigo', s.all);
+      renderCreditSummaryCard('creditCardCN', '🇨🇳 国内版额度明细', 'CN', 'blue', s.cn);
+      renderCreditSummaryCard('creditCardGlobal', '🌍 国际版额度明细', 'Global', 'emerald', s.global);
+    }
+
+    function closeAccountDetailModal() {
+      window._activeDetailUid = null;
+      const m = document.getElementById('creditDetailModal');
+      if (m) m.classList.add('hidden');
+    }
+
+    function openAccountDetailModal(uid) {
+      const a = (window.cachedAccounts || []).find(x => x.uid === uid);
+      if (!a) return;
+      window._activeDetailUid = uid;
+      const modal = document.getElementById('creditDetailModal');
+      const titleEl = document.getElementById('accDetailTitle');
+      const subEl = document.getElementById('accDetailSub');
+      const bodyEl = document.getElementById('accDetailBody');
+      if (!modal || !bodyEl) return;
+
+      const realmTag = a.realm === 'global' ? '🌍 Global (国际版)' : '🇨🇳 CN (国内版)';
+      if (titleEl) titleEl.innerText = `${a.nickname || a.uid} — 积分与额度明细`;
+      if (subEl) subEl.innerText = `UID: ${a.uid} · 域: ${realmTag} · 凭据: ${a.filename || '-'}`;
+
+      const cd = a.credit_detail;
+      const catLabel = { base: '套餐基础', bonus: '平台奖励', purchased: '购买积分' };
+      const catCls = {
+        base: 'bg-sky-500/15 text-sky-300 border-sky-500/30',
+        bonus: 'bg-purple-500/15 text-purple-300 border-purple-500/30',
+        purchased: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+      };
+
+      let summaryGrid = '';
+      if (cd) {
+        summaryGrid = `
+          <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+            <div class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+              <div class="text-[10px] text-emerald-300">当前可用积分</div>
+              <div class="text-lg font-bold font-mono text-white mt-0.5">${fmtCredit(cd.remain)}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-[10px] text-slate-400">累计总额度</div>
+              <div class="text-lg font-bold font-mono text-slate-200 mt-0.5">${fmtCredit(cd.total)}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800">
+              <div class="text-[10px] text-slate-400">已消耗积分</div>
+              <div class="text-lg font-bold font-mono text-slate-300 mt-0.5">${fmtCredit(cd.used)}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25">
+              <div class="text-[10px] text-sky-300">套餐基础</div>
+              <div class="text-lg font-bold font-mono text-sky-200 mt-0.5">${fmtCredit(cd.base_remain)}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25">
+              <div class="text-[10px] text-purple-300">平台奖励</div>
+              <div class="text-lg font-bold font-mono text-purple-200 mt-0.5">${fmtCredit(cd.bonus_remain)}</div>
+            </div>
+            <div class="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25">
+              <div class="text-[10px] text-amber-300">购买 / 将到期</div>
+              <div class="text-sm font-bold font-mono text-amber-200 mt-1">${fmtCredit(cd.purchased_remain)} / ${fmtCredit(cd.expiring_remain)}</div>
+            </div>
+          </div>`;
+      } else {
+        summaryGrid = `
+          <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800 text-xs text-slate-400 flex items-center justify-between">
+            <span>当前基础池积分余量：<strong class="text-emerald-300 font-mono">${fmtCredit(a.credits)}</strong>（尚未同步到精细资源包，可点击右下角“刷新最新数据”）</span>
+          </div>`;
+      }
+
+      const packs = (cd && cd.packs) ? cd.packs : [];
+      let packsHtml = `<div class="p-4 text-center text-xs text-slate-500 bg-slate-900/50 rounded-2xl border border-slate-800">暂无资源包明细（点击“刷新最新数据”实时向官方拉取）</div>`;
+      if (packs.length > 0) {
+        packsHtml = `
+          <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                  <th class="py-2.5 px-3 font-semibold">资源包名称</th>
+                  <th class="py-2.5 px-3 font-semibold">分类</th>
+                  <th class="py-2.5 px-3 font-semibold">状态</th>
+                  <th class="py-2.5 px-3 font-semibold">剩余 / 总额</th>
+                  <th class="py-2.5 px-3 font-semibold">已消耗</th>
+                  <th class="py-2.5 px-3 font-semibold">到期时间</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60 font-mono">
+                ${packs.map(p => {
+                  const pPct = p.total > 0 ? Math.max(0, Math.min(100, (p.remain / p.total) * 100)) : 0;
+                  const cLabel = catLabel[p.category] || '购买积分';
+                  const cCls = catCls[p.category] || catCls.purchased;
+                  const stBadge = p.is_active
+                    ? (p.is_expiring_soon ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-amber-500/20 text-amber-300 border border-amber-500/30 font-sans">即将到期</span>' : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-sans">生效中</span>')
+                    : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-slate-800 text-slate-400 border border-slate-700 font-sans">已耗尽/过期</span>';
+                  return `
+                    <tr class="hover:bg-slate-900/50 ${p.is_active ? '' : 'opacity-65'}">
+                      <td class="py-2 px-3 font-sans">
+                        <div class="text-slate-200 font-medium">${escapeHtml(p.package_name || p.package_code || '-')}</div>
+                        <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(p.sub_product_code || p.package_code || '')}</div>
+                      </td>
+                      <td class="py-2 px-3 font-sans"><span class="px-1.5 py-0.5 rounded text-[10px] border ${cCls}">${cLabel}</span></td>
+                      <td class="py-2 px-3">${stBadge}</td>
+                      <td class="py-2 px-3">
+                        <div class="text-emerald-300 font-semibold">${fmtCredit(p.remain)} <span class="text-slate-500 font-normal">/ ${fmtCredit(p.total)}</span></div>
+                        <div class="w-24 h-1 bg-slate-800 rounded-full overflow-hidden mt-1"><div class="h-full bg-emerald-400 rounded-full" style="width:${pPct.toFixed(0)}%"></div></div>
+                      </td>
+                      <td class="py-2 px-3 text-slate-300">${fmtCredit(p.used)}</td>
+                      <td class="py-2 px-3 text-[11px] ${p.is_expiring_soon ? 'text-amber-300' : 'text-slate-400'}">${escapeHtml(p.cycle_end_time || '长期有效')}</td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      // 模型额度（限流状态 + 实测积分消耗）合并视图
+      const mMap = {};
+      for (const rm of (a.rate_limited_models || [])) {
+        if (!mMap[rm.model]) mMap[rm.model] = { model: rm.model };
+        mMap[rm.model].limited = rm;
+      }
+      for (const mc of (a.model_costs || [])) {
+        if (!mMap[mc.model]) mMap[mc.model] = { model: mc.model };
+        mMap[mc.model].cost = mc;
+      }
+      const mList = Object.values(mMap).sort((x, y) => x.model.localeCompare(y.model));
+      let modelsHtml = `<div class="p-4 text-center text-xs text-slate-500 bg-slate-900/50 rounded-2xl border border-slate-800">该账号当前无模型限流锁定或已记录的调用消耗</div>`;
+      if (mList.length > 0) {
+        modelsHtml = `
+          <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                  <th class="py-2.5 px-3 font-semibold">模型名称</th>
+                  <th class="py-2.5 px-3 font-semibold">额度 / 限流状态</th>
+                  <th class="py-2.5 px-3 font-semibold">恢复时间 / 原因</th>
+                  <th class="py-2.5 px-3 font-semibold">观测次数</th>
+                  <th class="py-2.5 px-3 font-semibold text-right">实测单价 (/1K tok)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60 font-mono">
+                ${mList.map(m => {
+                  const lim = m.limited;
+                  const cost = m.cost;
+                  const badge = lim
+                    ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30 font-sans">限流中 (${lim.remaining_sec || 0}s)</span>`
+                    : `<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30 font-sans">额度正常</span>`;
+                  const detail = lim ? `${lim.reset_at || lim.until || '-'} · ${escapeHtml(lim.reason || '')}` : '-';
+                  return `
+                    <tr class="hover:bg-slate-900/50">
+                      <td class="py-2 px-3 text-indigo-300 font-semibold">${escapeHtml(m.model)}</td>
+                      <td class="py-2 px-3">${badge}</td>
+                      <td class="py-2 px-3 text-[11px] text-slate-400 font-sans">${detail}</td>
+                      <td class="py-2 px-3 text-slate-300">${cost ? (cost.samples || 0) : 0}</td>
+                      <td class="py-2 px-3 text-right ${cost && cost.cost_per_1k > 0 ? 'text-amber-300' : 'text-emerald-300'} font-semibold">${cost ? (cost.cost_per_1k > 0 ? fmtCredit(cost.cost_per_1k) : '0 (免费)') : '-'}</td>
+                    </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>`;
+      }
+
+      bodyEl.innerHTML = `
+        ${summaryGrid}
+        <div class="space-y-2">
+          <h4 class="text-xs font-bold text-slate-200 flex items-center justify-between">
+            <span>📦 积分资源包明细 (${packs.length} 个)</span>
+          </h4>
+          ${packsHtml}
+        </div>
+        <div class="space-y-2">
+          <h4 class="text-xs font-bold text-slate-200 flex items-center justify-between">
+            <span>⚡ 模型额度限流与消耗明细 (${mList.length} 项)</span>
+          </h4>
+          ${modelsHtml}
+        </div>
+      `;
+      modal.classList.remove('hidden');
     }
 
     function closeWelfareModal() {

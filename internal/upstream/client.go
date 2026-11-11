@@ -10,8 +10,11 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"math"
 	"net/http"
 	"regexp"
+	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -1592,21 +1595,31 @@ func (c *Client) UserResourceDetailed(a *auth.Auth, soon time.Duration) (remain 
 	return remain, buckets, nil
 }
 
-// userResourceResp get-user-resource 响应结构（UserResourceDetailed 与 ResourceSummary
-// 共享；含分桶所需 CycleEndTime 与聚合所需 TotalDosage，缺省字段按零值处理）。
+// userResourceResp get-user-resource 响应结构（UserResourceDetailed、ResourceSummary 与 UserResourceBreakdown
+// 共享；含分桶所需 CycleEndTime 与聚合所需 TotalDosage 及精确小数字符串字段，缺省字段按零值处理）。
 type userResourceResp struct {
 	Response struct {
 		Data struct {
 			TotalDosage int64 `json:"TotalDosage"`
 			Accounts    []struct {
-				PackageName         string `json:"PackageName"`
-				CycleEndTime        string `json:"CycleEndTime"` // "2006-01-02 15:04:05"，缺省/空 = 无到期
-				CapacitySize        int64  `json:"CapacitySize"`
-				CapacityRemain      int64  `json:"CapacityRemain"`
-				CapacityUsed        int64  `json:"CapacityUsed"`
-				CycleCapacitySize   int64  `json:"CycleCapacitySize"`
-				CycleCapacityRemain int64  `json:"CycleCapacityRemain"`
-				CycleCapacityUsed   int64  `json:"CycleCapacityUsed"`
+				PackageCode                string `json:"PackageCode"`
+				PackageName                string `json:"PackageName"`
+				SubProductCode             string `json:"SubProductCode"`
+				Status                     int    `json:"Status"`
+				CycleStartTime             string `json:"CycleStartTime"`
+				CycleEndTime               string `json:"CycleEndTime"` // "2006-01-02 15:04:05"，缺省/空 = 无到期
+				CapacitySize               int64  `json:"CapacitySize"`
+				CapacityRemain             int64  `json:"CapacityRemain"`
+				CapacityUsed               int64  `json:"CapacityUsed"`
+				CycleCapacitySize          int64  `json:"CycleCapacitySize"`
+				CycleCapacityRemain        int64  `json:"CycleCapacityRemain"`
+				CycleCapacityUsed          int64  `json:"CycleCapacityUsed"`
+				CapacitySizePrecise        string `json:"CapacitySizePrecise"`
+				CapacityRemainPrecise      string `json:"CapacityRemainPrecise"`
+				CapacityUsedPrecise        string `json:"CapacityUsedPrecise"`
+				CycleCapacitySizePrecise   string `json:"CycleCapacitySizePrecise"`
+				CycleCapacityRemainPrecise string `json:"CycleCapacityRemainPrecise"`
+				CycleCapacityUsedPrecise   string `json:"CycleCapacityUsedPrecise"`
 			} `json:"Accounts"`
 		} `json:"Data"`
 	} `json:"Response"`
@@ -1716,6 +1729,195 @@ func packageRemainUsed(a respAccount) (remain, used, size int64) {
 		used = size - remain
 	}
 	return remain, used, size
+}
+
+// CreditPackDetail 单个计费资源包的精确额度与周期状态。
+type CreditPackDetail struct {
+	PackageCode    string  `json:"package_code,omitempty"`
+	PackageName    string  `json:"package_name"`
+	SubProductCode string  `json:"sub_product_code,omitempty"`
+	Category       string  `json:"category"` // "base" | "bonus" | "purchased"
+	Status         int     `json:"status"`
+	Remain         float64 `json:"remain"`
+	Total          float64 `json:"total"`
+	Used           float64 `json:"used"`
+	CycleStartTime string  `json:"cycle_start_time,omitempty"`
+	CycleEndTime   string  `json:"cycle_end_time,omitempty"`
+	IsActive       bool    `json:"is_active"`
+	IsExpiringSoon bool    `json:"is_expiring_soon,omitempty"`
+}
+
+// CreditBreakdown 账号的精确积分总额度与按包分类明细。
+type CreditBreakdown struct {
+	Remain          float64            `json:"remain"`
+	Total           float64            `json:"total"`
+	Used            float64            `json:"used"`
+	ActiveTotal     float64            `json:"active_total"`
+	BaseRemain      float64            `json:"base_remain"`
+	BonusRemain     float64            `json:"bonus_remain"`
+	PurchasedRemain float64            `json:"purchased_remain"`
+	ExpiringRemain  float64            `json:"expiring_remain"`
+	TotalDosage     int64              `json:"total_dosage,omitempty"`
+	PackCount       int                `json:"pack_count"`
+	ActivePackCount int                `json:"active_pack_count"`
+	Packs           []CreditPackDetail `json:"packs,omitempty"`
+}
+
+func roundCredit2(v float64) float64 {
+	return math.Round(v*100) / 100
+}
+
+func parsePreciseCredit(precise string, fallback int64) float64 {
+	if s := strings.TrimSpace(precise); s != "" {
+		if v, err := strconv.ParseFloat(s, 64); err == nil {
+			return v
+		}
+	}
+	return float64(fallback)
+}
+
+func classifyPackCategory(subProductCode, packageName string) string {
+	sub := strings.ToLower(strings.TrimSpace(subProductCode))
+	name := strings.ToLower(strings.TrimSpace(packageName))
+	if sub == "sp_tcaca_codebuddy_ide" ||
+		strings.Contains(name, "free plan") ||
+		strings.Contains(name, "体验版") ||
+		strings.Contains(name, "subscription") ||
+		strings.Contains(name, "基础") ||
+		strings.Contains(name, "套餐") {
+		return "base"
+	}
+	if sub == "sp_tcaca_codebuddyide_bonus_pack" ||
+		strings.Contains(sub, "bonus") ||
+		strings.Contains(name, "bonus") ||
+		strings.Contains(name, "权益") ||
+		strings.Contains(name, "奖励") ||
+		strings.Contains(name, "赠送") ||
+		strings.Contains(name, "拉新") ||
+		strings.Contains(name, "福利") {
+		return "bonus"
+	}
+	return "purchased"
+}
+
+// UserResourceBreakdown 返回当前账号的精确小数积分总额度、分类余额与全部资源包明细。
+func (c *Client) UserResourceBreakdown(a *auth.Auth, soon time.Duration) (CreditBreakdown, error) {
+	resp, err := c.getUserResourceBody(a)
+	if err != nil {
+		return CreditBreakdown{}, err
+	}
+
+	now := time.Now()
+	cutoff := now.Add(soon)
+	bd := CreditBreakdown{
+		TotalDosage: resp.Response.Data.TotalDosage,
+	}
+
+	packs := make([]CreditPackDetail, 0, len(resp.Response.Data.Accounts))
+	for _, p := range resp.Response.Data.Accounts {
+		cycSize := parsePreciseCredit(p.CycleCapacitySizePrecise, p.CycleCapacitySize)
+		cycRemain := parsePreciseCredit(p.CycleCapacityRemainPrecise, p.CycleCapacityRemain)
+		cycUsed := parsePreciseCredit(p.CycleCapacityUsedPrecise, p.CycleCapacityUsed)
+		capSize := parsePreciseCredit(p.CapacitySizePrecise, p.CapacitySize)
+		capRemain := parsePreciseCredit(p.CapacityRemainPrecise, p.CapacityRemain)
+		capUsed := parsePreciseCredit(p.CapacityUsedPrecise, p.CapacityUsed)
+
+		var remain, used, total float64
+		if cycSize > 0 || cycRemain > 0 || cycUsed > 0 {
+			remain, used, total = cycRemain, cycUsed, cycSize
+		} else {
+			remain, used, total = capRemain, capUsed, capSize
+		}
+		if used == 0 && total > remain {
+			used = total - remain
+		}
+		if remain < 0 {
+			remain = 0
+		}
+		if used < 0 {
+			used = 0
+		}
+		if total < 0 {
+			total = 0
+		}
+
+		isActive := p.Status == 0 && remain > 0
+		expiringSoon := false
+		if soon > 0 && isActive && strings.TrimSpace(p.CycleEndTime) != "" {
+			if t, perr := time.ParseInLocation(packageEndLayout, strings.TrimSpace(p.CycleEndTime), softRateResetLoc); perr == nil {
+				if !t.After(cutoff) {
+					expiringSoon = true
+				}
+			}
+		}
+
+		cat := classifyPackCategory(p.SubProductCode, p.PackageName)
+		bd.Total += total
+		bd.Used += used
+		if isActive {
+			bd.ActivePackCount++
+			bd.ActiveTotal += total
+			bd.Remain += remain
+			switch cat {
+			case "base":
+				bd.BaseRemain += remain
+			case "bonus":
+				bd.BonusRemain += remain
+			default:
+				bd.PurchasedRemain += remain
+			}
+			if expiringSoon {
+				bd.ExpiringRemain += remain
+			}
+		}
+
+		packs = append(packs, CreditPackDetail{
+			PackageCode:    p.PackageCode,
+			PackageName:    p.PackageName,
+			SubProductCode: p.SubProductCode,
+			Category:       cat,
+			Status:         p.Status,
+			Remain:         roundCredit2(remain),
+			Total:          roundCredit2(total),
+			Used:           roundCredit2(used),
+			CycleStartTime: p.CycleStartTime,
+			CycleEndTime:   p.CycleEndTime,
+			IsActive:       isActive,
+			IsExpiringSoon: expiringSoon,
+		})
+	}
+
+	sort.SliceStable(packs, func(i, j int) bool {
+		if packs[i].IsActive != packs[j].IsActive {
+			return packs[i].IsActive
+		}
+		ei, ej := strings.TrimSpace(packs[i].CycleEndTime), strings.TrimSpace(packs[j].CycleEndTime)
+		if ei != ej {
+			if ei == "" {
+				return false
+			}
+			if ej == "" {
+				return true
+			}
+			return ei < ej
+		}
+		return packs[i].Remain > packs[j].Remain
+	})
+
+	if len(packs) == 0 && bd.TotalDosage > 0 {
+		bd.Remain = float64(bd.TotalDosage)
+	}
+	bd.PackCount = len(packs)
+	bd.Remain = roundCredit2(bd.Remain)
+	bd.Total = roundCredit2(bd.Total)
+	bd.Used = roundCredit2(bd.Used)
+	bd.ActiveTotal = roundCredit2(bd.ActiveTotal)
+	bd.BaseRemain = roundCredit2(bd.BaseRemain)
+	bd.BonusRemain = roundCredit2(bd.BonusRemain)
+	bd.PurchasedRemain = roundCredit2(bd.PurchasedRemain)
+	bd.ExpiringRemain = roundCredit2(bd.ExpiringRemain)
+	bd.Packs = packs
+	return bd, nil
 }
 
 // DailyCheckin 执行每日签到。已签到（业务 code 非 0）也返回错误，调用方按 msg 区分。
