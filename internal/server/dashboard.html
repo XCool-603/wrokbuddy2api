@@ -244,159 +244,159 @@
     <!-- TAB 1: 账号池矩阵 & 负载监控 -->
     <div id="tabContent-accounts" class="space-y-6">
       <!-- Metrics Dashboard -->
-      <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-indigo-500/10 rounded-full blur-xl group-hover:bg-indigo-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">总账号资产</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statTotal" class="text-2xl font-bold font-mono text-white">0</span>
-            <span class="text-[10px] text-slate-500">ACCOUNTS</span>
+      <section class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>总账号资产</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-indigo-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-indigo-400">
-            <span>双域智能负载</span>
-          </div>
+          <div id="statTotal" class="text-xl font-bold font-mono text-white mt-1">0</div>
         </div>
 
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-emerald-500/10 rounded-full blur-xl group-hover:bg-emerald-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">健康可调度</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statHealthy" class="text-2xl font-bold font-mono text-emerald-400">0</span>
-            <span class="text-[10px] text-emerald-500/70">READY</span>
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>健康可调度</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-emerald-400/80">
-            <span class="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block mr-1.5"></span>
-            <span>正常就绪</span>
-          </div>
+          <div id="statHealthy" class="text-xl font-bold font-mono text-emerald-400 mt-1">0</div>
         </div>
 
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-amber-500/10 rounded-full blur-xl group-hover:bg-amber-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">限流冷却中</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statCooling" class="text-2xl font-bold font-mono text-amber-400">0</span>
-            <span class="text-[10px] text-amber-500/70">COOLING</span>
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>限流冷却中</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-amber-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-amber-400/80">
-            <span>自动退避中</span>
-          </div>
+          <div id="statCooling" class="text-xl font-bold font-mono text-amber-400 mt-1">0</div>
         </div>
 
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-rose-500/10 rounded-full blur-xl group-hover:bg-rose-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">异常/停用</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statDisabled" class="text-2xl font-bold font-mono text-rose-400">0</span>
-            <span class="text-[10px] text-rose-500/70">OFFLINE</span>
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>异常 / 停用</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-rose-400/80">
-            <span>手动或熔断</span>
-          </div>
+          <div id="statDisabled" class="text-xl font-bold font-mono text-rose-400 mt-1">0</div>
         </div>
 
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-cyan-500/10 rounded-full blur-xl group-hover:bg-cyan-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">会话粘性绑定</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statSticky" class="text-2xl font-bold font-mono text-cyan-400">0</span>
-            <span class="text-[10px] text-cyan-500/70">SESSIONS</span>
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>会话粘性</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-cyan-400/80">
-            <span>上下文稳定路由</span>
-          </div>
+          <div id="statSticky" class="text-xl font-bold font-mono text-cyan-400 mt-1">0</div>
         </div>
 
-        <div class="glass-panel p-4 rounded-2xl border border-slate-800 relative overflow-hidden group">
-          <div class="absolute -right-4 -bottom-4 w-16 h-16 bg-purple-500/10 rounded-full blur-xl group-hover:bg-purple-500/20 transition"></div>
-          <p class="text-xs font-medium text-slate-400">在途并发满载</p>
-          <div class="flex items-baseline gap-2 mt-1">
-            <span id="statInFlight" class="text-2xl font-bold font-mono text-purple-400">0</span>
-            <span class="text-[10px] text-purple-500/70">BUSY</span>
+        <div class="bg-slate-900/65 px-4 py-3 rounded-xl border border-slate-800/80 hover:border-slate-700/80 transition">
+          <div class="flex items-center justify-between text-[11px] text-slate-400">
+            <span>在途满载</span>
+            <span class="w-1.5 h-1.5 rounded-full bg-purple-400"></span>
           </div>
-          <div class="mt-2 flex items-center text-[11px] text-purple-400/80">
-            <span>最大并发保护</span>
-          </div>
+          <div id="statInFlight" class="text-xl font-bold font-mono text-purple-400 mt-1">0</div>
         </div>
       </section>
 
-      <!-- 总积分与双域额度明细 (Credits & Quota Breakdown) -->
-      <section class="glass-panel rounded-2xl border border-slate-800/90 p-5 shadow-glass space-y-4">
-        <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 pb-3 border-b border-slate-800/80">
-          <div>
-            <h2 class="text-sm font-bold text-white flex items-center gap-2">
-              <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
-              <span>总积分与双域额度明细 (CN / Global)</span>
-            </h2>
-            <p class="text-[11px] text-slate-400 mt-0.5">实时汇总全池、国内版及国际版精确小数积分构成（套餐基础 / 平台奖励 / 购买包 / 即将到期）与模型额度限流状态</p>
-          </div>
+      <!-- 账户余额与双域额度摘要条 + 双快捷按钮 -->
+      <section class="glass-panel rounded-xl border border-slate-800/90 px-4 py-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+        <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs">
           <div class="flex items-center gap-2">
-            <span id="creditDetailCoverageBadge" class="text-[11px] font-mono text-slate-400 bg-slate-900/80 border border-slate-800 px-2.5 py-1 rounded-lg">已同步明细: 0 / 0</span>
-            <button onclick="refreshData(true)" class="px-3 py-1.5 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/30 text-indigo-300 text-xs font-medium transition cursor-pointer">
-              ↻ 拉取实时包明细
-            </button>
+            <span class="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span class="text-slate-400">全池余额</span>
+            <span id="stripAllRemain" class="text-base font-bold font-mono text-white">0</span>
+            <span id="stripAllTotal" class="text-[11px] font-mono text-slate-500">/ -</span>
           </div>
+          <div class="h-3.5 w-px bg-slate-800 hidden sm:block"></div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] px-1.5 py-0.5 rounded bg-blue-500/10 text-blue-300 border border-blue-500/20 font-mono">CN</span>
+            <span id="stripCNRemain" class="font-bold font-mono text-blue-300">0</span>
+          </div>
+          <div class="flex items-center gap-1.5">
+            <span class="text-[11px] px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-300 border border-emerald-500/20 font-mono">Global</span>
+            <span id="stripGlobalRemain" class="font-bold font-mono text-emerald-300">0</span>
+          </div>
+          <span id="creditDetailCoverageBadge" class="text-[11px] font-mono text-slate-400 bg-slate-900/80 border border-slate-800 px-2 py-0.5 rounded-lg">已同步明细 0/0</span>
+          <span id="stripAlertBadge" class="hidden text-[11px] font-mono px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/25"></span>
         </div>
-        <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          <div id="creditCardAll" class="rounded-2xl bg-slate-900/70 border border-indigo-500/25 p-4 space-y-3"></div>
-          <div id="creditCardCN" class="rounded-2xl bg-slate-900/70 border border-blue-500/25 p-4 space-y-3"></div>
-          <div id="creditCardGlobal" class="rounded-2xl bg-slate-900/70 border border-emerald-500/25 p-4 space-y-3"></div>
+        <div class="flex items-center gap-2 shrink-0">
+          <button onclick="openBalanceOverviewModal()" class="px-3.5 py-1.5 rounded-xl bg-emerald-500/15 hover:bg-emerald-500/25 border border-emerald-500/35 text-emerald-300 hover:text-emerald-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer">
+            <span>💰</span>
+            <span>账户余额</span>
+          </button>
+          <button onclick="openCreditDetailOverviewModal()" class="px-3.5 py-1.5 rounded-xl bg-indigo-500/15 hover:bg-indigo-500/25 border border-indigo-500/35 text-indigo-300 hover:text-indigo-200 text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer">
+            <span>📊</span>
+            <span>积分明细</span>
+          </button>
         </div>
       </section>
 
       <!-- Account Pool Card -->
       <div class="glass-panel rounded-2xl border border-slate-800 overflow-hidden shadow-glass">
-        <div class="px-6 py-5 border-b border-slate-800/80 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 bg-slate-900/30">
-          <div>
-            <h2 class="text-base font-bold text-white flex items-center gap-2.5">
+        <div class="px-5 py-4 border-b border-slate-800/80 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3 bg-slate-900/30">
+          <div class="flex flex-wrap items-center gap-3">
+            <div class="flex items-center gap-2">
               <span class="flex h-2 w-2 rounded-full bg-indigo-500"></span>
-              <span>账号池矩阵 (CN & Global Pool)</span>
-              <span id="accountCountBadge" class="text-xs px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
-            </h2>
-            <p class="text-xs text-slate-400 mt-0.5">支持跨域自动轮询、故障自愈、积分跟踪与生命周期监控</p>
+              <h2 class="text-sm font-bold text-white">账号池矩阵</h2>
+              <span id="accountCountBadge" class="text-[11px] px-2 py-0.5 rounded-full bg-slate-800 text-slate-300 font-mono">0</span>
+            </div>
+            <div class="inline-flex items-center p-0.5 rounded-xl bg-slate-900/90 border border-slate-800 text-[11px]">
+              <button id="acctFilter-all" onclick="setAccountRealmFilter('all')" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition cursor-pointer">全部</button>
+              <button id="acctFilter-cn" onclick="setAccountRealmFilter('cn')" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition cursor-pointer">🇨🇳 CN</button>
+              <button id="acctFilter-global" onclick="setAccountRealmFilter('global')" class="px-2.5 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition cursor-pointer">🌍 Global</button>
+            </div>
           </div>
 
           <div class="flex flex-wrap items-center gap-2">
-            <!-- Account Pool Specific Actions -->
-            <button onclick="openOAuthModal('cn')" class="px-3 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-400 hover:text-blue-300 border border-blue-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+            <button onclick="openOAuthModal('cn')" class="px-2.5 py-1.5 bg-blue-500/10 hover:bg-blue-500/20 text-blue-300 border border-blue-500/25 rounded-xl text-xs font-medium transition flex items-center gap-1.5 cursor-pointer">
               <span class="w-1.5 h-1.5 rounded-full bg-blue-400"></span>
               <span>授权国内版</span>
             </button>
-            <button onclick="openOAuthModal('global')" class="px-3 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-400 hover:text-emerald-300 border border-emerald-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
+            <button onclick="openOAuthModal('global')" class="px-2.5 py-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 rounded-xl text-xs font-medium transition flex items-center gap-1.5 cursor-pointer">
               <span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
               <span>授权国际版</span>
             </button>
-            <button onclick="openImportModal()" class="px-3 py-1.5 bg-indigo-600/20 hover:bg-indigo-600/30 text-indigo-300 hover:text-white border border-indigo-500/40 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="支持上传 ZIP 备份包、选择多个 JSON 凭证文件，或粘贴单个/数组 JSON 批量入池">
-              <svg class="w-3.5 h-3.5 text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12"/></svg>
-              <span>一键批量导入</span>
-            </button>
-            <a href="/ui/action/backup" class="px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="一键将账号凭证自动打包为 ZIP 压缩包下载到本地">
-              <svg class="w-3.5 h-3.5 text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"/></svg>
-              <span>一键全量导出</span>
-            </a>
-                        <button onclick="runBatchWelfare()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 hover:text-amber-200 border border-amber-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键领取所有账号的新手大礼包、活动补偿、签到并联动派猫与后台活动（多开新号必备）">
+
+            <div class="relative">
+              <button id="btnPoolImportMenu" onclick="toggleToolbarMenu('poolImportDropdown')" class="px-2.5 py-1.5 bg-slate-800/90 hover:bg-slate-700/80 text-slate-200 border border-slate-700 rounded-xl text-xs font-medium transition flex items-center gap-1 cursor-pointer">
+                <span>导入 / 备份</span>
+                <svg class="w-3 h-3 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div id="poolImportDropdown" class="absolute right-0 mt-1.5 w-44 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl p-1.5 hidden z-50 text-xs">
+                <button onclick="openImportModal(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>📥</span><span>一键批量导入</span>
+                </button>
+                <a href="/ui/action/backup" onclick="closeAllToolbarMenus()" class="w-full text-left px-3 py-2 rounded-xl text-slate-200 hover:bg-slate-800 transition flex items-center gap-2">
+                  <span>📦</span><span>一键全量导出 ZIP</span>
+                </a>
+              </div>
+            </div>
+
+            <button onclick="runBatchWelfare()" class="px-3 py-1.5 bg-gradient-to-r from-amber-500/20 to-orange-500/20 hover:from-amber-500/30 hover:to-orange-500/30 text-amber-300 border border-amber-500/35 rounded-xl text-xs font-semibold transition flex items-center gap-1.5 cursor-pointer" title="一键领取所有账号的新手大礼包、活动补偿、签到并联动派猫与后台活动">
               <span>🎁</span>
-              <span>一键吃满新手福利</span>
+              <span>一键吃满福利</span>
             </button>
-            <button onclick="runBatchTravel()" class="px-3 py-1.5 bg-gradient-to-r from-pink-500/20 to-rose-500/20 hover:from-pink-500/30 hover:to-rose-500/30 text-pink-300 hover:text-pink-200 border border-pink-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键对所有账号执行猫猫巡检：自动领养第一只猫、派出猫猫去旅行、旅行归来到站领奖">
-              <span>🐱</span>
-              <span>一键派猫猫旅行</span>
-            </button>
-            <button onclick="runBatchTasks()" class="px-3 py-1.5 bg-gradient-to-r from-cyan-500/20 to-blue-500/20 hover:from-cyan-500/30 hover:to-blue-500/30 text-cyan-300 hover:text-cyan-200 border border-cyan-500/40 rounded-xl text-xs font-semibold shadow-sm transition flex items-center gap-1.5" title="一键后台执行买得好、抖音乐园、商家宣传、博汪汪宠物、无畏契约拼豆等最新活动积分任务">
-              <span>⚡</span>
-              <span>最新活动成长任务</span>
-            </button>
-            <button onclick="openInviteModal()" class="px-3 py-1.5 bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-purple-200 border border-purple-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5" title="查看专属邀请链接与邀请码，新号注册吃福利指南">
-              <svg class="w-3.5 h-3.5 text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
-              <span>邀请新号指南</span>
-            </button>
-<button onclick="runBatchSignin()" class="px-3 py-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 hover:text-indigo-300 border border-indigo-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
-              <span>日常签到</span>
-            </button>
-            <button onclick="runBatchTrial()" class="px-3 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 text-teal-400 hover:text-teal-300 border border-teal-500/30 rounded-xl text-xs font-medium transition flex items-center gap-1.5">
-              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v13m0-13V6a2 2 0 112 2h-2zm0 0V4a2 2 0 10-2 2h2"/></svg>
-              <span>领取试用包</span>
-            </button>
+
+            <div class="relative">
+              <button id="btnPoolWelfareMenu" onclick="toggleToolbarMenu('poolWelfareDropdown')" class="px-2.5 py-1.5 bg-cyan-500/10 hover:bg-cyan-500/20 text-cyan-300 border border-cyan-500/25 rounded-xl text-xs font-medium transition flex items-center gap-1 cursor-pointer">
+                <span>更多任务</span>
+                <svg class="w-3 h-3 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/></svg>
+              </button>
+              <div id="poolWelfareDropdown" class="absolute right-0 mt-1.5 w-48 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl p-1.5 hidden z-50 text-xs">
+                <button onclick="runBatchTravel(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-pink-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>🐱</span><span>一键派猫猫旅行</span>
+                </button>
+                <button onclick="runBatchTasks(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-cyan-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>⚡</span><span>最新活动成长任务</span>
+                </button>
+                <button onclick="runBatchSignin(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-indigo-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>✅</span><span>日常签到</span>
+                </button>
+                <button onclick="runBatchTrial(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-teal-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>🎟️</span><span>领取试用包</span>
+                </button>
+                <div class="h-px bg-slate-800 my-1"></div>
+                <button onclick="openInviteModal(); closeAllToolbarMenus();" class="w-full text-left px-3 py-2 rounded-xl text-purple-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer">
+                  <span>🔗</span><span>邀请新号指南</span>
+                </button>
+              </div>
+            </div>
           </div>
         </div>
 
@@ -1473,8 +1473,79 @@ eyJhbGciOi...----refresh_token_here'></textarea>
     </div>
   </div>
 
+  <!-- Pool Account Balance Overview Modal -->
+  <div id="balanceOverviewModal" onclick="if(event.target===this) closeBalanceOverviewModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-emerald-500/30 rounded-3xl max-w-5xl w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>💰</span>
+            <span>账户余额与双域资产总览</span>
+          </h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">查看全池、国内版 (CN)、国际版 (Global) 精确可用余额及每个账号实时余量分布</p>
+        </div>
+        <button onclick="closeBalanceOverviewModal()" class="relative z-10 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer" title="关闭">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="balanceOverviewBody" class="py-4 space-y-4 max-h-[75vh] overflow-y-auto pr-1 custom-scroll"></div>
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-xs">
+          <button onclick="setModalRealmFilter('balance','all')" id="balFilter-all" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition">全部</button>
+          <button onclick="setModalRealmFilter('balance','cn')" id="balFilter-cn" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-medium transition">🇨🇳 国内版</button>
+          <button onclick="setModalRealmFilter('balance','global')" id="balFilter-global" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-medium transition">🌍 国际版</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="refreshData(true)" class="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/30 text-emerald-300 text-xs font-medium rounded-xl transition cursor-pointer">
+            ↻ 刷新全部余额
+          </button>
+          <button onclick="closeBalanceOverviewModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition cursor-pointer">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Pool Credit & Quota Detail Overview Modal -->
+  <div id="creditDetailOverviewModal" onclick="if(event.target===this) closeCreditDetailOverviewModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+    <div class="glass-panel border border-indigo-500/30 rounded-3xl max-w-5xl w-full p-6 shadow-2xl relative overflow-hidden">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div>
+          <h3 class="text-base font-bold text-white flex items-center gap-2">
+            <span>📊</span>
+            <span>总积分明细与模型额度监控</span>
+          </h3>
+          <p class="text-[11px] text-slate-400 mt-0.5">按域汇总套餐基础、平台奖励、购买包及即将到期积分构成，实时检视模型限流与各号资源包</p>
+        </div>
+        <button onclick="closeCreditDetailOverviewModal()" class="relative z-10 p-1.5 text-slate-400 hover:text-white hover:bg-slate-800 rounded-xl transition cursor-pointer" title="关闭">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div id="creditDetailOverviewBody" class="py-4 space-y-5 max-h-[75vh] overflow-y-auto pr-1 custom-scroll"></div>
+      <div class="pt-3 border-t border-slate-800 flex items-center justify-between gap-2">
+        <div class="flex items-center gap-1.5 text-xs">
+          <button onclick="setModalRealmFilter('detail','all')" id="detFilter-all" class="px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition">🌐 全池</button>
+          <button onclick="setModalRealmFilter('detail','cn')" id="detFilter-cn" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-medium transition">🇨🇳 CN</button>
+          <button onclick="setModalRealmFilter('detail','global')" id="detFilter-global" class="px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-medium transition">🌍 Global</button>
+        </div>
+        <div class="flex items-center gap-2">
+          <button onclick="refreshData(true)" class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium rounded-xl transition cursor-pointer">
+            ↻ 拉取实时包明细
+          </button>
+          <button onclick="closeCreditDetailOverviewModal()" class="px-5 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-medium rounded-xl transition cursor-pointer">
+            关闭
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Floating Row Actions Popover -->
+  <div id="rowActionMenu" class="fixed hidden z-50 w-44 bg-slate-900 border border-slate-700/90 rounded-2xl shadow-2xl p-1.5 text-xs"></div>
+
   <!-- Account Credit & Quota Detail Modal -->
-  <div id="creditDetailModal" onclick="if(event.target===this) closeAccountDetailModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-50">
+  <div id="creditDetailModal" onclick="if(event.target===this) closeAccountDetailModal()" class="fixed inset-0 bg-black/80 backdrop-blur-md flex items-center justify-center p-4 hidden z-[60]">
     <div class="glass-panel border border-indigo-500/30 rounded-3xl max-w-4xl w-full p-6 shadow-2xl relative overflow-hidden">
       <div class="flex items-center justify-between pb-3 border-b border-slate-800">
         <div>
@@ -1488,7 +1559,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"/></svg>
         </button>
       </div>
-      <div id="accDetailBody" class="py-4 space-y-5 max-h-[75vh] overflow-y-auto pr-1"></div>
+      <div id="accDetailBody" class="py-4 space-y-5 max-h-[75vh] overflow-y-auto pr-1 custom-scroll"></div>
       <div class="pt-3 border-t border-slate-800 flex items-center justify-end gap-2">
         <button onclick="refreshData(true).then(() => { if(window._activeDetailUid) openAccountDetailModal(window._activeDetailUid); })" class="px-4 py-2 bg-indigo-600/20 hover:bg-indigo-600/30 border border-indigo-500/30 text-indigo-300 text-xs font-medium rounded-xl transition cursor-pointer">
           ↻ 刷新最新数据
@@ -1668,11 +1739,17 @@ eyJhbGciOi...----refresh_token_here'></textarea>
     let hasWebPassword = false;
     let currentActiveTab = 'accounts';
 
-    // 全局 ESC 键关闭弹窗
+    // 全局 ESC 键关闭弹窗与浮层菜单
     window.addEventListener('keydown', function(e) {
       if (e.key === 'Escape') {
         closeOAuthModal();
         closeImportModal();
+        closeBalanceOverviewModal();
+        closeCreditDetailOverviewModal();
+        closeAccountDetailModal();
+        closeWelfareModal();
+        closeAllToolbarMenus();
+        closeRowActionMenu();
         showLoginModal(false);
         const cpModal = document.getElementById('changePasswordModal');
         if (cpModal) cpModal.classList.add('hidden');
@@ -1684,6 +1761,74 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       if (menu) menu.classList.toggle('hidden');
     }
 
+    function closeAllToolbarMenus() {
+      ['poolImportDropdown', 'poolWelfareDropdown'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.classList.add('hidden');
+      });
+    }
+
+    function toggleToolbarMenu(id) {
+      const target = document.getElementById(id);
+      const isHidden = target ? target.classList.contains('hidden') : true;
+      closeAllToolbarMenus();
+      closeRowActionMenu();
+      if (target && isHidden) target.classList.remove('hidden');
+    }
+
+    function closeRowActionMenu() {
+      const m = document.getElementById('rowActionMenu');
+      if (m) m.classList.add('hidden');
+    }
+
+    function openUpdateTokenByUid(uid) {
+      const a = (window.cachedAccounts || []).find(x => x.uid === uid);
+      if (a) openUpdateTokenModal(a.uid, a.nickname || a.uid);
+    }
+
+    function deleteAccountByUid(uid) {
+      const a = (window.cachedAccounts || []).find(x => x.uid === uid);
+      if (a && a.filename) deleteAccount(a.filename);
+    }
+
+    function openRowActionMenu(uid, ev) {
+      if (ev) ev.stopPropagation();
+      const menu = document.getElementById('rowActionMenu');
+      const a = (window.cachedAccounts || []).find(x => x.uid === uid);
+      if (!menu || !a) return;
+
+      closeAllToolbarMenus();
+      const isRevivable = a.disabled;
+      const isCooling = a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0);
+      const isManualDisabled = a.manual_disabled;
+      const canDelete = (currentUser && currentUser.role === 'admin') || a.is_my_account;
+      const safeUid = String(a.uid || '').replace(/['"\\]/g, '');
+
+
+      menu.innerHTML = `
+        <button onclick="runSingleWelfare('${a.uid}'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-amber-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>🎁</span><span>领取新手福利</span></button>
+        <button onclick="runSingleTasks('${a.uid}'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-cyan-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>⚡</span><span>执行成长任务</span></button>
+        <button onclick="runSingleTravel('${a.uid}'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-pink-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>🐱</span><span>领养/派猫旅行</span></button>
+        <div class="h-px bg-slate-800 my-1"></div>
+        ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-amber-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>💫</span><span>复活账号</span></button>` : ''}
+        ${isCooling ? `<button onclick="controlAccount('${a.uid}', 'clear_cooling'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-amber-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>❄️</span><span>解除冷却</span></button>` : ''}
+        <button onclick="openUpdateTokenByUid('${safeUid}'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-sky-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>🔑</span><span>重填 Token</span></button>
+        ${isManualDisabled
+          ? `<button onclick="controlAccount('${a.uid}', 'enable'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-emerald-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>▶️</span><span>启用账号</span></button>`
+          : `<button onclick="controlAccount('${a.uid}', 'disable'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-slate-300 hover:bg-slate-800 transition flex items-center gap-2 cursor-pointer"><span>⏸️</span><span>停用账号</span></button>`}
+        ${canDelete ? `<div class="h-px bg-slate-800 my-1"></div><button onclick="deleteAccountByUid('${safeUid}'); closeRowActionMenu();" class="w-full text-left px-3 py-1.5 rounded-xl text-rose-400 hover:bg-rose-500/10 transition flex items-center gap-2 cursor-pointer"><span>🗑️</span><span>删除账号</span></button>` : ''}
+      `;
+
+      menu.classList.remove('hidden');
+      const rect = (ev && ev.currentTarget) ? ev.currentTarget.getBoundingClientRect() : { right: 200, bottom: 200 };
+      const menuW = 176;
+      const menuH = menu.offsetHeight || 220;
+      const left = Math.max(8, Math.min(window.innerWidth - menuW - 8, rect.right - menuW));
+      const top = (rect.bottom + 6 + menuH > window.innerHeight) ? Math.max(8, rect.top - menuH - 6) : rect.bottom + 6;
+      menu.style.left = left + 'px';
+      menu.style.top = top + 'px';
+    }
+
     document.addEventListener('click', function(e) {
       const menu = document.getElementById('headerAuthDropdown');
       const btn = document.getElementById('btnHeaderAuthMenu');
@@ -1692,7 +1837,34 @@ eyJhbGciOi...----refresh_token_here'></textarea>
           menu.classList.add('hidden');
         }
       }
+      const impMenu = document.getElementById('poolImportDropdown');
+      const impBtn = document.getElementById('btnPoolImportMenu');
+      if (impMenu && !impMenu.classList.contains('hidden') && impBtn && !impMenu.contains(e.target) && !impBtn.contains(e.target)) {
+        impMenu.classList.add('hidden');
+      }
+      const welfMenu = document.getElementById('poolWelfareDropdown');
+      const welfBtn = document.getElementById('btnPoolWelfareMenu');
+      if (welfMenu && !welfMenu.classList.contains('hidden') && welfBtn && !welfMenu.contains(e.target) && !welfBtn.contains(e.target)) {
+        welfMenu.classList.add('hidden');
+      }
+      const rowMenu = document.getElementById('rowActionMenu');
+      if (rowMenu && !rowMenu.classList.contains('hidden') && !rowMenu.contains(e.target)) {
+        rowMenu.classList.add('hidden');
+      }
     });
+
+    window.accountRealmFilter = 'all';
+    function setAccountRealmFilter(realm) {
+      window.accountRealmFilter = realm;
+      for (const r of ['all', 'cn', 'global']) {
+        const b = document.getElementById('acctFilter-' + r);
+        if (!b) continue;
+        b.className = (r === realm)
+          ? 'px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition cursor-pointer'
+          : 'px-2.5 py-1 rounded-lg text-slate-400 hover:text-white font-medium transition cursor-pointer';
+      }
+      renderAccounts(window.cachedAccounts || []);
+    }
 
     function switchMainTab(tab) {
       currentActiveTab = tab;
@@ -2101,16 +2273,15 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
     function renderAccounts(accounts) {
       const tbody = document.getElementById('accountsTable');
-      if (!accounts.length) {
+      const filterRealm = window.accountRealmFilter || 'all';
+      const list = filterRealm === 'all' ? accounts : accounts.filter(a => a.realm === filterRealm);
+      if (!list.length) {
         tbody.innerHTML = `
           <tr>
             <td colspan="5" class="px-6 py-12 text-center text-slate-500 font-sans">
-              <div class="flex flex-col items-center justify-center space-y-3">
-                <div class="w-12 h-12 rounded-2xl bg-slate-800/50 flex items-center justify-center text-slate-600">
-                  <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0zm6 3a2 2 0 11-4 0 2 2 0 014 0zM7 10a2 2 0 11-4 0 2 2 0 014 0z"/></svg>
-                </div>
-                <p class="text-sm text-slate-400 font-medium">账号池当前为空</p>
-                <p class="text-xs text-slate-500 max-w-sm">请点击上方按钮快速授权国内版或国际版账号，或导入已有凭证</p>
+              <div class="flex flex-col items-center justify-center space-y-2">
+                <p class="text-sm text-slate-400 font-medium">${accounts.length ? '当前域筛选下暂无账号' : '账号池当前为空'}</p>
+                <p class="text-xs text-slate-500 max-w-sm">${accounts.length ? '点击左上角切换“全部”查看全部账号' : '请点击上方“授权国内版”或“授权国际版”，或批量导入凭证'}</p>
               </div>
             </td>
           </tr>`;
@@ -2118,140 +2289,111 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       }
 
       let html = '';
-      for (const a of accounts) {
+      for (const a of list) {
         const isGlobal = a.realm === 'global';
         const realmBadge = isGlobal
-          ? '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">🌍 GLOBAL</span>'
-          : '<span class="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-blue-500/10 text-blue-400 border border-blue-500/20">🇨🇳 CN</span>';
+          ? '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-emerald-500/10 text-emerald-300 border border-emerald-500/20">🌍 Global</span>'
+          : '<span class="inline-flex items-center gap-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold bg-blue-500/10 text-blue-300 border border-blue-500/20">🇨🇳 CN</span>';
 
-        let provBadge = '';
-        const pLower = (a.provider || '').toLowerCase();
-        if (pLower === 'google') {
-          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-red-500/10 text-red-400 border border-red-500/20">Google</span>';
-        } else if (pLower === 'twitter' || pLower === 'x') {
-          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20">Twitter / X</span>';
-        } else if (pLower === 'github') {
-          provBadge = '<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-slate-500/10 text-slate-300 border border-slate-500/20">GitHub</span>';
-        } else if (pLower) {
-          provBadge = `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] font-sans font-medium bg-indigo-500/10 text-indigo-400 border border-indigo-500/20">${escapeHtml(a.provider)}</span>`;
-        }
+        const provLabel = a.provider ? `<span class="text-[10px] font-sans text-slate-400">${escapeHtml(a.provider)}</span>` : '';
 
-        let statusBadge = '<span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>健康在线</span>';
+        let statusBadge = '<span class="inline-flex items-center gap-1.5 text-emerald-400 text-xs font-medium"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>正常就绪</span>';
         if (a.manual_disabled) {
-          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.manual_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>手动停用</span>';
+          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs font-medium" title="' + escapeHtml(a.manual_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>手动停用</span>';
         } else if (a.disabled) {
-          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs" title="' + (a.disabled_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>系统禁用</span>';
+          statusBadge = '<span class="inline-flex items-center gap-1.5 text-rose-400 text-xs font-medium" title="' + escapeHtml(a.disabled_reason || '') + '"><span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>系统禁用</span>';
         } else if (a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0)) {
-          let coolText = '限流冷却中';
+          let coolText = '限流冷却';
           let coolTitle = a.reason || '上游触发频控/限流保护';
           if (a.rate_limited_models && a.rate_limited_models.length > 0) {
             const mNames = a.rate_limited_models.map(m => m.model).join(', ');
             coolTitle += ` [限流模型: ${mNames}]`;
-            if (!a.until) {
-              coolText = '模型限流中';
-            }
+            if (!a.until) coolText = '部分模型限流';
           }
-          if (a.cool_remaining_sec > 0) {
-            coolText += ` (${a.cool_remaining_sec}s)`;
-          }
-          statusBadge = `<span class="inline-flex items-center gap-1.5 text-amber-400 text-xs cursor-help" title="${escapeHtml(coolTitle)}"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>${coolText}</span>`;
+          if (a.cool_remaining_sec > 0) coolText += ` (${a.cool_remaining_sec}s)`;
+          statusBadge = `<span class="inline-flex items-center gap-1.5 text-amber-400 text-xs font-medium cursor-help" title="${escapeHtml(coolTitle)}"><span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>${coolText}</span>`;
         }
 
-        const isRevivable = a.disabled;
-        const isCooling = a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0);
-        const isManualDisabled = a.manual_disabled;
+        let ownerTag = '';
+        if (a.owner) {
+          ownerTag = a.is_my_account
+            ? '<span class="px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/15 text-emerald-400 font-sans border border-emerald-500/25">我的</span>'
+            : `<span class="px-1.5 py-0.2 rounded text-[10px] bg-purple-500/15 text-purple-400 font-sans border border-purple-500/25" title="归属于: ${escapeHtml(a.owner)}">专属</span>`;
+        }
 
-          let ownerTag = '';
-          if (a.owner) {
-            if (a.is_my_account) {
-              ownerTag = '<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-emerald-500/20 text-emerald-400 font-sans border border-emerald-500/30">我的账号</span>';
+        let modelBadges = '';
+        if (a.rate_limited_models && a.rate_limited_models.length > 0) {
+          modelBadges = '<div class="mt-1.5 flex flex-wrap gap-1 max-w-[320px]">';
+          for (const lm of a.rate_limited_models.slice(0, 4)) {
+            const isBlocked = lm.reason && (lm.reason.indexOf('11102') !== -1 || lm.reason.indexOf('not available') !== -1);
+            const untilDate = lm.reset_at ? new Date(lm.reset_at) : (lm.until ? new Date(lm.until) : null);
+            let timeStr = '';
+            if (untilDate) {
+              const diffSec = Math.max(0, Math.floor((untilDate.getTime() - Date.now()) / 1000));
+              if (diffSec > 0) {
+                const mins = Math.ceil(diffSec / 60);
+                timeStr = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60}m` : `${mins}m`;
+              }
+            }
+            if (isBlocked) {
+              modelBadges += `<span class="px-1.5 py-0.2 rounded text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/25 font-mono" title="${escapeHtml(lm.reason || '11102')}">🚫 ${escapeHtml(lm.model)}</span>`;
             } else {
-              ownerTag = `<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-purple-500/20 text-purple-400 font-sans border border-purple-500/30" title="归属于: ${escapeHtml(a.owner)}">专属账号</span>`;
+              const suffix = timeStr ? ` ${timeStr}` : '';
+              modelBadges += `<span class="px-1.5 py-0.2 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/25 font-mono" title="${escapeHtml(lm.reason || '')}">⏳ ${escapeHtml(lm.model)}${suffix}</span>`;
             }
-          } else {
-            ownerTag = '<span class="ml-1.5 px-1.5 py-0.2 rounded text-[10px] bg-slate-800 text-slate-400 font-sans border border-slate-700">公共账号</span>';
           }
-
-          let modelBadges = '';
-          if (a.rate_limited_models && a.rate_limited_models.length > 0) {
-            modelBadges = '<div class="mt-1.5 flex flex-wrap gap-1 max-w-[340px]">';
-            for (const lm of a.rate_limited_models) {
-              const isBlocked = lm.reason && (lm.reason.indexOf('11102') !== -1 || lm.reason.indexOf('not available') !== -1);
-              const untilDate = lm.reset_at ? new Date(lm.reset_at) : (lm.until ? new Date(lm.until) : null);
-              let timeStr = '';
-              if (untilDate) {
-                const diffSec = Math.max(0, Math.floor((untilDate.getTime() - Date.now()) / 1000));
-                if (diffSec > 0) {
-                  const mins = Math.ceil(diffSec / 60);
-                  timeStr = mins >= 60 ? `${Math.floor(mins / 60)}h${mins % 60}m` : `${mins}m`;
-                }
-              }
-              if (isBlocked) {
-                modelBadges += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-rose-500/15 text-rose-300 border border-rose-500/30 font-mono" title="${escapeHtml(lm.reason || '上游该后端无此模型')}">
-                  <span class="w-1.5 h-1.5 rounded-full bg-rose-400"></span>
-                  🚫 ${escapeHtml(lm.model)} (上游不支持 11102)
-                </span>`;
-              } else {
-                const tip = `上游限流冷却中 (预计: ${untilDate ? untilDate.toLocaleTimeString() : '自动'}) [原因: ${lm.reason || '6004'}]`;
-                const suffix = timeStr ? ` (${timeStr}恢复)` : '';
-                modelBadges += `<span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-amber-500/15 text-amber-300 border border-amber-500/30 font-mono" title="${escapeHtml(tip)}">
-                  <span class="w-1.5 h-1.5 rounded-full bg-amber-400 animate-pulse"></span>
-                  ⚠️ ${escapeHtml(lm.model)}${suffix}
-                </span>`;
-              }
-            }
-            modelBadges += '</div>';
-          } else if (!a.disabled && !a.manual_disabled) {
-            modelBadges = '<div class="mt-1 flex items-center gap-1 text-[10px] text-emerald-400/70 font-mono"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>全模型正常</div>';
+          if (a.rate_limited_models.length > 4) {
+            modelBadges += `<span class="text-[10px] text-slate-400 font-mono">+${a.rate_limited_models.length - 4}</span>`;
           }
+          modelBadges += '</div>';
+        }
 
-          html += `
-            <tr class="hover:bg-slate-800/40 transition">
-              <td class="px-6 py-4">
-                <div class="flex flex-col gap-1.5 items-start">
-                  ${realmBadge}
-                  ${provBadge}
-                </div>
-              </td>
-              <td class="px-6 py-4">
-                <div class="font-sans font-semibold text-white text-xs flex items-center">
-                  <span>${escapeHtml(a.nickname || a.uid)}</span>
-                  ${ownerTag}
-                </div>
-                <div class="text-[11px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
-                <div class="mt-1 flex items-center gap-1.5 flex-wrap">
-                  <span class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-indigo-500/10 text-indigo-300 border border-indigo-500/20 font-mono" title="该账号专属官方邀请码">
-                    <span class="text-slate-400">邀请码:</span>
-                    <span class="font-semibold text-indigo-200">${escapeHtml(a.invite_code || a.uid)}</span>
-                  </span>
-                  <button onclick="copyInviteLink('${escapeHtml(a.invite_url || '')}', '${escapeHtml(a.invite_code || a.uid)}')" class="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[10px] bg-purple-500/15 hover:bg-purple-500/25 text-purple-300 hover:text-white border border-purple-500/30 transition cursor-pointer" title="一键复制专属邀请注册链接，用于注册新账号互领算力奖励">
-                    <svg class="w-2.5 h-2.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"/></svg>
-                    <span>复制链接</span>
-                  </button>
-                </div>
-                ${modelBadges}
-              </td>
-              <td class="px-6 py-4">${statusBadge}</td>
-              <td class="px-6 py-4 font-mono font-medium text-slate-200">
-                ${renderAccountCreditsCell(a)}
-              </td>
-              <td class="px-6 py-4 text-right font-sans space-x-2">
-                <button onclick="openAccountDetailModal('${a.uid}')" class="text-xs text-indigo-400 hover:text-indigo-300 hover:underline font-semibold" title="查看该账号全部积分资源包与模型额度明细">明细</button>
-                <button onclick="runSingleWelfare('${a.uid}')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="为此账号单独领取全套新手礼包、签到与活动福利">领福利</button>
-                <button onclick="runSingleTasks('${a.uid}', this)" class="text-xs text-cyan-400 hover:text-cyan-300 hover:underline" title="为此账号手动执行全量成长任务、最新活动与领猫">做任务</button>
-                <button onclick="runSingleTravel('${a.uid}')" class="text-xs text-pink-400 hover:text-pink-300 hover:underline" title="为该账号领养/派出猫猫旅行/领奖">派猫猫</button>
-                ${isRevivable ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline">复活</button>` : ''}
-                ${isCooling ? `<button onclick="controlAccount('${a.uid}', 'clear_cooling')" class="text-xs text-amber-400 hover:text-amber-300 hover:underline" title="上游已恢复时可直接解除冷却">解除冷却</button>` : ''}
-                <button onclick="openUpdateTokenModal('${a.uid}', '${escapeHtml(a.nickname || a.uid)}')" class="text-xs text-sky-400 hover:text-sky-300 hover:underline" title="更换/更新 Token 并一键解封">重填Token</button>
-                ${isManualDisabled 
-                  ? `<button onclick="controlAccount('${a.uid}', 'enable')" class="text-xs text-emerald-400 hover:text-emerald-300 hover:underline">启用</button>` 
-                  : `<button onclick="controlAccount('${a.uid}', 'disable')" class="text-xs text-slate-400 hover:text-slate-300 hover:underline">停用</button>`}
-                ${(currentUser && currentUser.role === 'admin') || a.is_my_account 
-                  ? `<button onclick="deleteAccount('${a.filename}')" class="text-xs text-rose-400 hover:text-rose-300 hover:underline">删除</button>` 
-                  : ''}
-              </td>
-            </tr>
-          `;
+        const quickFixBtn = a.disabled
+          ? `<button onclick="controlAccount('${a.uid}', 'revive')" class="ml-2 text-[10px] text-amber-400 hover:underline cursor-pointer">复活</button>`
+          : ((a.cooling || (a.rate_limited_models && a.rate_limited_models.length > 0))
+            ? `<button onclick="controlAccount('${a.uid}', 'clear_cooling')" class="ml-2 text-[10px] text-amber-400 hover:underline cursor-pointer">解冷</button>`
+            : '');
+
+        html += `
+          <tr class="hover:bg-slate-800/35 transition">
+            <td class="px-5 py-3.5 align-top">
+              <div class="flex flex-col gap-1 items-start">
+                ${realmBadge}
+                ${provLabel}
+              </div>
+            </td>
+            <td class="px-5 py-3.5 align-top">
+              <div class="font-sans font-semibold text-white text-xs flex items-center gap-1.5">
+                <span>${escapeHtml(a.nickname || a.uid)}</span>
+                ${ownerTag}
+                <button onclick="copyInviteLink('${escapeHtml(a.invite_url || '')}', '${escapeHtml(a.invite_code || a.uid)}')" class="p-1 text-slate-400 hover:text-indigo-300 rounded hover:bg-slate-800 transition cursor-pointer" title="复制邀请链接 (${escapeHtml(a.invite_code || a.uid)})">
+                  <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"/></svg>
+                </button>
+              </div>
+              <div class="text-[11px] text-slate-500 font-mono mt-0.5">${escapeHtml(a.uid)}</div>
+              ${modelBadges}
+            </td>
+            <td class="px-5 py-3.5 align-top whitespace-nowrap">
+              <div class="flex items-center">${statusBadge}${quickFixBtn}</div>
+            </td>
+            <td class="px-5 py-3.5 align-top font-mono font-medium text-slate-200">
+              ${renderAccountCreditsCell(a)}
+            </td>
+            <td class="px-5 py-3.5 align-top text-right font-sans whitespace-nowrap">
+              <div class="inline-flex items-center gap-1.5">
+                <button onclick="openBalanceOverviewModal('${a.uid}')" class="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/25 text-[11px] font-medium transition cursor-pointer" title="查看账号实时余额与池内资产对比">
+                  余额
+                </button>
+                <button onclick="openAccountDetailModal('${a.uid}')" class="px-2.5 py-1 rounded-lg bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-300 border border-indigo-500/25 text-[11px] font-medium transition cursor-pointer" title="查看该账号资源包与模型额度明细">
+                  明细
+                </button>
+                <button onclick="openRowActionMenu('${a.uid}', event)" class="px-2 py-1 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 hover:text-white border border-slate-700/80 text-[11px] font-medium transition cursor-pointer" title="更多账号操作">
+                  操作 ▾
+                </button>
+              </div>
+            </td>
+          </tr>
+        `;
       }
       tbody.innerHTML = html;
     }
@@ -3161,127 +3303,322 @@ eyJhbGciOi...----refresh_token_here'></textarea>
       const cd = a && a.credit_detail;
       if (cd) {
         const pct = cd.total > 0 ? Math.max(0, Math.min(100, (cd.remain / cd.total) * 100)) : (cd.remain > 0 ? 100 : 0);
-        const expTag = cd.expiring_remain > 0
-          ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="7天内将过期">(${fmtCredit(cd.expiring_remain)} 将到期)</span>`
-          : '';
-        const rlTag = (a.rate_limited_models && a.rate_limited_models.length > 0)
-          ? `<span class="text-[10px] px-1 py-0.2 rounded bg-rose-500/15 text-rose-300 border border-rose-500/30">${a.rate_limited_models.length} 模型限流</span>`
+        const expText = cd.expiring_remain > 0
+          ? ` · <span class="text-amber-400">${fmtCredit(cd.expiring_remain)}将到期</span>`
           : '';
         return `
-          <div class="space-y-1 min-w-[165px]">
-            <div class="flex items-baseline flex-wrap gap-1">
-              <span class="text-emerald-300 font-bold">${fmtCredit(cd.remain)}</span>
+          <div class="space-y-1 min-w-[140px]">
+            <div class="flex items-baseline gap-1 font-mono">
+              <span class="text-sm text-emerald-300 font-bold">${fmtCredit(cd.remain)}</span>
               <span class="text-[11px] text-slate-500">/ ${fmtCredit(cd.total)}</span>
-              ${expTag}
             </div>
-            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+            <div class="w-28 h-1 bg-slate-800 rounded-full overflow-hidden">
               <div class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-full" style="width:${pct.toFixed(1)}%"></div>
             </div>
-            <div class="flex flex-wrap items-center gap-1 text-[10px] font-sans">
-              <span class="px-1.5 py-0.2 rounded bg-sky-500/10 text-sky-300 border border-sky-500/20">基础 ${fmtCredit(cd.base_remain)}</span>
-              <span class="px-1.5 py-0.2 rounded bg-purple-500/10 text-purple-300 border border-purple-500/20">奖励 ${fmtCredit(cd.bonus_remain)}</span>
-              ${cd.purchased_remain > 0 ? `<span class="px-1.5 py-0.2 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">购买 ${fmtCredit(cd.purchased_remain)}</span>` : ''}
-              ${rlTag}
+            <div class="text-[10px] text-slate-400 font-sans truncate">
+              基础 ${fmtCredit(cd.base_remain)} · 奖励 ${fmtCredit(cd.bonus_remain)}${cd.purchased_remain > 0 ? ` · 购买 ${fmtCredit(cd.purchased_remain)}` : ''}${expText}
             </div>
           </div>`;
       }
       if (a && a.credits !== undefined && a.credits >= 0) {
-        return `${fmtCredit(a.credits)}${a.credits_expiring && a.credits_expiring > 0 ? `<span class="text-[10px] text-amber-400 font-normal ml-1" title="即将过期积分">(${fmtCredit(a.credits_expiring)} 将到期)</span>` : ''}`;
+        return `<div class="font-mono"><span class="text-sm text-slate-200 font-bold">${fmtCredit(a.credits)}</span>${a.credits_expiring && a.credits_expiring > 0 ? `<div class="text-[10px] text-amber-400 font-sans">${fmtCredit(a.credits_expiring)} 将到期</div>` : ''}</div>`;
       }
       return '<span class="text-slate-500">-</span>';
-    }
-
-    function renderCreditSummaryCard(elId, title, badgeText, accentColor, s) {
-      const el = document.getElementById(elId);
-      if (!el) return;
-      const d = s || {};
-      const remain = Number(d.remain || 0);
-      const total = Number(d.total || 0);
-      const used = Number(d.used || 0);
-      const activeTotal = Number(d.active_total || 0);
-      const pct = total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : (remain > 0 ? 100 : 0);
-      const barCls = accentColor === 'blue' ? 'from-blue-500 to-cyan-400'
-        : (accentColor === 'emerald' ? 'from-emerald-500 to-teal-400' : 'from-indigo-500 to-purple-400');
-      const badgeCls = accentColor === 'blue' ? 'bg-blue-500/15 text-blue-300 border-blue-500/30'
-        : (accentColor === 'emerald' ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30' : 'bg-indigo-500/15 text-indigo-300 border-indigo-500/30');
-
-      const mq = d.model_quotas || [];
-      let quotaHtml = '<span class="text-[11px] text-slate-500">当前无模型限流或消耗记录</span>';
-      if (mq.length > 0) {
-        quotaHtml = `<div class="flex flex-wrap gap-1.5">` + mq.slice(0, 6).map(m => {
-          const isLim = (m.limited_count || 0) > 0;
-          const cls = isLim
-            ? 'bg-rose-500/15 text-rose-300 border-rose-500/30'
-            : 'bg-slate-800/80 text-slate-300 border-slate-700/70';
-          const costPart = m.cost_per_1k > 0 ? ` · ${fmtCredit(m.cost_per_1k)}/1K` : (m.samples > 0 ? ' · 免费' : '');
-          const limPart = isLim ? ` · 限流${m.limited_count}号` : '';
-          return `<span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${cls}" title="${escapeHtml(m.reason || m.model)}">${escapeHtml(m.model)}${limPart}${costPart}</span>`;
-        }).join('') + (mq.length > 6 ? `<span class="text-[10px] text-slate-500 font-mono">+${mq.length - 6}</span>` : '') + `</div>`;
-      }
-
-      el.innerHTML = `
-        <div class="flex items-center justify-between gap-2">
-          <div class="flex items-center gap-2">
-            <span class="text-xs font-bold text-white">${title}</span>
-            <span class="text-[10px] font-mono px-1.5 py-0.5 rounded border ${badgeCls}">${badgeText}</span>
-          </div>
-          <span class="text-[11px] font-mono text-slate-400">可用 ${d.healthy_count || 0}/${d.account_count || 0} 号 · 包 ${d.active_pack_count || 0}/${d.pack_count || 0}</span>
-        </div>
-        <div>
-          <div class="flex items-baseline justify-between gap-2">
-            <div class="font-mono">
-              <span class="text-2xl font-bold text-white">${fmtCredit(remain)}</span>
-              <span class="text-xs text-slate-400 ml-1">/ ${total > 0 ? fmtCredit(total) : '-'}</span>
-            </div>
-            <div class="text-right text-[11px] font-mono text-slate-400">
-              已用 <span class="text-slate-200">${fmtCredit(used)}</span>
-              ${activeTotal > 0 ? `<span class="ml-1.5 text-slate-500">(生效包 ${fmtCredit(activeTotal)})</span>` : ''}
-            </div>
-          </div>
-          <div class="w-full h-2 bg-slate-800 rounded-full overflow-hidden mt-2">
-            <div class="h-full bg-gradient-to-r ${barCls} rounded-full transition-all" style="width:${pct.toFixed(1)}%"></div>
-          </div>
-        </div>
-        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1 text-[11px]">
-          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
-            <div class="text-[10px] text-slate-400">套餐基础</div>
-            <div class="font-mono font-semibold text-sky-300 mt-0.5">${fmtCredit(d.base_remain)}</div>
-          </div>
-          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
-            <div class="text-[10px] text-slate-400">平台奖励</div>
-            <div class="font-mono font-semibold text-purple-300 mt-0.5">${fmtCredit(d.bonus_remain)}</div>
-          </div>
-          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
-            <div class="text-[10px] text-slate-400">购买积分</div>
-            <div class="font-mono font-semibold text-amber-300 mt-0.5">${fmtCredit(d.purchased_remain)}</div>
-          </div>
-          <div class="px-2.5 py-1.5 rounded-xl bg-slate-950/70 border border-slate-800/80">
-            <div class="text-[10px] text-slate-400">7日内到期</div>
-            <div class="font-mono font-semibold ${(d.expiring_remain || 0) > 0 ? 'text-rose-300' : 'text-slate-400'} mt-0.5">${fmtCredit(d.expiring_remain)}</div>
-          </div>
-        </div>
-        <div class="pt-2 border-t border-slate-800/70 space-y-1.5">
-          <div class="flex items-center justify-between text-[10px] text-slate-400">
-            <span>模型额度 / 限流明细</span>
-            <span class="font-mono ${(d.rate_limited_models_count || 0) > 0 ? 'text-rose-400' : 'text-emerald-400'}">限流记录 ${d.rate_limited_models_count || 0} 条</span>
-          </div>
-          ${quotaHtml}
-        </div>
-      `;
     }
 
     function renderCreditSummary(summary, accounts) {
       const s = summary || {};
       const all = s.all || {};
-      const badge = document.getElementById('creditDetailCoverageBadge');
-      if (badge) {
-        const tot = all.account_count || (accounts ? accounts.length : 0);
-        const det = all.detail_account_count || 0;
-        badge.innerText = `已同步包明细: ${det} / ${tot}`;
+      const cn = s.cn || {};
+      const gl = s.global || {};
+      const setEl = (id, txt) => { const el = document.getElementById(id); if (el) el.innerText = txt; };
+      setEl('stripAllRemain', fmtCredit(all.remain));
+      setEl('stripAllTotal', all.total > 0 ? `/ ${fmtCredit(all.total)}` : '');
+      setEl('stripCNRemain', fmtCredit(cn.remain));
+      setEl('stripGlobalRemain', fmtCredit(gl.remain));
+
+      const tot = all.account_count || (accounts ? accounts.length : 0);
+      const det = all.detail_account_count || 0;
+      setEl('creditDetailCoverageBadge', `已同步明细 ${det}/${tot}`);
+
+      const alertBadge = document.getElementById('stripAlertBadge');
+      if (alertBadge) {
+        const parts = [];
+        if ((all.expiring_remain || 0) > 0) parts.push(`${fmtCredit(all.expiring_remain)} 将到期`);
+        if ((all.rate_limited_models_count || 0) > 0) parts.push(`${all.rate_limited_models_count} 模型限流`);
+        if (parts.length > 0) {
+          alertBadge.innerText = parts.join(' · ');
+          alertBadge.classList.remove('hidden');
+        } else {
+          alertBadge.classList.add('hidden');
+        }
       }
-      renderCreditSummaryCard('creditCardAll', '🌐 全池总额度明细', 'ALL', 'indigo', s.all);
-      renderCreditSummaryCard('creditCardCN', '🇨🇳 国内版额度明细', 'CN', 'blue', s.cn);
-      renderCreditSummaryCard('creditCardGlobal', '🌍 国际版额度明细', 'Global', 'emerald', s.global);
+
+      const balModal = document.getElementById('balanceOverviewModal');
+      if (balModal && !balModal.classList.contains('hidden')) {
+        renderBalanceOverviewBody();
+      }
+      const detModal = document.getElementById('creditDetailOverviewModal');
+      if (detModal && !detModal.classList.contains('hidden')) {
+        renderCreditDetailOverviewBody();
+      }
+    }
+
+    window._modalRealmFilter = { balance: 'all', detail: 'all' };
+    window._balanceHighlightUid = null;
+
+    function setModalRealmFilter(kind, realm) {
+      window._modalRealmFilter[kind] = realm;
+      const prefix = kind === 'balance' ? 'balFilter-' : 'detFilter-';
+      for (const r of ['all', 'cn', 'global']) {
+        const btn = document.getElementById(prefix + r);
+        if (!btn) continue;
+        btn.className = (r === realm)
+          ? 'px-2.5 py-1 rounded-lg bg-indigo-600 text-white font-medium transition'
+          : 'px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 hover:text-white font-medium transition';
+      }
+      if (kind === 'balance') renderBalanceOverviewBody();
+      else renderCreditDetailOverviewBody();
+    }
+
+    function openBalanceOverviewModal(focusUid) {
+      window._balanceHighlightUid = focusUid || null;
+      const modal = document.getElementById('balanceOverviewModal');
+      if (!modal) return;
+      renderBalanceOverviewBody();
+      modal.classList.remove('hidden');
+    }
+
+    function closeBalanceOverviewModal() {
+      window._balanceHighlightUid = null;
+      const m = document.getElementById('balanceOverviewModal');
+      if (m) m.classList.add('hidden');
+    }
+
+    function renderBalanceOverviewBody() {
+      const bodyEl = document.getElementById('balanceOverviewBody');
+      if (!bodyEl) return;
+      const s = window.cachedCreditSummary || {};
+      const accounts = window.cachedAccounts || [];
+      const realm = (window._modalRealmFilter && window._modalRealmFilter.balance) || 'all';
+      const filtered = realm === 'all' ? accounts : accounts.filter(a => a.realm === realm);
+      const focusUid = window._balanceHighlightUid;
+
+      const card = (title, tag, cls, d) => {
+        const st = d || {};
+        const remain = Number(st.remain || 0);
+        const total = Number(st.total || 0);
+        const used = Number(st.used || 0);
+        const pct = total > 0 ? Math.max(0, Math.min(100, (remain / total) * 100)) : (remain > 0 ? 100 : 0);
+        return `
+          <div class="p-4 rounded-2xl bg-slate-900/80 border ${cls} space-y-2">
+            <div class="flex items-center justify-between text-xs">
+              <span class="font-semibold text-white">${title}</span>
+              <span class="text-[10px] font-mono text-slate-400">可用 ${st.healthy_count || 0}/${st.account_count || 0} 号 · 包 ${st.active_pack_count || 0}/${st.pack_count || 0}</span>
+            </div>
+            <div class="flex items-baseline justify-between font-mono">
+              <div><span class="text-2xl font-bold text-white">${fmtCredit(remain)}</span><span class="text-xs text-slate-400 ml-1">/ ${total > 0 ? fmtCredit(total) : '-'}</span></div>
+              <span class="text-[11px] text-slate-400">已用 ${fmtCredit(used)}</span>
+            </div>
+            <div class="w-full h-1.5 bg-slate-800 rounded-full overflow-hidden">
+              <div class="h-full bg-gradient-to-r from-emerald-500 to-cyan-400 rounded-full" style="width:${pct.toFixed(1)}%"></div>
+            </div>
+          </div>`;
+      };
+
+      const rows = filtered.map(a => {
+        const cd = a.credit_detail;
+        const remain = cd ? cd.remain : (a.credits >= 0 ? a.credits : 0);
+        const total = cd ? cd.total : 0;
+        const base = cd ? cd.base_remain : 0;
+        const bonus = cd ? cd.bonus_remain : 0;
+        const purch = cd ? cd.purchased_remain : 0;
+        const exp = cd ? cd.expiring_remain : (a.credits_expiring || 0);
+        const isHi = focusUid && a.uid === focusUid;
+        const realmTag = a.realm === 'global'
+          ? '<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/25">Global</span>'
+          : '<span class="px-1.5 py-0.5 rounded text-[10px] bg-blue-500/15 text-blue-300 border border-blue-500/25">CN</span>';
+        const stTag = (a.disabled || a.manual_disabled)
+          ? '<span class="text-rose-400">停用</span>'
+          : (a.cooling ? '<span class="text-amber-400">冷却</span>' : '<span class="text-emerald-400">就绪</span>');
+        return `
+          <tr class="${isHi ? 'bg-emerald-500/10' : 'hover:bg-slate-900/60'}">
+            <td class="py-2.5 px-3 font-sans">
+              <div class="text-slate-200 font-medium">${escapeHtml(a.nickname || a.uid)}</div>
+              <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
+            </td>
+            <td class="py-2.5 px-3 font-mono">${realmTag}</td>
+            <td class="py-2.5 px-3 text-xs">${stTag}</td>
+            <td class="py-2.5 px-3 font-mono">
+              <span class="text-emerald-300 font-bold">${fmtCredit(remain)}</span>
+              <span class="text-slate-500 text-[11px]">${total > 0 ? '/ ' + fmtCredit(total) : ''}</span>
+            </td>
+            <td class="py-2.5 px-3 font-mono text-[11px] text-slate-300">
+              基础 ${fmtCredit(base)} · 奖励 ${fmtCredit(bonus)}${purch > 0 ? ' · 购 ' + fmtCredit(purch) : ''}
+            </td>
+            <td class="py-2.5 px-3 font-mono text-[11px] ${exp > 0 ? 'text-amber-300' : 'text-slate-500'}">${exp > 0 ? fmtCredit(exp) : '-'}</td>
+            <td class="py-2.5 px-3 text-right">
+              <button onclick="openAccountDetailModal('${a.uid}')" class="px-2 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 text-[11px] font-medium cursor-pointer">明细 →</button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      bodyEl.innerHTML = `
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          ${card('🌐 全池总额', 'ALL', 'border-indigo-500/25', s.all)}
+          ${card('🇨🇳 国内版 (CN)', 'CN', 'border-blue-500/25', s.cn)}
+          ${card('🌍 国际版 (Global)', 'Global', 'border-emerald-500/25', s.global)}
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+          <table class="w-full text-left border-collapse text-xs">
+            <thead>
+              <tr class="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                <th class="py-2.5 px-3 font-semibold">账号</th>
+                <th class="py-2.5 px-3 font-semibold">域</th>
+                <th class="py-2.5 px-3 font-semibold">状态</th>
+                <th class="py-2.5 px-3 font-semibold">可用 / 总额</th>
+                <th class="py-2.5 px-3 font-semibold">分桶构成</th>
+                <th class="py-2.5 px-3 font-semibold">7日到期</th>
+                <th class="py-2.5 px-3 font-semibold text-right">包明细</th>
+              </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-800/60">
+              ${rows || '<tr><td colspan="7" class="py-8 text-center text-slate-500">当前筛选下暂无账号</td></tr>'}
+            </tbody>
+          </table>
+        </div>`;
+    }
+
+    function openCreditDetailOverviewModal() {
+      const modal = document.getElementById('creditDetailOverviewModal');
+      if (!modal) return;
+      renderCreditDetailOverviewBody();
+      modal.classList.remove('hidden');
+    }
+
+    function closeCreditDetailOverviewModal() {
+      const m = document.getElementById('creditDetailOverviewModal');
+      if (m) m.classList.add('hidden');
+    }
+
+    function renderCreditDetailOverviewBody() {
+      const bodyEl = document.getElementById('creditDetailOverviewBody');
+      if (!bodyEl) return;
+      const s = window.cachedCreditSummary || {};
+      const realm = (window._modalRealmFilter && window._modalRealmFilter.detail) || 'all';
+      const d = (realm === 'cn' ? s.cn : (realm === 'global' ? s.global : s.all)) || {};
+      const accounts = (window.cachedAccounts || []).filter(a => realm === 'all' || a.realm === realm);
+      const mq = d.model_quotas || [];
+
+      const modelRows = mq.map(m => {
+        const isLim = (m.limited_count || 0) > 0;
+        const stBadge = isLim
+          ? `<span class="px-1.5 py-0.5 rounded text-[10px] bg-rose-500/20 text-rose-300 border border-rose-500/30">限流 ${m.limited_count} 个账号</span>`
+          : `<span class="px-1.5 py-0.5 rounded text-[10px] bg-emerald-500/15 text-emerald-300 border border-emerald-500/30">全部正常</span>`;
+        const costText = m.cost_per_1k > 0 ? `<span class="text-amber-300">${fmtCredit(m.cost_per_1k)} / 1K</span>` : (m.samples > 0 ? '<span class="text-emerald-300">0 (免费)</span>' : '<span class="text-slate-500">-</span>');
+        return `
+          <tr class="hover:bg-slate-900/50">
+            <td class="py-2 px-3 font-mono font-semibold text-indigo-300">${escapeHtml(m.model)}</td>
+            <td class="py-2 px-3">${stBadge}</td>
+            <td class="py-2 px-3 text-[11px] text-slate-400 truncate max-w-[260px]" title="${escapeHtml(m.reason || '')}">${escapeHtml(m.reason || '-')}</td>
+            <td class="py-2 px-3 font-mono text-slate-300">${m.samples || 0}</td>
+            <td class="py-2 px-3 font-mono text-right">${costText}</td>
+          </tr>`;
+      }).join('');
+
+      const accRows = accounts.map(a => {
+        const cd = a.credit_detail;
+        const packs = cd ? (cd.packs || []) : [];
+        const activePacks = packs.filter(p => p.is_active);
+        return `
+          <tr class="hover:bg-slate-900/50">
+            <td class="py-2 px-3">
+              <div class="text-slate-200 font-medium">${escapeHtml(a.nickname || a.uid)}</div>
+              <div class="text-[10px] text-slate-500 font-mono">${escapeHtml(a.uid)}</div>
+            </td>
+            <td class="py-2 px-3 font-mono text-emerald-300 font-bold">${fmtCredit(cd ? cd.remain : (a.credits || 0))}</td>
+            <td class="py-2 px-3 font-mono text-sky-300">${fmtCredit(cd ? cd.base_remain : 0)}</td>
+            <td class="py-2 px-3 font-mono text-purple-300">${fmtCredit(cd ? cd.bonus_remain : 0)}</td>
+            <td class="py-2 px-3 font-mono text-amber-300">${fmtCredit(cd ? cd.purchased_remain : 0)}</td>
+            <td class="py-2 px-3 font-mono text-slate-300">${cd ? `${activePacks.length}/${packs.length}` : '未同步'}</td>
+            <td class="py-2 px-3 text-right">
+              <button onclick="openAccountDetailModal('${a.uid}')" class="px-2.5 py-1 rounded-lg bg-indigo-500/15 hover:bg-indigo-500/25 text-indigo-300 text-[11px] font-medium cursor-pointer">查看全部包 →</button>
+            </td>
+          </tr>`;
+      }).join('');
+
+      bodyEl.innerHTML = `
+        <div class="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
+          <div class="p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/25">
+            <div class="text-[10px] text-emerald-300">可用余额</div>
+            <div class="text-lg font-bold font-mono text-white mt-0.5">${fmtCredit(d.remain)}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-[10px] text-slate-400">累计总额度</div>
+            <div class="text-lg font-bold font-mono text-slate-200 mt-0.5">${fmtCredit(d.total)}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-slate-900 border border-slate-800">
+            <div class="text-[10px] text-slate-400">已消耗</div>
+            <div class="text-lg font-bold font-mono text-slate-300 mt-0.5">${fmtCredit(d.used)}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-sky-500/10 border border-sky-500/25">
+            <div class="text-[10px] text-sky-300">套餐基础</div>
+            <div class="text-lg font-bold font-mono text-sky-200 mt-0.5">${fmtCredit(d.base_remain)}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-purple-500/10 border border-purple-500/25">
+            <div class="text-[10px] text-purple-300">平台奖励</div>
+            <div class="text-lg font-bold font-mono text-purple-200 mt-0.5">${fmtCredit(d.bonus_remain)}</div>
+          </div>
+          <div class="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/25">
+            <div class="text-[10px] text-amber-300">购买 / 将到期</div>
+            <div class="text-sm font-bold font-mono text-amber-200 mt-1">${fmtCredit(d.purchased_remain)} / ${fmtCredit(d.expiring_remain)}</div>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <div class="flex items-center justify-between text-xs font-bold text-slate-200">
+            <span>⚡ 模型额度限流与实测单价 (${mq.length} 项)</span>
+            <span class="text-[11px] font-mono text-slate-400">限流记录: ${d.rate_limited_models_count || 0} 条</span>
+          </div>
+          <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                  <th class="py-2 px-3 font-semibold">模型名称</th>
+                  <th class="py-2 px-3 font-semibold">限流状态</th>
+                  <th class="py-2 px-3 font-semibold">原因</th>
+                  <th class="py-2 px-3 font-semibold">观测次数</th>
+                  <th class="py-2 px-3 font-semibold text-right">实测单价</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                ${modelRows || '<tr><td colspan="5" class="py-5 text-center text-slate-500">当前域无模型限流或观测记录</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="space-y-2">
+          <h4 class="text-xs font-bold text-slate-200">📦 分账号资源包构成 (${accounts.length} 个账号)</h4>
+          <div class="overflow-x-auto rounded-2xl border border-slate-800 bg-slate-950/60">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="bg-slate-900/90 text-slate-400 border-b border-slate-800 text-[11px]">
+                  <th class="py-2 px-3 font-semibold">账号</th>
+                  <th class="py-2 px-3 font-semibold">总余量</th>
+                  <th class="py-2 px-3 font-semibold">套餐基础</th>
+                  <th class="py-2 px-3 font-semibold">平台奖励</th>
+                  <th class="py-2 px-3 font-semibold">购买积分</th>
+                  <th class="py-2 px-3 font-semibold">生效/总包数</th>
+                  <th class="py-2 px-3 font-semibold text-right">包明细</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-800/60">
+                ${accRows || '<tr><td colspan="7" class="py-5 text-center text-slate-500">当前域暂无账号</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
     }
 
     function closeAccountDetailModal() {
