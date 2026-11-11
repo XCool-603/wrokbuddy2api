@@ -334,7 +334,11 @@ func main() {
 	h := server.NewHandler(server.Config{
 		Pool:         p,
 		Upstream:     up,
-		APIKey:       cfg.APIKey,
+		APIKey:             cfg.APIKey,
+		ListenAddr:         cfg.Listen,
+		IPWhitelistEnabled: cfg.IPWhitelistEnabled,
+		AllowedIPs:         cfg.AllowedIPs,
+		AllowLocalhost:     cfg.AllowLocalhost,
 		Session:      sessRouter,
 		StickyCount:  sessCount,
 		RedisMode:    redisMode,

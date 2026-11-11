@@ -18,7 +18,10 @@ import (
 type Config struct {
 	Listen      string `json:"listen"`       // ":7863"
 	APIKey      string `json:"api_key"`      // 空 = 不鉴权
-	WebPassword string `json:"web_password"` // 控制台 Web 面板访问密码，非空时需登录才能查看和操作
+	WebPassword        string   `json:"web_password"`         // 控制台 Web 面板访问密码，非空时需登录才能查看和操作
+	IPWhitelistEnabled bool     `json:"ip_whitelist_enabled"` // 是否开启 AI 接口 IP 白名单防扫描
+	AllowedIPs         []string `json:"allowed_ips"`          // 允许访问 AI 接口的 IP / CIDR 列表
+	AllowLocalhost     *bool    `json:"allow_localhost,omitempty"`
 	AuthDir     string `json:"auth_dir"`     // ./auths
 	StateFile   string `json:"state_file"`   // ./data/state.json
 
@@ -257,8 +260,11 @@ func Load(path string) (*Config, error) {
 		settingsFile := filepath.Join(filepath.Dir(c.StateFile), "settings.json")
 		if raw, err := os.ReadFile(settingsFile); err == nil {
 			var s struct {
-				APIKey      string `json:"api_key"`
-				WebPassword string `json:"web_password"`
+				APIKey             string   `json:"api_key"`
+				WebPassword        string   `json:"web_password"`
+				IPWhitelistEnabled *bool    `json:"ip_whitelist_enabled"`
+				AllowedIPs         []string `json:"allowed_ips"`
+				AllowLocalhost     *bool    `json:"allow_localhost"`
 			}
 			if err := json.Unmarshal(raw, &s); err == nil {
 				if s.APIKey != "" {
@@ -266,6 +272,16 @@ func Load(path string) (*Config, error) {
 				}
 				if s.WebPassword != "" {
 					c.WebPassword = s.WebPassword
+				}
+				if s.IPWhitelistEnabled != nil {
+					c.IPWhitelistEnabled = *s.IPWhitelistEnabled
+				}
+				if s.AllowedIPs != nil {
+					c.AllowedIPs = s.AllowedIPs
+				}
+				if s.AllowLocalhost != nil {
+					v := *s.AllowLocalhost
+					c.AllowLocalhost = &v
 				}
 			}
 		}
@@ -287,6 +303,26 @@ func applyEnv(c *Config) {
 	}
 	if v := os.Getenv("WB2A_WEB_PASSWORD"); v != "" {
 		c.WebPassword = v
+	}
+	if v := os.Getenv("WB2A_ALLOWED_IPS"); v != "" {
+		parts := strings.Split(v, ",")
+		ips := make([]string, 0, len(parts))
+		for _, p := range parts {
+			if p = strings.TrimSpace(p); p != "" {
+				ips = append(ips, p)
+			}
+		}
+		c.AllowedIPs = ips
+		if len(ips) > 0 && os.Getenv("WB2A_IP_WHITELIST_ENABLED") == "" {
+			c.IPWhitelistEnabled = true
+		}
+	}
+	if v := os.Getenv("WB2A_IP_WHITELIST_ENABLED"); v != "" {
+		c.IPWhitelistEnabled = strings.EqualFold(v, "true") || v == "1"
+	}
+	if v := os.Getenv("WB2A_ALLOW_LOCALHOST"); v != "" {
+		b := strings.EqualFold(v, "true") || v == "1"
+		c.AllowLocalhost = &b
 	}
 	if v := os.Getenv("WB2A_AUTH_DIR"); v != "" {
 		c.AuthDir = v

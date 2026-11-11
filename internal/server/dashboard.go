@@ -372,6 +372,7 @@ func (h *Handler) RegisterWebUI() {
 	h.mux.HandleFunc("POST /ui/action/delete", h.withWebAuth(h.handleActionDelete))
 	h.mux.HandleFunc("POST /ui/config/apikey", h.withWebAuth(h.handleConfigAPIKey))
 	h.mux.HandleFunc("POST /ui/config/password", h.withWebAuth(h.handleConfigPassword))
+	h.mux.HandleFunc("POST /ui/config/ip_whitelist", h.withWebAuth(h.handleConfigIPWhitelist))
 	h.mux.HandleFunc("GET /ui/action/backup", h.withWebAuth(h.handleActionBackup))
 	h.mux.HandleFunc("GET /ui/backup/export", h.withWebAuth(h.handleActionBackup))
 	h.mux.HandleFunc("POST /ui/backup/import", h.withWebAuth(h.handleOAuthBatchImport))
@@ -800,6 +801,8 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		"creditSummary":  creditSummary.build(),
 		"models":         models,
 		"apiKey":         displayAPIKey,
+		"ipWhitelist":    h.GetIPWhitelist(),
+		"networkInfo":    h.GetRuntimeNetworkInfo(r),
 		"hasPassword":    h.GetWebPassword() != "",
 		"currentVersion": CurrentVersion,
 		"isDocker":       isDockerEnvironment(),

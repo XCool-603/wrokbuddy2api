@@ -334,6 +334,10 @@ func (h *Handler) handleActionDelete(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) savePersistentSetting(key, val string) {
+	h.savePersistentAny(key, val)
+}
+
+func (h *Handler) savePersistentAny(key string, val any) {
 	// 1. 持久化到 ./data/settings.json（Docker volume 及跨更新持久化目录）
 	stateFile := h.cfg.StateFile
 	if stateFile == "" {

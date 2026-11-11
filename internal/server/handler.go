@@ -5,7 +5,9 @@ import (
 	"context"
 	"crypto/subtle"
 	"encoding/json"
+	"log"
 	"net/http"
+	"net/netip"
 	"strings"
 	"sync"
 	"time"
@@ -99,6 +101,15 @@ type Config struct {
 
 	// RunTravelFunc 执行猫猫旅行巡检自动化（领养 / 派出 / 领奖）（可选）
 	RunTravelFunc func()
+
+	// ListenAddr 服务监听地址（用于控制台展示当前运行端口与网卡 IP）
+	ListenAddr string
+	// IPWhitelistEnabled 是否启用 AI 接口 IP 白名单防扫描
+	IPWhitelistEnabled bool
+	// AllowedIPs 允许访问 AI 接口的 IP / CIDR 列表
+	AllowedIPs []string
+	// AllowLocalhost 开启白名单时是否始终放行本机回环（默认 nil = true）
+	AllowLocalhost *bool
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -111,7 +122,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.50"
+const CurrentVersion = "v1.2.51"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。
 const dumpReqMinBytes = 4 << 20
@@ -121,6 +132,7 @@ type Handler struct {
 	cfg     Config
 	keyMu   sync.RWMutex
 	webMu   sync.RWMutex
+	ipMu    sync.RWMutex
 	mux     *http.ServeMux
 	degrade degradeGate
 	// wafIP WAF IP 级拦截状态机（fail-fast，wafip.go）：短窗多号 WAF 403 →
@@ -129,6 +141,9 @@ type Handler struct {
 	inFlightTracker *InFlightTracker
 	alertMgr        *AlertManager
 	modelBreaker    *ModelCircuitBreaker
+	ipWL            IPWhitelistConfig
+	ipPrefixes      []netip.Prefix
+	runtimeIPs      []string
 }
 
 func (h *Handler) getAuthDir() string {
@@ -192,6 +207,7 @@ func NewHandler(cfg Config) *Handler {
 		alertMgr:        cfg.AlertMgr,
 		modelBreaker:    NewModelCircuitBreaker(),
 	}
+	h.initIPWhitelist(cfg)
 	h.mux.HandleFunc("POST /v1/chat/completions", h.withAuth(h.chatCompletions))
 	h.mux.HandleFunc("POST /v1/messages", h.withAuth(h.messagesHandler))
 	h.mux.HandleFunc("POST /v1/videos/generations", h.withAuth(h.videoGenerations))
@@ -228,6 +244,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
+		allowed, clientIP := h.IsIPAllowed(r)
+		if !allowed {
+			log.Printf("WARN: [security] IP 未在白名单中被拦截: ip=%s method=%s path=%s", clientIP, r.Method, r.URL.Path)
+			writeOpenAIError(w, http.StatusForbidden, "ip_not_allowed", "access denied: client IP is not in whitelist")
+			return
+		}
+		if globalAuthLimiter.isAPIKeyLocked(clientIP) {
+			log.Printf("WARN: [security] 疑似恶意扫描/爆破 Key 暂时拦截: ip=%s path=%s", clientIP, r.URL.Path)
+			writeOpenAIError(w, http.StatusTooManyRequests, "rate_limit_exceeded", "too many invalid API key attempts, try again later")
+			return
+		}
 		currentKey := h.GetAPIKey()
 		authz := r.Header.Get("Authorization")
 		provided := strings.TrimPrefix(authz, "Bearer ")
@@ -238,6 +265,7 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 		// 1. 如果配置了 UserMgr，优先尝试校验用户专属 API Key
 		if h.cfg.UserMgr != nil && provided != "" {
 			if u, ok := h.cfg.UserMgr.FindByAPIKey(provided); ok {
+				globalAuthLimiter.resetAPIKeyFail(clientIP)
 				// 命中用户专属 API Key：校验 RPM 限频与每日积分配额 (F-07)
 				if err := h.cfg.UserMgr.CheckRPM(provided); err != nil {
 					writeOpenAIError(w, http.StatusTooManyRequests, "rate_limit_exceeded", err.Error())
@@ -258,11 +286,13 @@ func (h *Handler) withAuth(next http.HandlerFunc) http.HandlerFunc {
 		if currentKey != "" {
 			if provided == "" ||
 				subtle.ConstantTimeCompare([]byte(provided), []byte(currentKey)) != 1 {
+				globalAuthLimiter.recordAPIKeyFail(clientIP)
 				writeOpenAIError(w, http.StatusUnauthorized, "invalid_api_key", "missing or invalid API key")
 				return
 			}
 		}
 
+		globalAuthLimiter.resetAPIKeyFail(clientIP)
 		// 未设置 currentKey 或命中全局 Key，视为系统管理员身份
 		if h.cfg.UserMgr != nil {
 			if adminUser, ok := h.cfg.UserMgr.FindByUsername("admin"); ok {

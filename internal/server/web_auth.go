@@ -23,11 +23,13 @@ type authRateLimiter struct {
 	mu           sync.Mutex
 	failedLogins map[string][]time.Time
 	registers    map[string][]time.Time
+	apiKeyFails  map[string][]time.Time
 }
 
 var globalAuthLimiter = &authRateLimiter{
 	failedLogins: make(map[string][]time.Time),
 	registers:    make(map[string][]time.Time),
+	apiKeyFails:  make(map[string][]time.Time),
 }
 
 func getClientIP(r *http.Request) string {
@@ -120,6 +122,54 @@ func (l *authRateLimiter) recordRegister(ip string) {
 	}
 	valid = append(valid, time.Now())
 	l.registers[ip] = valid
+}
+
+func (l *authRateLimiter) isAPIKeyLocked(ip string) bool {
+	if ip == "" {
+		return false
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	times, ok := l.apiKeyFails[ip]
+	if !ok {
+		return false
+	}
+	cutoff := time.Now().Add(-2 * time.Minute)
+	valid := make([]time.Time, 0, len(times))
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	l.apiKeyFails[ip] = valid
+	return len(valid) >= 25
+}
+
+func (l *authRateLimiter) recordAPIKeyFail(ip string) {
+	if ip == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	cutoff := time.Now().Add(-2 * time.Minute)
+	times := l.apiKeyFails[ip]
+	valid := make([]time.Time, 0, len(times)+1)
+	for _, t := range times {
+		if t.After(cutoff) {
+			valid = append(valid, t)
+		}
+	}
+	valid = append(valid, time.Now())
+	l.apiKeyFails[ip] = valid
+}
+
+func (l *authRateLimiter) resetAPIKeyFail(ip string) {
+	if ip == "" {
+		return
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	delete(l.apiKeyFails, ip)
 }
 
 type webSessionInfo struct {
