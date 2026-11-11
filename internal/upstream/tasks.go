@@ -11,6 +11,8 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"strconv"
+	"strings"
 	"time"
 
 	"workbuddy2api/internal/auth"
@@ -19,14 +21,21 @@ import (
 const (
 	growthTasksListPath   = "/v2/activity/growth/tasks"
 	growthTasksAcceptPath = "/v2/activity/growth/tasks/accept"
+	marketExpertListPath  = "/v2/operation-platform/market/expert/list"
+	marketSkillListPath   = "/v2/operation-platform/market/skill/list"
+	supportScenesPath     = "/console/as/support/scenes?locale=zh-CN"
 	defaultWebBase        = "https://www.workbuddy.cn"
-	desktopUA             = "WorkBuddy/5.5.6 WorkBuddy/5.5.6 CLI/2.137.1"
+	desktopUA             = "WorkBuddy/5.9.3 WorkBuddy/5.9.3 CLI/2.137.1"
 	webBrowserUA          = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36"
 	libraryDocURL         = "https://www.workbuddy.cn/space/d/o0KWYeynteVv06UnAZqIFm"
 )
 
-// taskActionGap 单次动作之间默认防风控间隔（测试可置 0）。
-var taskActionGap = 350 * time.Millisecond
+var (
+	// taskActionGap 单次动作之间默认防风控间隔（测试可置 0）。
+	taskActionGap = 350 * time.Millisecond
+	// taskClaimSettleDelay 事件上报后等待服务端异步归账再领奖的缓冲时长（测试可置 0）。
+	taskClaimSettleDelay = 2 * time.Second
+)
 
 // NativeTaskResult 单账号内置纯 Go 任务执行汇总。
 type NativeTaskResult struct {
@@ -51,11 +60,39 @@ type growthTaskItem struct {
 }
 
 type nativeTaskSpec struct {
-	Kind      string
-	Target    int
-	ExpertID  string
-	SkipNote  string
-	NightOnly bool
+	Kind       string
+	Target     int
+	ExpertID   string
+	ExpertName string
+	SkipNote   string
+	NightOnly  bool
+}
+
+type taskScene struct {
+	ID   string
+	Name string
+}
+
+type taskExpert struct {
+	ID       string
+	Name     string
+	Category string
+	Type     string
+	Version  string
+}
+
+type taskSkill struct {
+	ID   string
+	Name string
+}
+
+type taskRuntimeCatalog struct {
+	scenesLoaded bool
+	scenes       []taskScene
+	experts      []taskExpert
+	teams        []taskExpert
+	lighthouse   []taskExpert
+	skills       []taskSkill
 }
 
 var nativeTaskSpecs = map[string]nativeTaskSpec{
@@ -66,7 +103,7 @@ var nativeTaskSpecs = map[string]nativeTaskSpec{
 	"skill_1":                       {Kind: "skill", Target: 1},
 	"automation_1":                  {Kind: "automation", Target: 1},
 	"playbook_prompt":               {Kind: "playbook", Target: 1},
-	"Expert_lighthouse":             {Kind: "lighthouse", Target: 1, ExpertID: "ex_2cvvUZQhDyeJ"},
+	"Expert_lighthouse":             {Kind: "lighthouse", Target: 1, ExpertID: "ex_2cvvUZQhDyeJ", ExpertName: "腾讯轻量云专家"},
 	"Buddy_App":                     {Kind: "buddy5", Target: 1},
 	"Buddy_App_QQ":                  {Kind: "buddy5", Target: 1},
 	"Hp_Appearance":                 {Kind: "skin", Target: 1},
@@ -76,37 +113,45 @@ var nativeTaskSpecs = map[string]nativeTaskSpec{
 	"first_buddy":                   {Kind: "buddyfirst", Target: 1},
 	"RichMeow_Chat":                 {Kind: "richmeow", Target: 1},
 	"Library_read":                  {Kind: "library", Target: 1},
-	"expert_use_maidehao":           {Kind: "fixed_expert", Target: 1, ExpertID: "ex_GDl31WahyIH0"},
-	"expert_use_douyinyin":          {Kind: "fixed_expert", Target: 1, ExpertID: "ex_FbY5nlWTqDod"},
-	"expert_use_shangjia_xuanchuan": {Kind: "fixed_expert", Target: 1, ExpertID: "ex_Weo3x2EZuSDm"},
-	"expert_use_bowangwang":         {Kind: "fixed_expert", Target: 1, ExpertID: "ex_WZY136wV5aMt"},
-	"WorkBuddy_Valorant":            {Kind: "fixed_expert", Target: 1, ExpertID: "ex_xQHHD1u5Jkua"},
+	"skill_share":                   {Kind: "skillshare", Target: 1},
+	"expert_use_maidehao":           {Kind: "fixed_expert", Target: 1, ExpertID: "ex_GDl31WahyIH0", ExpertName: "买得好"},
+	"expert_use_douyinyin":          {Kind: "fixed_expert", Target: 1, ExpertID: "ex_FbY5nlWTqDod", ExpertName: "抖音乐园"},
+	"expert_use_shangjia_xuanchuan": {Kind: "fixed_expert", Target: 1, ExpertID: "ex_Weo3x2EZuSDm", ExpertName: "商家宣传"},
+	"expert_use_bowangwang":         {Kind: "fixed_expert", Target: 1, ExpertID: "ex_WZY136wV5aMt", ExpertName: "博汪汪"},
+	"WorkBuddy_Valorant":            {Kind: "fixed_expert", Target: 1, ExpertID: "ex_xQHHD1u5Jkua", ExpertName: "无畏契约拼豆专家"},
 	"Sequential_Tasks_1":            {Kind: "minichat", Target: 1},
 	"school_season":                 {Kind: "schoolseason", Target: 1},
 	"wb_wechat_oa_subscribe_task":   {SkipNote: "关注微信公众号需外部回调"},
 	"Expert_Philanthropy":           {SkipNote: "真实捐款动作不可自动执行"},
 }
 
-var defaultTaskExperts = []struct {
-	ID   string
-	Name string
-}{
-	{"ContentCreator", "内容创作专家"},
-	{"UiDesigner", "UI设计师"},
-	{"DataAnalyticsReporter", "数据分析报告师"},
-	{"ChinaEcommerceOperationsExpert", "中国电商运营专家"},
-	{"DouyinStrategist", "抖音策略师"},
+var defaultTaskExperts = []taskExpert{
+	{ID: "ContentCreator", Name: "内容创作专家", Type: "agent"},
+	{ID: "UiDesigner", Name: "UI设计师", Type: "agent"},
+	{ID: "DataAnalyticsReporter", Name: "数据分析报告师", Type: "agent"},
+	{ID: "ChinaEcommerceOperationsExpert", Name: "中国电商运营专家", Type: "agent"},
+	{ID: "DouyinStrategist", Name: "抖音策略师", Type: "agent"},
 }
 
-var defaultTaskTeams = []string{
-	"CloudOpsTeam", "SoftwareCompany", "TradingAgentTeam", "GPTResearcherTeam", "MarketingCampaignTeam",
+var defaultTaskTeams = []taskExpert{
+	{ID: "CloudOpsTeam", Name: "CloudOpsTeam", Type: "team"},
+	{ID: "SoftwareCompany", Name: "SoftwareCompany", Type: "team"},
+	{ID: "TradingAgentTeam", Name: "TradingAgentTeam", Type: "team"},
+	{ID: "GPTResearcherTeam", Name: "GPTResearcherTeam", Type: "team"},
+	{ID: "MarketingCampaignTeam", Name: "MarketingCampaignTeam", Type: "team"},
 }
 
-var defaultTaskScenes = []struct {
-	ID   string
-	Name string
-}{
+var defaultLighthouseExperts = []taskExpert{
+	{ID: "ex_2cvvUZQhDyeJ", Name: "腾讯轻量云专家", Category: "13-TencentZone", Type: "agent", Version: "1.1.1"},
+}
+
+var defaultTaskScenes = []taskScene{
 	{"0", "幻灯片"}, {"2", "视频生成"}, {"4", "深度研究"}, {"6", "文档处理"}, {"8", "数据分析"},
+}
+
+var defaultTaskSkills = []taskSkill{
+	{"skill_2096525080079265792", "pptx"},
+	{"skill_2096528888507297792", "xlsx"},
 }
 
 func (c *Client) webBase() string {
@@ -146,26 +191,26 @@ func (c *Client) RunGrowthTasks(ctx context.Context, a *auth.Auth) (NativeTaskRe
 	if err != nil {
 		return res, err
 	}
+	cat := &taskRuntimeCatalog{}
 	for _, t := range tasks {
 		if ctx.Err() != nil {
 			return res, ctx.Err()
 		}
-		c.processGrowthTask(ctx, a, t, false, &res, logf)
+		c.processGrowthTask(ctx, a, t, false, cat, &res, logf)
 	}
 
 	// 小程序渠道限定任务（Sequential_Tasks_1 / school_season）
-	for _, code := range []string{"Sequential_Tasks_1", "school_season"} {
-		if ctx.Err() != nil {
-			break
-		}
-		mpTasks, mperr := c.listGrowthTasks(ctx, a, true)
-		if mperr != nil {
-			break
-		}
+	if mpTasks, mperr := c.listGrowthTasks(ctx, a, true); mperr == nil {
+		mpByCode := make(map[string]growthTaskItem, len(mpTasks))
 		for _, t := range mpTasks {
-			if t.TaskCode == code {
-				c.processGrowthTask(ctx, a, t, true, &res, logf)
+			mpByCode[t.TaskCode] = t
+		}
+		for _, code := range []string{"Sequential_Tasks_1", "school_season"} {
+			if ctx.Err() != nil {
 				break
+			}
+			if t, ok := mpByCode[code]; ok {
+				c.processGrowthTask(ctx, a, t, true, cat, &res, logf)
 			}
 		}
 	}
@@ -175,7 +220,7 @@ func (c *Client) RunGrowthTasks(ctx context.Context, a *auth.Auth) (NativeTaskRe
 	return res, nil
 }
 
-func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTaskItem, mp bool, res *NativeTaskResult, logf func(string, ...any)) {
+func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTaskItem, mp bool, cat *taskRuntimeCatalog, res *NativeTaskResult, logf func(string, ...any)) {
 	code := t.TaskCode
 	if code == "" {
 		return
@@ -215,7 +260,7 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 	}
 
 	if t.AcceptStatus == "not_accepted" || t.AcceptStatus == "" {
-		if err := c.acceptGrowthTask(ctx, a, code, mp); err != nil {
+		if err := c.acceptGrowthTaskWithVerify(ctx, a, code, mp); err != nil {
 			res.Failed++
 			logf("%s: accept failed: %v", code, err)
 			return
@@ -229,7 +274,6 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 			logf("%s: adopt failed: %v", code, err)
 			return
 		}
-		// 领养本身直给 +300，再幂等 claim 一次
 		c.claimGrowthTask(ctx, a, code, mp, res, logf)
 		return
 	}
@@ -238,7 +282,8 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 	if target <= 0 {
 		target = spec.Target
 	}
-	need := target - t.Progress.Current
+	offset := t.Progress.Current
+	need := target - offset
 	if need <= 0 {
 		need = 1
 	}
@@ -246,12 +291,13 @@ func (c *Client) processGrowthTask(ctx context.Context, a *auth.Auth, t growthTa
 		need = 1
 	}
 
-	if err := c.emitTaskEvents(ctx, a, code, spec, need); err != nil {
+	if err := c.emitTaskEvents(ctx, a, code, spec, cat, offset, need); err != nil {
 		res.Failed++
 		logf("%s: report failed: %v", code, err)
 		return
 	}
-	sleepTaskGap(ctx)
+	// 等待服务端事件异步入账后再领奖，避免过早 claim 命中 400
+	sleepTaskDur(ctx, taskClaimSettleDelay)
 	c.claimGrowthTask(ctx, a, code, mp, res, logf)
 }
 
@@ -277,47 +323,52 @@ func (c *Client) listGrowthTasks(ctx context.Context, a *auth.Auth, mp bool) ([]
 	return resp.Tasks, nil
 }
 
-func (c *Client) acceptGrowthTask(ctx context.Context, a *auth.Auth, code string, mp bool) error {
-	raw, _ := json.Marshal(map[string]any{"task_codes": []string{code}})
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+growthTasksAcceptPath, bytes.NewReader(raw))
-	if err != nil {
-		return err
+func (c *Client) acceptGrowthTaskWithVerify(ctx context.Context, a *auth.Auth, code string, mp bool) error {
+	var lastErr error
+	for attempt := 0; attempt < 2; attempt++ {
+		raw, _ := json.Marshal(map[string]any{"task_codes": []string{code}})
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+growthTasksAcceptPath, bytes.NewReader(raw))
+		if err != nil {
+			return err
+		}
+		c.BillingHeaders(req, a)
+		if mp {
+			req.Header.Set("X-Client-Platform", "miniprogram")
+		}
+		data, err := c.doJSON(req)
+		if err != nil {
+			lastErr = err
+			sleepTaskGap(ctx)
+			continue
+		}
+		var resp struct {
+			Results []struct {
+				Status string `json:"status"`
+			} `json:"results"`
+		}
+		if len(data) == 0 || json.Unmarshal(data, &resp) != nil || len(resp.Results) == 0 || resp.Results[0].Status == "accepted" {
+			return nil
+		}
+		lastErr = fmt.Errorf("accept status=%s", resp.Results[0].Status)
+		sleepTaskGap(ctx)
 	}
-	c.BillingHeaders(req, a)
-	if mp {
-		req.Header.Set("X-Client-Platform", "miniprogram")
-	}
-	_, err = c.doJSON(req)
-	return err
+	return lastErr
 }
 
 func (c *Client) claimGrowthTask(ctx context.Context, a *auth.Auth, code string, mp bool, res *NativeTaskResult, logf func(string, ...any)) {
-	path := "/activity/growth/tasks/" + code + "/claim"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+path, nil)
-	if err != nil {
-		res.Failed++
-		logf("%s: build claim req err=%v", code, err)
-		return
-	}
-	c.BillingHeaders(req, a)
-	if mp {
-		req.Header.Set("X-Client-Platform", "miniprogram")
-	}
-	data, err := c.doJSON(req)
-	var ue *Error
-	if err != nil && errors.As(err, &ue) && ue.Status == http.StatusBadRequest {
-		// 400 自动降级 web 域（对齐 task_common.py web_claim_fallback）
-		wb := c.webBase()
-		reqWeb, werr := http.NewRequestWithContext(ctx, http.MethodPost, wb+path, nil)
-		if werr == nil {
-			c.BillingHeaders(reqWeb, a)
-			reqWeb.Header.Set("x-client-platform", "web")
-			reqWeb.Header.Set("Origin", wb)
-			reqWeb.Header.Set("Referer", wb+"/profile/growth-center")
-			reqWeb.Header.Set("User-Agent", webBrowserUA)
-			reqWeb.Header.Set("X-Domain", wb)
-			data, err = c.doJSON(reqWeb)
+	var data json.RawMessage
+	var err error
+	for attempt := 0; attempt < 2; attempt++ {
+		data, err = c.doClaimOnce(ctx, a, code, mp)
+		if err == nil {
+			break
 		}
+		var ue *Error
+		if attempt == 0 && errors.As(err, &ue) && ue.Status == http.StatusBadRequest && taskClaimSettleDelay > 0 {
+			sleepTaskDur(ctx, taskClaimSettleDelay)
+			continue
+		}
+		break
 	}
 	if err != nil {
 		res.Failed++
@@ -343,22 +394,73 @@ func (c *Client) claimGrowthTask(ctx context.Context, a *auth.Auth, code string,
 	logf("%s: claim ok (+%d credit, +%d energy)", code, cr.Credit, cr.Energy)
 }
 
-func (c *Client) emitTaskEvents(ctx context.Context, a *auth.Auth, code string, spec nativeTaskSpec, need int) error {
+func (c *Client) doClaimOnce(ctx context.Context, a *auth.Auth, code string, mp bool) (json.RawMessage, error) {
+	path := "/activity/growth/tasks/" + code + "/claim"
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+path, nil)
+	if err != nil {
+		return nil, err
+	}
+	c.BillingHeaders(req, a)
+	if mp {
+		req.Header.Set("X-Client-Platform", "miniprogram")
+	}
+	data, err := c.doJSON(req)
+	var ue *Error
+	if err != nil && errors.As(err, &ue) && ue.Status == http.StatusBadRequest {
+		// 400 自动降级 web 域（对齐 task_common.py web_claim_fallback）
+		wb := c.webBase()
+		reqWeb, werr := http.NewRequestWithContext(ctx, http.MethodPost, wb+path, nil)
+		if werr == nil {
+			c.BillingHeaders(reqWeb, a)
+			reqWeb.Header.Set("x-client-platform", "web")
+			reqWeb.Header.Set("Origin", wb)
+			reqWeb.Header.Set("Referer", wb+"/profile/growth-center")
+			reqWeb.Header.Set("User-Agent", webBrowserUA)
+			reqWeb.Header.Set("X-Domain", wb)
+			data, err = c.doJSON(reqWeb)
+		}
+	}
+	return data, err
+}
+
+func (c *Client) emitTaskEvents(ctx context.Context, a *auth.Auth, code string, spec nativeTaskSpec, cat *taskRuntimeCatalog, offset, need int) error {
 	uid := a.RawUID()
 	switch spec.Kind {
 	case "richmeow":
 		return c.reportDesktopEvents(ctx, a, buildDesktopChatEvents(uid, a.Nickname))
 	case "buddy5":
 		return c.reportDesktopEvents(ctx, a, buildDesktopBuddy5Events(uid, a.Nickname, "cb_y5Dy46tPQGGWtueMxXbe", "企鹅教师助手"))
+	case "skillshare":
+		skills := c.getSkills(ctx, a, cat)
+		sk := skills[0]
+		return c.reportDesktopEvents(ctx, a, buildDesktopSkillShareEvents(uid, a.Nickname, sk.ID, sk.Name))
 	case "library":
 		return c.reportWebLibraryEvent(ctx, a, uid)
+	}
+
+	var scenes []taskScene
+	var experts []taskExpert
+	var teams []taskExpert
+	var lighthouse []taskExpert
+	var skills []taskSkill
+	switch spec.Kind {
+	case "template":
+		scenes = c.getScenes(ctx, a, cat)
+	case "expert":
+		experts = c.getExperts(ctx, a, cat)
+	case "team":
+		teams = c.getTeams(ctx, a, cat)
+	case "lighthouse":
+		lighthouse = c.getLighthouseExperts(ctx, a, cat)
+	case "skill":
+		skills = c.getSkills(ctx, a, cat)
 	}
 
 	for i := 0; i < need; i++ {
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}
-		ev := buildStandardTaskEvent(uid, spec, i)
+		ev := buildStandardTaskEvent(uid, spec, offset+i, scenes, experts, teams, lighthouse, skills)
 		raw, err := json.Marshal([]map[string]any{ev})
 		if err != nil {
 			return err
@@ -373,7 +475,179 @@ func (c *Client) emitTaskEvents(ctx context.Context, a *auth.Auth, code string, 
 	return nil
 }
 
-func buildStandardTaskEvent(uid string, spec nativeTaskSpec, idx int) map[string]any {
+func (c *Client) getScenes(ctx context.Context, a *auth.Auth, cat *taskRuntimeCatalog) []taskScene {
+	if cat.scenesLoaded && len(cat.scenes) > 0 {
+		return cat.scenes
+	}
+	cat.scenesLoaded = true
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.chatBase(a)+supportScenesPath, nil)
+	if err == nil {
+		c.BillingHeaders(req, a)
+		if data, derr := c.doJSON(req); derr == nil && len(data) > 0 {
+			var resp struct {
+				Scenes []struct {
+					ID   json.RawMessage `json:"id"`
+					Name string          `json:"name"`
+				} `json:"scenes"`
+			}
+			if json.Unmarshal(data, &resp) == nil && len(resp.Scenes) > 0 {
+				var out []taskScene
+				for _, sc := range resp.Scenes {
+					idStr := strings.Trim(strings.TrimSpace(string(sc.ID)), `"`)
+					if idStr == "" || idStr == "null" {
+						continue
+					}
+					if _, nerr := strconv.Atoi(idStr); nerr == nil || idStr != "" {
+						out = append(out, taskScene{ID: idStr, Name: sc.Name})
+					}
+				}
+				if len(out) > 0 {
+					cat.scenes = out
+					return cat.scenes
+				}
+			}
+		}
+	}
+	cat.scenes = defaultTaskScenes
+	return cat.scenes
+}
+
+func (c *Client) getExperts(ctx context.Context, a *auth.Auth, cat *taskRuntimeCatalog) []taskExpert {
+	if len(cat.experts) > 0 {
+		return cat.experts
+	}
+	if list := c.fetchMarketExperts(ctx, a, "", false); len(list) > 0 {
+		cat.experts = list
+		return cat.experts
+	}
+	cat.experts = defaultTaskExperts
+	return cat.experts
+}
+
+func (c *Client) getTeams(ctx context.Context, a *auth.Auth, cat *taskRuntimeCatalog) []taskExpert {
+	if len(cat.teams) > 0 {
+		return cat.teams
+	}
+	if list := c.fetchMarketExperts(ctx, a, "", true); len(list) > 0 {
+		cat.teams = list
+		return cat.teams
+	}
+	cat.teams = defaultTaskTeams
+	return cat.teams
+}
+
+func (c *Client) getLighthouseExperts(ctx context.Context, a *auth.Auth, cat *taskRuntimeCatalog) []taskExpert {
+	if len(cat.lighthouse) > 0 {
+		return cat.lighthouse
+	}
+	for _, kw := range []string{"lighthouse", "轻量云"} {
+		for _, e := range c.fetchMarketExperts(ctx, a, kw, false) {
+			blob := strings.ToLower(e.ID + " " + e.Name)
+			if strings.Contains(blob, "lighthouse") || strings.Contains(blob, "轻量") || strings.Contains(blob, "tencent") {
+				cat.lighthouse = append(cat.lighthouse, e)
+			}
+		}
+	}
+	if len(cat.lighthouse) == 0 {
+		cat.lighthouse = defaultLighthouseExperts
+	}
+	return cat.lighthouse
+}
+
+func (c *Client) getSkills(ctx context.Context, a *auth.Auth, cat *taskRuntimeCatalog) []taskSkill {
+	if len(cat.skills) > 0 {
+		return cat.skills
+	}
+	raw, _ := json.Marshal(map[string]any{"page": 1, "page_size": 8})
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+marketSkillListPath, bytes.NewReader(raw))
+	if err == nil {
+		c.BillingHeaders(req, a)
+		if data, derr := c.doJSON(req); derr == nil && len(data) > 0 {
+			var resp struct {
+				Skills []struct {
+					SkillID string `json:"skill_id"`
+					Name    string `json:"name"`
+				} `json:"skills"`
+			}
+			if json.Unmarshal(data, &resp) == nil {
+				for _, s := range resp.Skills {
+					if s.SkillID != "" {
+						cat.skills = append(cat.skills, taskSkill{ID: s.SkillID, Name: s.Name})
+					}
+				}
+			}
+		}
+	}
+	if len(cat.skills) == 0 {
+		cat.skills = defaultTaskSkills
+	}
+	return cat.skills
+}
+
+func (c *Client) fetchMarketExperts(ctx context.Context, a *auth.Auth, keyword string, teamOnly bool) []taskExpert {
+	body := map[string]any{"page": 1, "page_size": 50}
+	if keyword != "" {
+		body["keyword"] = keyword
+	}
+	raw, _ := json.Marshal(body)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+marketExpertListPath, bytes.NewReader(raw))
+	if err != nil {
+		return nil
+	}
+	c.BillingHeaders(req, a)
+	data, err := c.doJSON(req)
+	if err != nil || len(data) == 0 {
+		return nil
+	}
+	var resp struct {
+		Experts []struct {
+			ExpertID      string   `json:"expert_id"`
+			SourceID      string   `json:"source_id"`
+			DisplayNameZH string   `json:"display_name_zh"`
+			ProfessionZH  string   `json:"profession_zh"`
+			Categories    []string `json:"categories"`
+			ExpertType    string   `json:"expert_type"`
+			Version       string   `json:"version"`
+		} `json:"experts"`
+	}
+	if json.Unmarshal(data, &resp) != nil {
+		return nil
+	}
+	var out []taskExpert
+	for _, e := range resp.Experts {
+		eid := e.ExpertID
+		if eid == "" {
+			eid = e.SourceID
+		}
+		if eid == "" {
+			continue
+		}
+		etype := e.ExpertType
+		if etype == "" {
+			etype = "agent"
+		}
+		if teamOnly && etype != "team" {
+			continue
+		}
+		name := e.DisplayNameZH
+		if name == "" {
+			name = e.ProfessionZH
+		}
+		if name == "" {
+			name = eid
+		}
+		cat := ""
+		if len(e.Categories) > 0 {
+			cat = e.Categories[0]
+		}
+		out = append(out, taskExpert{
+			ID: eid, Name: name, Category: cat, Type: etype, Version: e.Version,
+		})
+	}
+	return out
+}
+
+func buildStandardTaskEvent(uid string, spec nativeTaskSpec, idx int, scenes []taskScene, experts, teams, lighthouse []taskExpert, skills []taskSkill) map[string]any {
 	now := time.Now().UnixMilli()
 	cid := fmt.Sprintf("wb-run-%d-%d", now, idx)
 	rid := fmt.Sprintf("%s-%d", cid, now)
@@ -386,24 +660,47 @@ func buildStandardTaskEvent(uid string, spec nativeTaskSpec, idx int) map[string
 			"id": fmt.Sprintf("wbx-canvas-%d", now), "cost": 0, "isSuccessful": true, "userId": uid,
 		}
 	case "template":
-		sc := defaultTaskScenes[idx%len(defaultTaskScenes)]
+		if len(scenes) == 0 {
+			scenes = defaultTaskScenes
+		}
+		sc := scenes[idx%len(scenes)]
 		return map[string]any{
 			"eventCode": "agent_task_created_with_template", "timestamp": now, "reportDelay": 0,
 			"isCustomModel": true, "id": sc.ID, "name": sc.Name,
 			"requestId": rid, "conversationId": cid, "userId": uid,
 		}
 	case "expert":
-		ex := defaultTaskExperts[idx%len(defaultTaskExperts)]
-		return buildExpertEvent(uid, cid, rid, now, ex.ID, ex.Name, "agent")
-	case "fixed_expert", "lighthouse":
-		return buildExpertEvent(uid, cid, rid, now, spec.ExpertID, spec.ExpertID, "agent")
+		if len(experts) == 0 {
+			experts = defaultTaskExperts
+		}
+		ex := experts[idx%len(experts)]
+		return buildExpertEvent(uid, cid, rid, now, ex.ID, ex.Name, ex.Category, "agent", ex.Version)
+	case "fixed_expert":
+		name := spec.ExpertName
+		if name == "" {
+			name = spec.ExpertID
+		}
+		return buildExpertEvent(uid, cid, rid, now, spec.ExpertID, name, "", "agent", "")
+	case "lighthouse":
+		if len(lighthouse) == 0 {
+			lighthouse = defaultLighthouseExperts
+		}
+		lh := lighthouse[idx%len(lighthouse)]
+		return buildExpertEvent(uid, cid, rid, now, lh.ID, lh.Name, lh.Category, "agent", lh.Version)
 	case "team":
-		tid := defaultTaskTeams[idx%len(defaultTaskTeams)]
-		return buildExpertEvent(uid, cid, rid, now, tid, tid, "team")
+		if len(teams) == 0 {
+			teams = defaultTaskTeams
+		}
+		tm := teams[idx%len(teams)]
+		return buildExpertEvent(uid, cid, rid, now, tm.ID, tm.Name, tm.Category, "team", tm.Version)
 	case "skill":
+		if len(skills) == 0 {
+			skills = defaultTaskSkills
+		}
+		sk := skills[idx%len(skills)]
 		return map[string]any{
 			"eventCode": "skill_info", "timestamp": now, "reportDelay": 0,
-			"skillId": "skill_2096525080079265792", "skillName": "pptx", "skillVersion": "",
+			"skillId": sk.ID, "skillName": sk.Name, "skillVersion": "",
 			"action": "use", "conversationId": cid, "requestId": rid, "userId": uid,
 		}
 	case "automation":
@@ -473,11 +770,11 @@ func buildStandardTaskEvent(uid string, spec nativeTaskSpec, idx int) map[string
 	}
 }
 
-func buildExpertEvent(uid, cid, rid string, now int64, id, name, expertType string) map[string]any {
+func buildExpertEvent(uid, cid, rid string, now int64, id, name, category, expertType, version string) map[string]any {
 	return map[string]any{
 		"eventCode": "expert_actual_use", "timestamp": now, "reportDelay": 0,
 		"mode": "CLOUD", "id": id, "name": name, "expertTitle": name,
-		"type": "", "expertType": expertType, "source": "builtin", "version": "",
+		"type": category, "expertType": expertType, "source": "builtin", "version": version,
 		"cost": 0, "characterCount": 12, "conversationId": cid, "requestId": rid, "messageId": rid,
 		"requestModelId": "deepseek-v4-flash", "requestModelName": "DeepSeek V4 Flash", "userId": uid,
 	}
@@ -549,15 +846,51 @@ func buildDesktopBuddy5Events(uid, nick, buddyID, buddyName string) []map[string
 	return injectDesktopFingerprint(events, uid, nick, now)
 }
 
+func buildDesktopSkillShareEvents(uid, nick, skillID, skillName string) []map[string]any {
+	now := time.Now().UnixMilli()
+	if skillID == "" {
+		skillID = "skill_2096525080079265792"
+	}
+	if skillName == "" {
+		skillName = "pptx"
+	}
+	events := []map[string]any{
+		{
+			"eventCode": "skill_share_entry_click", "skillId": skillID, "skillName": skillName,
+			"skillType": "market", "skillSource": "official", "entry": "detail",
+			"status": "safe", "actionSuccessful": true, "tooltip": "", "clickAt": now,
+		},
+		{
+			"eventCode": "skill_share_channel_action", "skillId": skillID, "skillName": skillName,
+			"skillType": "market", "action": "wechat", "panelAction": "click",
+			"panelType": "mini_program_card", "isSuccessful": true, "cost": 0,
+			"id": fmt.Sprintf("share-%d", now), "actionAt": now,
+		},
+		{
+			"eventCode": "skill_share_channel_action", "skillId": skillID, "skillName": skillName,
+			"skillType": "market", "action": "wechat", "panelAction": "success",
+			"panelType": "mini_program_card", "isSuccessful": true, "cost": 12,
+			"id": fmt.Sprintf("share-%d", now), "actionAt": now,
+		},
+		{
+			"eventCode": "skill_share_channel_action", "skillId": skillID, "skillName": skillName,
+			"skillType": "market", "action": "link", "panelAction": "success",
+			"panelType": "clipboard", "isSuccessful": true, "cost": 12,
+			"id": fmt.Sprintf("share-%d-link", now), "actionAt": now,
+		},
+	}
+	return injectDesktopFingerprint(events, uid, nick, now)
+}
+
 func injectDesktopFingerprint(events []map[string]any, uid, nick string, now int64) []map[string]any {
 	fp := map[string]any{
 		"timezone": "Asia/Shanghai", "reportDelay": 2000,
 		"userId": uid, "username": nick, "userNickname": nick,
 		"product": "SaaS", "releaseDate": 1789036585355,
 		"commit": "5f9692923c93033111c51ad7b003eb80204a9b75",
-		"ideName": "WorkBuddy", "ideType": "WorkBuddy", "ideVersion": "5.5.6",
+		"ideName": "WorkBuddy", "ideType": "WorkBuddy", "ideVersion": "5.9.3",
 		"machineId": deriveTaskID("machine", uid), "sessionId": deriveTaskID("session", uid),
-		"extName": "workbuddy-desktop", "extVersion": "5.5.6",
+		"extName": "workbuddy-desktop", "extVersion": "5.9.3",
 		"os": "win32", "arch": "x64", "osVersion": "10.0.26220",
 		"cpuCores": 20, "memorySize": 24, "timestamp": now, "presentAt": now,
 	}
@@ -574,13 +907,21 @@ func (c *Client) reportDesktopEvents(ctx context.Context, a *auth.Auth, events [
 	if err != nil {
 		return err
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.chatBase(a)+reportPath, bytes.NewReader(raw))
+	chatBase := c.chatBase(a)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, chatBase+reportPath, bytes.NewReader(raw))
 	if err != nil {
 		return err
 	}
-	c.BillingHeaders(req, a)
+	req.Header.Set("Authorization", "Bearer "+a.AccessTokenValue())
+	req.Header.Set("Accept", "application/json, text/plain, */*")
+	req.Header.Set("Content-Type", "application/json;charset=UTF-8")
 	req.Header.Set("User-Agent", desktopUA)
+	req.Header.Set("X-Domain", chatBase)
 	req.Header.Set("X-Product", "SaaS")
+	req.Header.Set("X-Request-ID", fmt.Sprintf("%s%06d", deriveTaskID("req", a.RawUID()), time.Now().Nanosecond()%1000000))
+	if uid := a.RawUID(); uid != "" {
+		req.Header.Set("X-User-Id", uid)
+	}
 	_, err = c.doJSON(req)
 	return err
 }
@@ -618,10 +959,14 @@ func withinCSTNightWindow(t time.Time) bool {
 }
 
 func sleepTaskGap(ctx context.Context) {
-	if taskActionGap <= 0 {
+	sleepTaskDur(ctx, taskActionGap)
+}
+
+func sleepTaskDur(ctx context.Context, d time.Duration) {
+	if d <= 0 {
 		return
 	}
-	tm := time.NewTimer(taskActionGap)
+	tm := time.NewTimer(d)
 	defer tm.Stop()
 	select {
 	case <-ctx.Done():

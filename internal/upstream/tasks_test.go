@@ -3,6 +3,7 @@ package upstream
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -13,12 +14,15 @@ import (
 )
 
 func TestRunGrowthTasksNativeFlow(t *testing.T) {
-	origGap := taskActionGap
-	taskActionGap = 0
-	t.Cleanup(func() { taskActionGap = origGap })
+	origGap, origSettle := taskActionGap, taskClaimSettleDelay
+	taskActionGap, taskClaimSettleDelay = 0, 0
+	t.Cleanup(func() {
+		taskActionGap, taskClaimSettleDelay = origGap, origSettle
+	})
 
 	var reportCount, acceptCount, firstCalls int32
 	var claimedCodes []string
+	var seenSkillShare, seenLighthouse, seenTemplate, seenBuddy bool
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -40,6 +44,10 @@ func TestRunGrowthTasksNativeFlow(t *testing.T) {
 				"data": map[string]any{
 					"tasks": []map[string]any{
 						{"task_code": "expert_use_maidehao", "accept_status": "not_accepted", "progress": map[string]int{"current": 0, "target": 1}},
+						{"task_code": "Expert_lighthouse", "accept_status": "accepted", "progress": map[string]int{"current": 0, "target": 1}},
+						{"task_code": "template_5", "accept_status": "accepted", "progress": map[string]int{"current": 0, "target": 5}},
+						{"task_code": "Buddy_App", "accept_status": "accepted", "progress": map[string]int{"current": 0, "target": 1}},
+						{"task_code": "skill_share", "accept_status": "not_accepted", "progress": map[string]int{"current": 0, "target": 1}},
 						{"task_code": "RichMeow_Chat", "accept_status": "accepted", "progress": map[string]int{"current": 0, "target": 1}},
 						{"task_code": "Library_read", "accept_status": "accepted", "progress": map[string]int{"current": 0, "target": 1}},
 						{"task_code": "first_buddy", "accept_status": "not_accepted", "progress": map[string]int{"current": 0, "target": 1}},
@@ -48,11 +56,50 @@ func TestRunGrowthTasksNativeFlow(t *testing.T) {
 					},
 				},
 			})
+		case r.URL.Path == "/console/as/support/scenes":
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{
+					"scenes": []map[string]any{
+						{"id": 0, "name": "幻灯片"}, {"id": 2, "name": "视频"}, {"id": 4, "name": "研究"}, {"id": 6, "name": "文档"}, {"id": 8, "name": "数据"},
+					},
+				},
+			})
+		case r.URL.Path == marketExpertListPath:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{
+					"experts": []map[string]any{
+						{"expert_id": "ex_2cvvUZQhDyeJ", "display_name_zh": "腾讯轻量云专家", "categories": []string{"13-TencentZone"}, "expert_type": "agent", "version": "1.1.1"},
+					},
+				},
+			})
+		case r.URL.Path == marketSkillListPath:
+			_ = json.NewEncoder(w).Encode(map[string]any{
+				"code": 0,
+				"data": map[string]any{
+					"skills": []map[string]any{{"skill_id": "skill_2096525080079265792", "name": "pptx"}},
+				},
+			})
 		case r.URL.Path == growthTasksAcceptPath:
 			atomic.AddInt32(&acceptCount, 1)
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
 		case r.URL.Path == reportPath:
 			atomic.AddInt32(&reportCount, 1)
+			raw, _ := io.ReadAll(r.Body)
+			s := string(raw)
+			if strings.Contains(s, `"skill_share_channel_action"`) && strings.Contains(r.Header.Get("X-Domain"), srvURLHost(r)) {
+				seenSkillShare = true
+			}
+			if strings.Contains(s, `"ex_2cvvUZQhDyeJ"`) && strings.Contains(s, `"13-TencentZone"`) {
+				seenLighthouse = true
+			}
+			if strings.Contains(s, `"agent_task_created_with_template"`) {
+				seenTemplate = true
+			}
+			if strings.Contains(s, `"buddyapp_enter_click"`) && strings.Contains(s, `"5.9.3"`) {
+				seenBuddy = true
+			}
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
 		case r.URL.Path == buddyAgreementPath:
 			_ = json.NewEncoder(w).Encode(map[string]any{"code": 0, "data": map[string]any{}})
@@ -89,15 +136,19 @@ func TestRunGrowthTasksNativeFlow(t *testing.T) {
 		ChatBaseCN:    srv.URL,
 		BillingBaseCN: srv.URL,
 	}
-	res, err := cl.RunGrowthTasks(context.Background(), &auth.Auth{UID: "u_native_1", AccessToken: "at"})
+	res, err := cl.RunGrowthTasks(context.Background(), &auth.Auth{UID: "u_native_1", AccessToken: "at", Domain: "www.codebuddy.cn"})
 	if err != nil {
 		t.Fatalf("RunGrowthTasks err=%v", err)
 	}
 	if res.Failed != 0 {
 		t.Errorf("failed=%d logs=%v", res.Failed, res.Logs)
 	}
-	if res.ClaimedCredits != 200 { // maidehao + RichMeow + Library_read + Sequential_Tasks_1 = 4 * 50
-		t.Errorf("credits=%d want 200 (logs=%v)", res.ClaimedCredits, res.Logs)
+	if res.ClaimedCredits != 400 { // 8 claimed new * 50
+		t.Errorf("credits=%d want 400 (logs=%v)", res.ClaimedCredits, res.Logs)
+	}
+	if !seenSkillShare || !seenLighthouse || !seenTemplate || !seenBuddy {
+		t.Errorf("missing expected events: skillShare=%v lighthouse=%v template=%v buddy=%v",
+			seenSkillShare, seenLighthouse, seenTemplate, seenBuddy)
 	}
 	if res.Already != 2 { // chat_5 + first_buddy(already_claimed)
 		t.Errorf("already=%d want 2", res.Already)
@@ -108,12 +159,13 @@ func TestRunGrowthTasksNativeFlow(t *testing.T) {
 	if atomic.LoadInt32(&firstCalls) != 2 {
 		t.Errorf("firstCalls=%d want 2", firstCalls)
 	}
-	if atomic.LoadInt32(&reportCount) < 8 { // maidehao + richmeow + library + 5*buddy + minichat = 9
-		t.Errorf("reportCount=%d want >=8", reportCount)
+	if len(claimedCodes) != 9 {
+		t.Errorf("claimedCodes=%v want 9", claimedCodes)
 	}
-	if len(claimedCodes) != 5 {
-		t.Errorf("claimedCodes=%v want 5", claimedCodes)
-	}
+}
+
+func srvURLHost(r *http.Request) string {
+	return r.Host
 }
 
 func TestRunGrowthTasksRejectsGlobal(t *testing.T) {

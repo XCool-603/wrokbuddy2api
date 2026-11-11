@@ -128,6 +128,7 @@ MAPPING = {
     "expert_use_shangjia_xuanchuan": {"kind": "fixed_expert", "target": 1, "src": "商家宣传", "expertId": "ex_Weo3x2EZuSDm"},
     "expert_use_bowangwang":        {"kind": "fixed_expert", "target": 1, "src": "博汪汪", "expertId": "ex_WZY136wV5aMt"},
     "WorkBuddy_Valorant":           {"kind": "fixed_expert", "target": 1, "src": "无畏契约拼豆专家", "expertId": "ex_xQHHD1u5Jkua"},
+    "skill_share":                  {"kind": "skillshare",   "target": 1, "src": "技能详情页分享事件链"},
     "wb_wechat_oa_subscribe_task":  {"unforgeable": True, "reason": "关注微信公众号需外部回调/24小时"},
     # 不可伪造（真实业务副作用）
     "Expert_Philanthropy":    {"unforgeable": True, "reason": "真实捐款动作(M8)"},
@@ -165,9 +166,9 @@ def desktop_fingerprint(auth):
         "username": auth.get("nick", ""), "userNickname": auth.get("nick", ""),
         "product": "SaaS", "releaseDate": 1789036585355,
         "commit": "5f9692923c93033111c51ad7b003eb80204a9b75",
-        "ideName": "WorkBuddy", "ideType": "WorkBuddy", "ideVersion": "5.5.6",
+        "ideName": "WorkBuddy", "ideType": "WorkBuddy", "ideVersion": "5.9.3",
         "machineId": derive_id(auth, "machine"), "sessionId": derive_id(auth, "session"),
-        "extName": "workbuddy-desktop", "extVersion": "5.5.6",
+        "extName": "workbuddy-desktop", "extVersion": "5.9.3",
         "os": "win32", "arch": "x64", "osVersion": "10.0.26220",
         "cpuCores": 20, "memorySize": 24,
         "timestamp": now, "presentAt": now,
@@ -247,8 +248,8 @@ DEFAULT_CASES = [("worker-ledger-freedom-dashboard", {"title": "打工人小账�
                   "artifact_type": "other", "categories": [""], "skills": [],
                   "experts": [], "prompt": ""})]
 LIGHTHOUSE_IDS = [("ex_2cvvUZQhDyeJ", {
-    "name": "腾讯轻量云专家", "category": "02-Engineering",
-    "expertType": "agent", "version": "1.0.2"})]
+    "name": "腾讯轻量云专家", "category": "13-TencentZone",
+    "expertType": "agent", "version": "1.1.1"})]
 LIGHTHOUSE_KEYWORDS = ["lighthouse", "轻量云"]
 
 # 连登/能量读数（只读 oracle，M15 实测 /v2/activity/growth/energy -> data.balance）
@@ -267,7 +268,7 @@ MARKET_LIST_PATH = "/v2/operation-platform/market/expert/list"
 WEB_BASE = "https://www.workbuddy.cn"
 
 # fork 桌面指纹（desktop.go）/ web 域（report.go）吸收常量
-DESKTOP_UA = "WorkBuddy/5.5.6 WorkBuddy/5.5.6 CLI/2.137.1"
+DESKTOP_UA = "WorkBuddy/5.9.3 WorkBuddy/5.9.3 CLI/2.137.1"
 WEB_UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
           "(KHTML, like Gecko) Chrome/152.0.0.0 Safari/537.36")
 # Library_read 空间文档 URL（fork autotask.go:438 实测三账号点亮）
@@ -492,7 +493,7 @@ def ids_for(kind, auth, need, offset=0, code=None):
         return [("", {}) for _ in range(need)]
     if kind == "richmeow":
         return [("", {}) for _ in range(need)]
-    if kind in ("buddy5", "library", "buddyfirst", "minichat", "schoolseason"):
+    if kind in ("buddy5", "library", "buddyfirst", "minichat", "schoolseason", "skillshare"):
         # history/current 不是顺序语义：buddy5/library/buddyfirst 是固定事件组按需补 1 次（offset 无意义）
         return [("", {}) for _ in range(need)]
     if kind == "school":
@@ -1286,6 +1287,34 @@ def light_up(auth, code, spec, cur, target, uid8, opts, stats, cap=0):
             if i < need - 1:
                 time.sleep(opts.gap)
         time.sleep(2.0)  # 服务端归账可能异步
+    elif spec["kind"] == "skillshare":
+        skills = _fetch_skills(auth)
+        sid, sname = skills[0] if skills else DEFAULT_SKILL_IDS[0]
+        sname = sname or "pptx"
+        for i in range(need):
+            now = int(time.time() * 1000)
+            events = [
+                {"eventCode": "skill_share_entry_click", "skillId": sid, "skillName": sname,
+                 "skillType": "market", "skillSource": "official", "entry": "detail",
+                 "status": "safe", "actionSuccessful": True, "tooltip": "", "clickAt": now},
+                {"eventCode": "skill_share_channel_action", "skillId": sid, "skillName": sname,
+                 "skillType": "market", "action": "wechat", "panelAction": "click",
+                 "panelType": "mini_program_card", "isSuccessful": True, "cost": 0,
+                 "id": f"share-{now}-{i}", "actionAt": now},
+                {"eventCode": "skill_share_channel_action", "skillId": sid, "skillName": sname,
+                 "skillType": "market", "action": "wechat", "panelAction": "success",
+                 "panelType": "mini_program_card", "isSuccessful": True, "cost": 12,
+                 "id": f"share-{now}-{i}", "actionAt": now},
+                {"eventCode": "skill_share_channel_action", "skillId": sid, "skillName": sname,
+                 "skillType": "market", "action": "link", "panelAction": "success",
+                 "panelType": "clipboard", "isSuccessful": True, "cost": 12,
+                 "id": f"share-{now}-{i}-link", "actionAt": now},
+            ]
+            st_r, sc = report_desktop_events(auth, events)
+            print(f"[task_runner] {uid8} {code}: report {i + 1}/{need} {st_r} code={sc} skill_share id={sid}")
+            if i < need - 1:
+                time.sleep(opts.gap)
+        time.sleep(2.0)
     elif spec["kind"] == "library":
         # web 域 web_element_click（fork ReportWebEvent），base 为 www.workbuddy.cn
         for i in range(need):
