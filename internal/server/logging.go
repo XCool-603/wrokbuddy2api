@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -109,6 +110,50 @@ func (s *chatStat) done() {
 	recordChatMetric(s, total)
 }
 
+// QuotaObservation 从上游 usage.quota 提取的模型免费配额观测。
+type QuotaObservation struct {
+	Model        string
+	Percent      float64
+	ResetAt      time.Time
+	SharedModels []string
+}
+
+type rawQuotaPayload struct {
+	Model        string          `json:"model"`
+	Percent      float64         `json:"percent"`
+	ResetAt      json.RawMessage `json:"reset_at"`
+	SharedModels []string        `json:"shared_models"`
+}
+
+func parseQuotaResetAt(raw json.RawMessage) time.Time {
+	s := strings.Trim(strings.TrimSpace(string(raw)), `"`)
+	if s == "" || s == "null" {
+		return time.Time{}
+	}
+	if sec, err := strconv.ParseInt(s, 10, 64); err == nil && sec > 0 {
+		return time.Unix(sec, 0)
+	}
+	if fsec, err := strconv.ParseFloat(s, 64); err == nil && fsec > 0 {
+		return time.Unix(int64(fsec), 0)
+	}
+	if ts, err := time.Parse(time.RFC3339, s); err == nil {
+		return ts
+	}
+	return time.Time{}
+}
+
+func (q *rawQuotaPayload) toObservation() (QuotaObservation, bool) {
+	if q == nil {
+		return QuotaObservation{}, false
+	}
+	return QuotaObservation{
+		Model:        strings.TrimSpace(q.Model),
+		Percent:      q.Percent,
+		ResetAt:      parseQuotaResetAt(q.ResetAt),
+		SharedModels: q.SharedModels,
+	}, true
+}
+
 // chatStatsReader 在流式透传时抓取 SSE 末帧的 usage.completion_tokens 精确值，
 // 并记录首个 data 帧的 TTFB；原始字节原样返回给下游透传。
 // 注意：不做 rune 估算，token 数一律采信上游 usage。
@@ -119,13 +164,15 @@ type chatStatsReader struct {
 	seen      bool // 已见过首个 data 帧（TTFB 只记一次）
 	hasUsage  bool // 末帧是否带 usage
 	hasCredit bool // 是否出现过带 credit 的 usage（缺失≠0，见 Credit() 注释）
+	hasQuota  bool // 末帧是否带 usage.quota
 	tokens    int
-	credit    float64 // 末帧 usage.credit（本次真实扣费，供成本账本）
-	prompt    int     // 末帧 usage.prompt_tokens（与 completion 合计折算单价）
-	cacheHit  int     // 末帧 usage.prompt_cache_hit_tokens（供 /v1/stats）
-	cacheMiss int     // 末帧 usage.prompt_cache_miss_tokens
-	cacheWr   int     // 末帧 usage.prompt_cache_write_tokens
-	pend      []byte  // 已读未返回的行缓存
+	credit    float64          // 末帧 usage.credit（本次真实扣费，供成本账本）
+	quota     QuotaObservation // 末帧 usage.quota（免费额度百分比与重置时间）
+	prompt    int              // 末帧 usage.prompt_tokens（与 completion 合计折算单价）
+	cacheHit  int              // 末帧 usage.prompt_cache_hit_tokens（供 /v1/stats）
+	cacheMiss int              // 末帧 usage.prompt_cache_miss_tokens
+	cacheWr   int              // 末帧 usage.prompt_cache_write_tokens
+	pend      []byte           // 已读未返回的行缓存
 }
 
 // newChatStatsReaderSince 以 since 为 TTFB 计时起点（通常是请求进入 handler 的时刻）。
@@ -143,6 +190,11 @@ func (s *chatStatsReader) Tokens() (int, bool) { return s.tokens, s.hasUsage }
 // 字段显式出现——字段缺失时 ok=false（缺失≠0：不能把"缺观测"当"0 成本"写入账本，
 // 否则收费的号可能被误判 tier0 免费层）。显式 credit:0 仍是合法免费观测（ok=true）。
 func (s *chatStatsReader) Credit() (float64, bool) { return s.credit, s.hasUsage && s.hasCredit }
+
+// Quota 返回末帧 usage.quota（模型免费额度百分比与重置时间）。
+func (s *chatStatsReader) Quota() (QuotaObservation, bool) {
+	return s.quota, s.hasUsage && s.hasQuota
+}
 
 // TotalTokens 返回本次请求总 token 数（prompt + completion），供成本单价折算。
 func (s *chatStatsReader) TotalTokens() int { return s.prompt + s.tokens }
@@ -175,9 +227,10 @@ func (s *chatStatsReader) parseSSELine(line string) {
 			PromptTokens     int      `json:"prompt_tokens"`
 			Credit           *float64 `json:"credit"` // 指针区分「缺失」与「显式 0」
 			// 缓存三段（上游实测字段名，见 /v1/stats 的 cache_* 口径）。
-			PromptCacheHitTokens   int `json:"prompt_cache_hit_tokens"`
-			PromptCacheMissTokens  int `json:"prompt_cache_miss_tokens"`
-			PromptCacheWriteTokens int `json:"prompt_cache_write_tokens"`
+			PromptCacheHitTokens   int              `json:"prompt_cache_hit_tokens"`
+			PromptCacheMissTokens  int              `json:"prompt_cache_miss_tokens"`
+			PromptCacheWriteTokens int              `json:"prompt_cache_write_tokens"`
+			Quota                  *rawQuotaPayload `json:"quota"`
 		} `json:"usage"`
 	}
 	if json.Unmarshal([]byte(payload), &chunk) != nil || chunk.Usage == nil {
@@ -192,6 +245,10 @@ func (s *chatStatsReader) parseSSELine(line string) {
 	if chunk.Usage.Credit != nil {
 		s.hasCredit = true
 		s.credit = *chunk.Usage.Credit
+	}
+	if q, ok := chunk.Usage.Quota.toObservation(); ok {
+		s.hasQuota = true
+		s.quota = q
 	}
 }
 
@@ -251,6 +308,27 @@ func usageCreditTotal(resp map[string]any) (credit float64, total int, ok bool) 
 		return 0, 0, false
 	}
 	return c, int(pt) + int(ct), true
+}
+
+// parseUsageQuota 从聚合响应中提取 usage.quota（供非流式免费额度检测）。
+func parseUsageQuota(resp map[string]any) (QuotaObservation, bool) {
+	u, isMap := resp["usage"].(map[string]any)
+	if !isMap {
+		return QuotaObservation{}, false
+	}
+	qAny, ok := u["quota"]
+	if !ok || qAny == nil {
+		return QuotaObservation{}, false
+	}
+	raw, err := json.Marshal(qAny)
+	if err != nil {
+		return QuotaObservation{}, false
+	}
+	var rq rawQuotaPayload
+	if json.Unmarshal(raw, &rq) != nil {
+		return QuotaObservation{}, false
+	}
+	return rq.toObservation()
 }
 
 // uidPrefix 只显示 uid 前 8 位；空 uid 显示 "-"。

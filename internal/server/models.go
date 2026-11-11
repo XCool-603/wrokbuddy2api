@@ -59,6 +59,58 @@ func fmtCreditsPrefix(raw string) string {
 	return "[" + s + " credit]"
 }
 
+// isFreeTierModel 判定本次调用是否走「免费额度模型」（x0.00 / auto-free / 混元免费档等）。
+// 只读本地配置、已知免费别名与已预热的动态模型目录缓存，不发起任何外部网络请求。
+func (h *Handler) isFreeTierModel(realm, bareModel, reqModel string) bool {
+	if IsFreeRouteAlias(reqModel) {
+		return true
+	}
+	lowerBare := strings.ToLower(strings.TrimSpace(bareModel))
+	lowerReq := strings.ToLower(strings.TrimSpace(reqModel))
+	for _, s := range []string{lowerBare, strings.TrimPrefix(strings.TrimPrefix(lowerReq, "global:"), "cn:")} {
+		switch s {
+		case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4", "hy4free-preview",
+			"hy3", "hy3free", "hy3-free", "hunyuan3-free",
+			"hy4flash-exp1", "hy4flash-exp2", "hy4flash-exp3", "hy4flash-exp4":
+			return true
+		}
+	}
+	if h != nil {
+		for _, m := range h.cfg.FreeModels {
+			_, fb := resolveModel(m)
+			if strings.EqualFold(fb, bareModel) || strings.EqualFold(m, reqModel) {
+				return true
+			}
+		}
+		if h.cfg.ModelRoutes != nil {
+			for _, key := range []string{"auto-free", "free"} {
+				for _, m := range h.cfg.ModelRoutes[key] {
+					_, fb := resolveModel(m)
+					if strings.EqualFold(fb, bareModel) || strings.EqualFold(m, reqModel) {
+						return true
+					}
+				}
+			}
+		}
+		if realm == "global" && h.cfg.Upstream != nil {
+			for _, mi := range h.cfg.Upstream.GlobalModelInfosSnapshot() {
+				if strings.EqualFold(mi.ID, bareModel) && IsFreeCredits(mi.Credits) {
+					return true
+				}
+			}
+		}
+		dynamicModelsCache.RLock()
+		cached := dynamicModelsCache.ids
+		dynamicModelsCache.RUnlock()
+		for _, mi := range cached {
+			if strings.EqualFold(mi.ID, bareModel) && IsFreeCredits(mi.Credits) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // applyModelInfoFields 把上游模型对象全字段（ModelInfo）按「空值省略」写出规则
 // 合入 /v1/models 条目：name/description/credits/tags/vendor/能力旗标/
 // max_allowed_size/reasoning_effort/reasoning_summary。CN 动态分支与 global

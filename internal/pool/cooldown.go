@@ -109,6 +109,42 @@ func (p *Pool) CooldownSoftForModel(uid string, base time.Duration, resetAt time
 	}
 }
 
+// CooldownFreeQuotaModel 免费额度耗尽触发的模型级冷却：
+// 保留完整的恢复时间（对齐上游 quota.reset_at，未提供时对齐次日 00:00 CST，上限 24h），
+// 不受 soft_rate_max(10m/2h) 截断，防止免费额度用完的账号在次日重置前又被选出来扣费；
+// 且只锁定该免费模型，不影响同一账号使用其他模型。
+func (p *Pool) CooldownFreeQuotaModel(uid string, resetAt time.Time, model, reason string) {
+	if p == nil || uid == "" || model == "" {
+		return
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	e := p.entryLocked(uid)
+	if e == nil {
+		return
+	}
+	now := time.Now()
+	until := resetAt
+	maxCap := now.Add(24 * time.Hour)
+	if until.IsZero() || !until.After(now) {
+		cst := time.FixedZone("CST", 8*3600)
+		inCST := now.In(cst)
+		until = time.Date(inCST.Year(), inCST.Month(), inCST.Day()+1, 0, 0, 0, 0, cst)
+	}
+	if until.After(maxCap) {
+		until = maxCap
+	}
+	if e.modelCooldowns == nil {
+		e.modelCooldowns = map[string]modelCooldown{}
+	}
+	e.modelCooldowns[model] = modelCooldown{
+		Until:   until,
+		ResetAt: until,
+		Reason:  reason,
+	}
+	p.dirty.Store(true)
+}
+
 // BlockModelBackoff 11102「该后端无此模型」的 (账号, 模型) 负缓存入口（handler.applyErrorPolicy
 // 调用）。复用 modelCooldowns 机制（不新建平行状态）：写 modelCooldowns[model]，Until 为指数退避
 // TTL，选号侧 healthyForModel 自动对该账号避开该模型。

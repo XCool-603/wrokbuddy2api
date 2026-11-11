@@ -227,22 +227,25 @@ func (h *Handler) ResolveHunyuanFreeCandidates(model string) []string {
 	clean = strings.TrimPrefix(clean, "cn:")
 	switch clean {
 	case "hy4free", "hy4-free", "hunyuan-free", "hunyuan4-free", "hy4", "hy4free-preview":
-		base := []string{
-			"global:hy4free",
-			"cn:hy4free",
-			"cn:hy4flash-exp1",
-			"cn:hy4flash-exp2",
-			"cn:hy4flash-exp3",
-			"cn:hy4flash-exp4",
+		var totalGL, totalCN int
+		if h != nil && h.cfg.Pool != nil {
+			totalGL, _, _, _, _ = h.cfg.Pool.CountsDetailedForRealm("global")
+			totalCN, _, _, _, _ = h.cfg.Pool.CountsDetailedForRealm("cn")
 		}
+		var base []string
 		if strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "cn:") {
-			base = []string{
-				"cn:hy4free",
-				"cn:hy4flash-exp1",
-				"cn:hy4flash-exp2",
-				"cn:hy4flash-exp3",
-				"cn:hy4flash-exp4",
-				"global:hy4free",
+			if totalCN > 0 || totalGL == 0 {
+				base = append(base, "cn:hy4free", "cn:hy4flash-exp1", "cn:hy4flash-exp2", "cn:hy4flash-exp3", "cn:hy4flash-exp4")
+			}
+			if totalGL > 0 {
+				base = append(base, "global:hy4free")
+			}
+		} else {
+			if totalGL > 0 || totalCN == 0 {
+				base = append(base, "global:hy4free")
+			}
+			if totalCN > 0 {
+				base = append(base, "cn:hy4free", "cn:hy4flash-exp1", "cn:hy4flash-exp2", "cn:hy4flash-exp3", "cn:hy4flash-exp4")
 			}
 		}
 		return h.SortCandidatesByHealth(base)

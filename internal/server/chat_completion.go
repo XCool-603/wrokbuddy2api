@@ -718,22 +718,15 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				st.hasUsage = hasUsage
 				st.prompt = stats.PromptTokens()
 				st.cacheHit, st.cacheMiss, st.cacheWr = stats.CacheTokens()
+				quota, hasQuota := stats.Quota()
 				if credit, ok := stats.Credit(); ok {
 					st.credit = credit
 					st.hasCredit = true
-				}
-				// 成本账本：末帧 usage 带 credit 与 token 总数时记录实测单价，
-				// 供下次选号把免费/便宜的号排在前面。
-				if credit, ok := stats.Credit(); ok {
-					h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, stats.TotalTokens())
-					if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
-						cost := int64(credit)
-						if cost <= 0 && credit > 0 {
-							cost = 1
-						}
-						h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
-					}
+					h.handleObservedUsageCost(r, acct, realm, bareModel, peek.Model, credit, true, stats.TotalTokens(), quota, hasQuota, stickyUID, unbindSticky)
 				} else if hasUsage {
+					if hasQuota {
+						h.handleObservedUsageCost(r, acct, realm, bareModel, peek.Model, 0, false, stats.TotalTokens(), quota, true, stickyUID, unbindSticky)
+					}
 					// R9(c) 防护观测：usage 存在但 credit 缺失（如 global SSE 末帧未带 credit）。
 					// 不算合法成本观测（缺失≠0），仅记一条 WARN 协助排障，绝不写入账本。
 					log.Printf("WARN: [server] stream usage without credit acct=%s model=%s (no cost observation)", logfmt.Label(acct.UID, acct.Nickname), bareModel)
@@ -754,17 +747,13 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 			// 成本账本（非流式）：从聚合响应的 usage 取 credit 与 token 总数。
 			fillStatFromUsage(st, resp)
+			quota, hasQuota := parseUsageQuota(resp)
 			if credit, total, ok := usageCreditTotal(resp); ok {
 				st.credit = credit
 				st.hasCredit = true
-				h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, total)
-				if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
-					cost := int64(credit)
-					if cost <= 0 && credit > 0 {
-						cost = 1
-					}
-					h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
-				}
+				h.handleObservedUsageCost(r, acct, realm, bareModel, peek.Model, credit, true, total, quota, hasQuota, stickyUID, unbindSticky)
+			} else if hasQuota {
+				h.handleObservedUsageCost(r, acct, realm, bareModel, peek.Model, 0, false, 0, quota, true, stickyUID, unbindSticky)
 			}
 			if st.hasCredit {
 				if uMap, ok := resp["usage"].(map[string]any); ok {
@@ -1185,4 +1174,61 @@ func (h *Handler) proxyToDsh(w http.ResponseWriter, r *http.Request, body []byte
 	}
 	w.WriteHeader(resp.StatusCode)
 	_, _ = io.Copy(w, resp.Body)
+}
+
+// handleObservedUsageCost 统一记录实测积分消耗，并对「免费模型开始扣费 / 配额达 100%」触发模型级限流保护：
+// 立即将该账号在当前免费模型（及 shared_models）标记为限流冷却至上游重置时间，
+// 解绑粘性并让后续请求自动切换到池内其他仍有免费额度的账号。
+func (h *Handler) handleObservedUsageCost(
+	r *http.Request,
+	acct *auth.Auth,
+	realm, bareModel, reqModel string,
+	credit float64,
+	hasCredit bool,
+	totalTok int,
+	quota QuotaObservation,
+	hasQuota bool,
+	stickyUID string,
+	unbindSticky func(),
+) {
+	if hasCredit && h.cfg.Pool != nil {
+		h.cfg.Pool.NoteModelCost(acct.UID, bareModel, credit, totalTok)
+		if u, ok := r.Context().Value(userContextKey).(*usermgr.User); ok && u != nil && h.cfg.UserMgr != nil {
+			cost := int64(credit)
+			if cost <= 0 && credit > 0 {
+				cost = 1
+			}
+			h.cfg.UserMgr.DeductDailyCredit(u.APIKey, cost)
+		}
+	}
+	if h.cfg.Pool == nil || !h.isFreeTierModel(realm, bareModel, reqModel) {
+		return
+	}
+	charged := hasCredit && credit > 0
+	quotaFull := hasQuota && quota.Percent >= 100
+	if !charged && !quotaFull {
+		return
+	}
+	var resetAt time.Time
+	var pct float64
+	if hasQuota {
+		resetAt = quota.ResetAt
+		pct = quota.Percent
+	}
+	reason := fmt.Sprintf("free quota exhausted (credit=%.2f, quota=%.0f%%)", credit, pct)
+	targets := []string{bareModel}
+	for _, sm := range quota.SharedModels {
+		sm = strings.TrimSpace(sm)
+		if sm != "" && !strings.EqualFold(sm, bareModel) {
+			targets = append(targets, sm)
+		}
+	}
+	for _, m := range targets {
+		h.cfg.Pool.CooldownFreeQuotaModel(acct.UID, resetAt, m, reason)
+	}
+	if stickyUID == acct.UID && unbindSticky != nil {
+		unbindSticky()
+	}
+	log.Printf("WARN: [free-guard] acct=%s model=%s (req=%s) credit=%.4f quota=%.0f%% -> rate-limited until %s, switching to next account",
+		logfmt.Label(acct.UID, acct.Nickname), bareModel, reqModel, credit, pct, resetAt.Format(time.RFC3339))
 }

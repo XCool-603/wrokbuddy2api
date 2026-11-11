@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
@@ -32,6 +33,13 @@ func newRealmFake(t *testing.T) *realmFake {
 	cf := &realmFake{}
 	cf.up = &upstream.Client{
 		HTTP: &http.Client{Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
+			if strings.Contains(r.URL.Path, "/billing/") {
+				return &http.Response{
+					StatusCode: 200,
+					Header:     http.Header{"Content-Type": []string{"application/json"}},
+					Body:       io.NopCloser(strings.NewReader(`{"code":0,"data":{}}`)),
+				}, nil
+			}
 			cf.mu.Lock()
 			defer cf.mu.Unlock()
 			cf.authz = r.Header.Get("Authorization")
@@ -318,5 +326,75 @@ func TestChatDualRealmFailoverWhenGlobalAccountDeadForHy4Free(t *testing.T) {
 	}
 	if gotModel != "hy4-preview" {
 		t.Errorf("global:hy4-preview outbound model should be hy4-preview, got %s", gotModel)
+	}
+}
+
+// TestFreeModelCreditChargeMarksRateLimitedAndSwitchesAccount 验证：
+// 免费模型（如 global:hy4free）在某账号返回 credit > 0 或 quota.percent >= 100 时，
+// 立即把该账号在该免费模型标记为限流冷却并自动切到下一个账号；全部免费账号都限流后返回 429，
+// 不继续扣费，同时同一账号调用其他模型（如 gpt-5.4）完全不受影响。
+func TestFreeModelCreditChargeMarksRateLimitedAndSwitchesAccount(t *testing.T) {
+	resetUnix := time.Now().Add(12 * time.Hour).Unix()
+	var mu sync.Mutex
+	var usedAuthz []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		authz := r.Header.Get("Authorization")
+		mu.Lock()
+		usedAuthz = append(usedAuthz, authz)
+		mu.Unlock()
+		_, _ = io.WriteString(w, fmt.Sprintf(
+			"data: {\"id\":\"1\",\"choices\":[{\"delta\":{\"content\":\"ok\"}}]}\n\n"+
+				"data: {\"id\":\"1\",\"choices\":[],\"usage\":{\"prompt_tokens\":1000,\"completion_tokens\":10,\"credit\":0.25,\"quota\":{\"model\":\"hy4\",\"percent\":100,\"reset_at\":\"%d\"}}}\n\n"+
+				"data: [DONE]\n\n", resetUnix))
+	}))
+	defer srv.Close()
+
+	p := testPoolWith(
+		&auth.Auth{UID: "gl1", AccessToken: "at_gl1", Domain: "www.workbuddy.ai", ExpiresAt: 9999999999},
+		&auth.Auth{UID: "gl2", AccessToken: "at_gl2", Domain: "www.workbuddy.ai", ExpiresAt: 9999999999},
+	)
+	up := &upstream.Client{
+		HTTP: srv.Client(), ChatHTTP: srv.Client(),
+		GlobalEnabled: true, ChatBaseGlobal: srv.URL, BillingBaseGlobal: srv.URL,
+	}
+	h := NewHandler(Config{Pool: p, Upstream: up, GlobalEnabled: true, MaxRotate: 3})
+
+	// 第 1 次：选中其中 1 个账号，因返回 credit=0.25 -> 立即对该账号的 hy4free 限流
+	reqBody := `{"model":"global:hy4free","stream":true,"conversation_id":"sticky-free-conv","messages":[{"role":"user","content":"hi"}]}`
+	rec1 := httptest.NewRecorder()
+	h.ServeHTTP(rec1, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(reqBody)))
+	if rec1.Code != http.StatusOK {
+		t.Fatalf("req1 code=%d body=%s", rec1.Code, rec1.Body.String())
+	}
+
+	// 第 2 次（哪怕同会话粘性）：必须自动切换到另一个账号！
+	rec2 := httptest.NewRecorder()
+	h.ServeHTTP(rec2, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(reqBody)))
+	if rec2.Code != http.StatusOK {
+		t.Fatalf("req2 code=%d body=%s", rec2.Code, rec2.Body.String())
+	}
+
+	mu.Lock()
+	first, second := usedAuthz[0], usedAuthz[1]
+	mu.Unlock()
+	if first == second {
+		t.Fatalf("expected account switch after free quota credit charge, got same authz twice: %s", first)
+	}
+
+	// 第 3 次：两个账号的 hy4free 都已被限流，必须返回 429 阻止继续扣费！
+	rec3 := httptest.NewRecorder()
+	h.ServeHTTP(rec3, httptest.NewRequest("POST", "/v1/chat/completions", strings.NewReader(reqBody)))
+	if rec3.Code != http.StatusTooManyRequests {
+		t.Fatalf("req3 expected 429 rate-limited when all free accounts exhausted, got %d body=%s", rec3.Code, rec3.Body.String())
+	}
+
+	// 但同一个账号调用其他收费模型（如 global:gpt-5.4）不受免费模型限流影响，仍正常放行
+	recOther := httptest.NewRecorder()
+	h.ServeHTTP(recOther, httptest.NewRequest("POST", "/v1/chat/completions",
+		strings.NewReader(`{"model":"global:gpt-5.4","stream":true,"messages":[{"role":"user","content":"hi"}]}`)))
+	if recOther.Code != http.StatusOK {
+		t.Fatalf("other model global:gpt-5.4 should remain healthy, got %d body=%s", recOther.Code, recOther.Body.String())
 	}
 }
