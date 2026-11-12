@@ -110,6 +110,11 @@ type Config struct {
 	AllowedIPs []string
 	// AllowLocalhost 开启白名单时是否始终放行本机回环（默认 nil = true）
 	AllowLocalhost *bool
+
+	// CheckinEnabled 是否启用每日定时自动签到（nil = true）
+	CheckinEnabled *bool
+	// CheckinHours 每日定时自动签到小时列表（CST，空则默认 [9, 21]）
+	CheckinHours []int
 }
 
 // notFoundCooldown 上游 404 的固定短冷却时长。
@@ -122,7 +127,7 @@ const wafCooldownBase = 60 * time.Second
 const ServiceName = "workbuddy2api"
 
 // CurrentVersion 当前发布版本
-const CurrentVersion = "v1.2.51"
+const CurrentVersion = "v1.2.52"
 
 // dumpReqMinBytes WB2A_DUMP_REQ 调试落盘的"大请求"固定阈值（4MB）。
 const dumpReqMinBytes = 4 << 20

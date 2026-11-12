@@ -399,7 +399,19 @@ func (s *Scheduler) CheckinAll() ([]CheckinOutcome, error) {
 			}
 		}
 		// 签到返回错误（含"今天已签到"）也继续查余额：余额恢复即可解冻账号。
-		if err := s.cfg.Upstream.DailyCheckin(a); err != nil {
+		checkinErr := s.cfg.Upstream.DailyCheckin(a)
+		if checkinErr != nil {
+			var ue *upstream.Error
+			if errors.As(checkinErr, &ue) && (ue.Status == 401 || ue.Kind == upstream.ErrSessionDead) && a.RefreshTokenValue() != "" {
+				// 若 access_token 未到预期过期时间却被服务端提前吊销，强制刷新并重试一次签到。
+				if rerr := s.cfg.Upstream.RefreshToken(a); rerr == nil {
+					a.BackfillRealm()
+					_ = a.SaveAtomic()
+					checkinErr = s.cfg.Upstream.DailyCheckin(a)
+				}
+			}
+		}
+		if err := checkinErr; err != nil {
 			if upstream.IsAlreadyCheckin(err) {
 				// "今天已签到"是幂等成功，不是错误：不填 detail，免得回执里
 				// 出现一整段 400 报文、被误读成签到失败。
@@ -434,8 +446,15 @@ func (s *Scheduler) CheckinAll() ([]CheckinOutcome, error) {
 		default:
 			failN++
 		}
+		s.cfg.Pool.SetCheckinResult(st.UID, string(oc.Status), oc.Detail)
 		out = append(out, oc)
 	}
+	for _, oc := range out {
+		if oc.Status == CheckinSkipped || oc.Status == CheckinFail {
+			s.cfg.Pool.SetCheckinResult(oc.UID, string(oc.Status), oc.Detail)
+		}
+	}
+	s.cfg.Pool.SetCheckinRunSummary("auto", len(statuses), okN, alreadyN, failN, skipN)
 	log.Printf("checkin done: total=%d ok=%d already=%d fail=%d skipped=%d",
 		len(statuses), okN, alreadyN, failN, skipN)
 	return out, nil

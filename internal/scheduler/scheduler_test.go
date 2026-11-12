@@ -772,3 +772,56 @@ func TestNextFireUTCMachineAlignsWithBeijingTime(t *testing.T) {
 		t.Errorf("next in CST = %v, want 09:00 CST", next.In(cstLoc))
 	}
 }
+
+func TestCheckinAllRetries401AndRecordsSummary(t *testing.T) {
+	var checkinAttempt atomic.Int32
+	var refreshed atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case strings.HasSuffix(r.URL.Path, "/v2/billing/meter/daily-checkin"):
+			if checkinAttempt.Add(1) == 1 {
+				w.WriteHeader(http.StatusUnauthorized)
+				_, _ = w.Write([]byte(`401 Authorization Required`))
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+			_, _ = w.Write([]byte(`{"code":0,"msg":"ok","data":{}}`))
+		case strings.HasSuffix(r.URL.Path, "/v2/billing/meter/get-user-resource"):
+			_, _ = w.Write([]byte(`{"code":0,"data":{"Response":{"Data":{"TotalDosage":250,"Accounts":[]}}}}`))
+		default:
+			// token refresh endpoint
+			refreshed.Add(1)
+			_, _ = w.Write([]byte(`{"code":0,"data":{"accessToken":"fresh_at","refreshToken":"fresh_rt","expiresIn":5184000}}`))
+		}
+	}))
+	defer srv.Close()
+
+	up := upstream.New()
+	up.ChatBaseCN = srv.URL
+	up.BillingBaseCN = srv.URL
+
+	p := pool.New("")
+	a := &auth.Auth{UID: "u_retry", AccessToken: "stale_at", RefreshToken: "rt1", ExpiresAt: time.Now().Add(24 * time.Hour).Unix()}
+	a.SetRealm("cn")
+	p.Add(a)
+
+	s := New(Config{Pool: p, Upstream: up})
+	out, err := s.CheckinAll()
+	if err != nil {
+		t.Fatalf("CheckinAll err=%v", err)
+	}
+	if len(out) != 1 || out[0].Status != CheckinOK {
+		t.Fatalf("out=%+v want CheckinOK after 401 refresh retry", out)
+	}
+	if refreshed.Load() != 1 || checkinAttempt.Load() != 2 {
+		t.Errorf("refreshed=%d checkinAttempt=%d, want 1/2", refreshed.Load(), checkinAttempt.Load())
+	}
+	rec, ok := p.GetCheckinResultToday("u_retry")
+	if !ok || rec.Status != "ok" {
+		t.Errorf("GetCheckinResultToday=%+v ok=%v, want status=ok", rec, ok)
+	}
+	sum := p.GetCheckinRunSummary()
+	if sum == nil || sum.OK != 1 || sum.Trigger != "auto" {
+		t.Errorf("GetCheckinRunSummary=%+v, want OK=1 auto", sum)
+	}
+}

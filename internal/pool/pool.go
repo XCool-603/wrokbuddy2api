@@ -73,6 +73,10 @@ type Pool struct {
 	// stopCh 关闭信号：Close 关闭它使 startFlusher 的后台 goroutine 退出。
 	// nil = 未启动 flusher（stateFp 为空时 New 不起 flusher）。
 	stopCh chan struct{}
+
+	checkinMu      sync.RWMutex
+	checkins       map[string]CheckinRecord
+	checkinSummary *CheckinRunSummary
 	// closeOnce 保证 Close 幂等（多次调用不重复 close channel）。
 	closeOnce sync.Once
 }

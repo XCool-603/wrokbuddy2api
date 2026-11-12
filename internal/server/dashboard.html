@@ -313,6 +313,7 @@
             <span id="stripGlobalRemain" class="font-bold font-mono text-emerald-300">0</span>
           </div>
           <span id="creditDetailCoverageBadge" class="text-[11px] font-mono text-slate-400 bg-slate-900/80 border border-slate-800 px-2 py-0.5 rounded-lg">已同步明细 0/0</span>
+          <button id="stripCheckinBadge" onclick="runBatchSignin()" class="text-[11px] font-mono px-2 py-0.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 hover:border-indigo-500/40 hover:text-indigo-300 transition cursor-pointer" title="点击立即执行一次全池每日签到">📅 自动签到: 检测中</button>
           <span id="stripAlertBadge" class="hidden text-[11px] font-mono px-2 py-0.5 rounded-lg bg-amber-500/10 text-amber-300 border border-amber-500/25"></span>
         </div>
         <div class="flex items-center gap-2 shrink-0">
@@ -2032,6 +2033,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
         window.cachedAccounts = data.accounts || [];
         window.cachedCreditSummary = data.creditSummary || null;
+        renderCheckinSummary(data.checkinSummary);
         renderIPWhitelistConfig(data.ipWhitelist, data.networkInfo);
         renderCreditSummary(data.creditSummary, data.accounts || []);
         window.cachedModels = data.models || [];
@@ -2425,6 +2427,7 @@ eyJhbGciOi...----refresh_token_here'></textarea>
             </td>
             <td class="px-5 py-3.5 align-top whitespace-nowrap">
               <div class="flex items-center">${statusBadge}${quickFixBtn}</div>
+              ${renderRowCheckinTag(a)}
             </td>
             <td class="px-5 py-3.5 align-top font-mono font-medium text-slate-200">
               ${renderAccountCreditsCell(a)}
@@ -3341,6 +3344,44 @@ eyJhbGciOi...----refresh_token_here'></textarea>
 
       document.getElementById('welfareRawOutput').textContent = data.output || '无输出';
       document.getElementById('welfareModal').classList.remove('hidden');
+    }
+
+    function renderRowCheckinTag(a) {
+      if (!a || !a.checkin_status) return '';
+      if (a.checkin_status === 'ok' || a.checkin_status === 'already') {
+        const tm = a.checkin_at ? ` (${a.checkin_at})` : '';
+        return `<div class="mt-1 text-[10px] text-emerald-400/90 font-mono" title="今日已完成每日签到${escapeHtml(tm)}">✓ 今日已签</div>`;
+      }
+      if (a.checkin_status === 'fail') {
+        return `<div class="mt-1 text-[10px] text-rose-400 font-mono cursor-help" title="${escapeHtml(a.checkin_detail || '签到失败')}">✗ 签到失败</div>`;
+      }
+      return '';
+    }
+
+    function renderCheckinSummary(cs) {
+      const el = document.getElementById('stripCheckinBadge');
+      if (!el || !cs) return;
+      if (!cs.enabled) {
+        el.innerText = '📅 自动签到: 已关闭';
+        el.className = 'text-[11px] font-mono px-2 py-0.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-500 cursor-pointer';
+        return;
+      }
+      const nextStr = cs.next_run_at ? ` · 下次 ${cs.next_run_at}` : '';
+      const lastStr = cs.last_run_at ? `上次运行: ${cs.last_run_at} (成功 ${cs.ok || 0} / 已签 ${cs.already || 0} / 失败 ${cs.fail || 0} / 跳过 ${cs.skipped || 0})` : '尚未记录运行（服务启动与每日整点自动执行）';
+      el.title = `${lastStr}\n排程时刻 (CST): ${(cs.hours || [9, 21]).join(':00, ')}:00\n说明: 仅国内版 (CN) 支持每日签到，点击可立即手动签到一次`;
+      if ((cs.fail || 0) > 0 && cs.today_checked === 0) {
+        el.innerText = `📅 签到异常 ${cs.fail}号${nextStr}`;
+        el.className = 'text-[11px] font-mono px-2 py-0.5 rounded-lg bg-rose-500/15 border border-rose-500/30 text-rose-300 hover:bg-rose-500/25 transition cursor-pointer';
+      } else if ((cs.today_checked || 0) > 0) {
+        el.innerText = `✓ 今日已签 ${cs.today_checked}/${cs.cn_accounts || cs.today_checked} CN${nextStr}`;
+        el.className = 'text-[11px] font-mono px-2 py-0.5 rounded-lg bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 hover:bg-emerald-500/25 transition cursor-pointer';
+      } else if ((cs.cn_accounts || 0) === 0) {
+        el.innerText = `📅 自动签到: 无CN号 (仅CN支持)`;
+        el.className = 'text-[11px] font-mono px-2 py-0.5 rounded-lg bg-slate-900/80 border border-slate-800 text-slate-400 cursor-pointer';
+      } else {
+        el.innerText = `📅 待签到 0/${cs.cn_accounts} CN${nextStr}`;
+        el.className = 'text-[11px] font-mono px-2 py-0.5 rounded-lg bg-amber-500/10 border border-amber-500/25 text-amber-300 hover:bg-amber-500/20 transition cursor-pointer';
+      }
     }
 
     function fmtCredit(v) {

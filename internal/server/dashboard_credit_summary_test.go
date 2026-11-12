@@ -50,6 +50,8 @@ func TestHandleDashboardDataCreditSummary(t *testing.T) {
 
 	p.CooldownFreeQuotaModel("gl_sum_1", time.Now().Add(time.Hour), "hy4free", "free quota exhausted")
 	p.NoteModelCost("cn_sum_1", "claude-4.0-sonnet", 12.5, 5000)
+	p.SetCheckinResult("cn_sum_1", "ok", "")
+	p.SetCheckinRunSummary("auto", 2, 1, 0, 0, 1)
 
 	cnServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -143,12 +145,14 @@ func TestHandleDashboardDataCreditSummary(t *testing.T) {
 	}
 
 	var resp struct {
-		CurrentVersion string               `json:"currentVersion"`
-		CreditSummary  CreditSummaryPayload `json:"creditSummary"`
+		CurrentVersion string                `json:"currentVersion"`
+		CreditSummary  CreditSummaryPayload  `json:"creditSummary"`
+		CheckinSummary CheckinSummaryPayload `json:"checkinSummary"`
 		Accounts       []struct {
-			UID          string                    `json:"uid"`
-			Realm        string                    `json:"realm"`
-			CreditDetail *upstream.CreditBreakdown `json:"credit_detail"`
+			UID           string                    `json:"uid"`
+			Realm         string                    `json:"realm"`
+			CheckinStatus string                    `json:"checkin_status"`
+			CreditDetail  *upstream.CreditBreakdown `json:"credit_detail"`
 		} `json:"accounts"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &resp); err != nil {
@@ -191,5 +195,17 @@ func TestHandleDashboardDataCreditSummary(t *testing.T) {
 	}
 	if gl.RateLimitedModelsCount != 1 {
 		t.Errorf("global rate_limited_models_count = %d, want 1", gl.RateLimitedModelsCount)
+	}
+	if resp.CheckinSummary.TodayChecked != 1 || resp.CheckinSummary.CNAccounts != 1 || resp.CheckinSummary.OK != 1 {
+		t.Errorf("checkinSummary mismatch: %+v", resp.CheckinSummary)
+	}
+	var cnChecked bool
+	for _, a := range resp.Accounts {
+		if a.UID == "cn_sum_1" && a.CheckinStatus == "ok" {
+			cnChecked = true
+		}
+	}
+	if !cnChecked {
+		t.Errorf("expected cn_sum_1 checkin_status=ok in accounts response")
 	}
 }

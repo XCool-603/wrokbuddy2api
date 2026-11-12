@@ -339,6 +339,8 @@ func main() {
 		IPWhitelistEnabled: cfg.IPWhitelistEnabled,
 		AllowedIPs:         cfg.AllowedIPs,
 		AllowLocalhost:     cfg.AllowLocalhost,
+		CheckinEnabled:     &cfg.Schedule.CheckinEnabled,
+		CheckinHours:       cfg.Schedule.CheckinHours,
 		Session:      sessRouter,
 		StickyCount:  sessCount,
 		RedisMode:    redisMode,

@@ -245,6 +245,69 @@ func (b *creditSummaryBuilder) build() CreditSummaryPayload {
 	}
 }
 
+// CheckinSummaryPayload 控制台顶部展示的每日自动签到状态汇总。
+type CheckinSummaryPayload struct {
+	Enabled      bool   `json:"enabled"`
+	Hours        []int  `json:"hours"`
+	LastRunAt    string `json:"last_run_at,omitempty"`
+	NextRunAt    string `json:"next_run_at,omitempty"`
+	Trigger      string `json:"trigger,omitempty"`
+	TodayChecked int    `json:"today_checked"`
+	CNAccounts   int    `json:"cn_accounts"`
+	OK           int    `json:"ok"`
+	Already      int    `json:"already"`
+	Fail         int    `json:"fail"`
+	Skipped      int    `json:"skipped"`
+}
+
+func (h *Handler) buildCheckinSummary(todayChecked, cnAccounts int) CheckinSummaryPayload {
+	cst := time.FixedZone("CST", 8*3600)
+	enabled := true
+	if h.cfg.CheckinEnabled != nil {
+		enabled = *h.cfg.CheckinEnabled
+	}
+	hours := h.cfg.CheckinHours
+	if len(hours) == 0 {
+		hours = []int{9, 21}
+	}
+	out := CheckinSummaryPayload{
+		Enabled:      enabled,
+		Hours:        append([]int(nil), hours...),
+		TodayChecked: todayChecked,
+		CNAccounts:   cnAccounts,
+	}
+	if enabled {
+		nowCST := time.Now().In(cst)
+		var earliest time.Time
+		for _, hr := range hours {
+			if hr < 0 || hr > 23 {
+				continue
+			}
+			t := time.Date(nowCST.Year(), nowCST.Month(), nowCST.Day(), hr, 0, 0, 0, cst)
+			if !t.After(nowCST) {
+				t = t.Add(24 * time.Hour)
+			}
+			if earliest.IsZero() || t.Before(earliest) {
+				earliest = t
+			}
+		}
+		if !earliest.IsZero() {
+			out.NextRunAt = earliest.Format("15:04")
+		}
+	}
+	if h.cfg.Pool != nil {
+		if sum := h.cfg.Pool.GetCheckinRunSummary(); sum != nil && !sum.LastRunAt.IsZero() {
+			out.LastRunAt = sum.LastRunAt.In(cst).Format("01-02 15:04")
+			out.Trigger = sum.Trigger
+			out.OK = sum.OK
+			out.Already = sum.Already
+			out.Fail = sum.Fail
+			out.Skipped = sum.Skipped
+		}
+	}
+	return out
+}
+
 // fetchAndSyncCredit 安全地拉取单账号最新真实积分并更新池（自带 Token 过期自动续期、401 重试及精确分桶计算）
 func (h *Handler) fetchAndSyncCredit(a *auth.Auth, uid string) bool {
 	if h == nil || h.cfg.Upstream == nil || h.cfg.Pool == nil {
@@ -525,7 +588,10 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		Owner             string                  `json:"owner"`
 		IsMyAccount       bool                    `json:"is_my_account"`
 		InviteCode        string                  `json:"invite_code,omitempty"`
-		InviteURL         string                  `json:"invite_url,omitempty"`
+		InviteURL         string                    `json:"invite_url,omitempty"`
+		CheckinStatus     string                    `json:"checkin_status,omitempty"`
+		CheckinDetail     string                    `json:"checkin_detail,omitempty"`
+		CheckinAt         string                    `json:"checkin_at,omitempty"`
 	}
 
 	poolList := h.cfg.Pool.List()
@@ -743,6 +809,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 	finalSeenUID := make(map[string]bool)
 	finalSeenFP := make(map[string]bool)
 	creditSummary := newCreditSummaryBuilder()
+	todayCheckedCount, cnAccountCount := 0, 0
 	for _, item := range accounts {
 		fp := fmt.Sprintf("%s:%s:%s", item.Realm, item.Provider, strings.ToLower(auth.CleanRawUID(item.UID)))
 		if finalSeenUID[item.UID] || (item.Provider != "" && finalSeenFP[fp]) {
@@ -754,6 +821,17 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		}
 		if bd := getCachedCreditBreakdown(item.UID); bd != nil {
 			item.CreditDetail = bd
+		}
+		if rec, ok := h.cfg.Pool.GetCheckinResultToday(item.UID); ok {
+			item.CheckinStatus = rec.Status
+			item.CheckinDetail = rec.Detail
+			item.CheckinAt = rec.UpdatedAt.In(time.FixedZone("CST", 8*3600)).Format("15:04:05")
+		}
+		if item.Realm == "cn" {
+			cnAccountCount++
+		}
+		if item.CheckinStatus == "ok" || item.CheckinStatus == "already" {
+			todayCheckedCount++
 		}
 		creditSummary.add(item.Realm, item.Disabled, item.ManualDisabled, item.Cooling, item.Credits, item.CreditsExpiring, item.CreditDetail, item.RateLimitedModels, item.ModelCosts)
 		dedupedAccounts = append(dedupedAccounts, item)
@@ -799,6 +877,7 @@ func (h *Handler) handleDashboardData(w http.ResponseWriter, r *http.Request) {
 		},
 		"accounts":       accounts,
 		"creditSummary":  creditSummary.build(),
+		"checkinSummary": h.buildCheckinSummary(todayCheckedCount, cnAccountCount),
 		"models":         models,
 		"apiKey":         displayAPIKey,
 		"ipWhitelist":    h.GetIPWhitelist(),

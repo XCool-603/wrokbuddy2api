@@ -105,7 +105,7 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 	sb.WriteString(fmt.Sprintf("%-36s | %-12s | %-10s | %-6s | %s\n", "UID", "昵称", "签到状态", "余额", "详情"))
 	sb.WriteString("-------------------------------------+--------------+------------+--------+--------------------\n")
 
-	okN, alreadyN, failN := 0, 0, 0
+	okN, alreadyN, failN, skipN := 0, 0, 0, 0
 	for _, f := range files {
 		raw, err := os.ReadFile(f)
 		if err != nil {
@@ -128,7 +128,9 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 
 		// 国际版账号官方无每日签到活动，明确跳过并提示，与自动签到调度器保持一致
 		if a.IsGlobal() {
-			remainStr := "-"
+			skipN++
+			h.cfg.Pool.SetCheckinResult(a.UID, "skipped", "global")
+		remainStr := "-"
 			if remain, qerr := up.UserResource(a); qerr == nil {
 				remainStr = fmt.Sprintf("%d", remain)
 				h.cfg.Pool.SetCredits(a.UID, remain)
@@ -151,6 +153,13 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 		}
 
 		err = up.DailyCheckin(a)
+		if err != nil && !isAlreadyCheckinErr(err) && a.RefreshTokenValue() != "" {
+			if rerr := up.RefreshToken(a); rerr == nil {
+				a.BackfillRealm()
+				_ = a.SaveAtomic()
+				err = up.DailyCheckin(a)
+			}
+		}
 		status := "FAIL"
 		detail := ""
 		if err == nil {
@@ -166,6 +175,7 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 			failN++
 		}
 
+		h.cfg.Pool.SetCheckinResult(a.UID, strings.ToLower(status), detail)
 		remainStr := "-"
 		if remain, qerr := up.UserResource(a); qerr == nil {
 			remainStr = fmt.Sprintf("%d", remain)
@@ -180,6 +190,7 @@ func (h *Handler) handleActionSignin(w http.ResponseWriter, r *http.Request) {
 			logfmt.Truncate(a.UID, 36), logfmt.Truncate(nick, 12), status, remainStr, logfmt.Truncate(detail, 30)))
 	}
 
+	h.cfg.Pool.SetCheckinRunSummary("manual", len(files), okN, alreadyN, failN, skipN)
 	sb.WriteString(fmt.Sprintf("\n总计: %d | 成功: %d | 已签: %d | 失败: %d\n", len(files), okN, alreadyN, failN))
 
 	writeJSON(w, http.StatusOK, map[string]any{
