@@ -1,14 +1,14 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.52)
+# WorkBuddy 2API · 完整用户与架构开发手册 (`v1.2.52`)
 
 <p align="center">
-  <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
-  双域容灾调度 · 精确积分明细与双域额度总览 · IP 白名单防扫描 · 多渠道同邮箱共存 · 赛博前台门户 · 原生桌面窗口 · 视觉全模态 · DeepSeek Harness 智能体内嵌
+  <b>将 WorkBuddy / CodeBuddy 多账号汇聚为标准 OpenAI / Anthropic 兼容接口的生产级双域智能网关</b><br>
+  双域余额与积分明细 · AI 接口 IP 白名单防扫描 · 免费额度防扣费护盾 · 纯 Go 自动任务与猫猫旅行 · 排队 SSE 心跳保活 · 视频大模型代理 · DeepSeek Harness 内嵌
 </p>
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
-  <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
+  <img alt="API" src="https://img.shields.io/badge/API-OpenAI%20%26%20Anthropic-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
   <img alt="License" src="https://img.shields.io/badge/License-MIT-green?style=flat-square">
@@ -18,831 +18,324 @@
 
 ## 目录 (Table of Contents)
 
-- [1. 项目简介与核心定位](#1-项目简介与核心定位)
-- [2. 核心特性全览 (v1.2.52)](#2-核心特性全览-v1252)
-- [3. 快速安装与多环境部署](#3-快速安装与多环境部署)
-  - [3.1 方式一：Windows 原生桌面客户端（双击即用）](#31-方式一windows-原生桌面客户端双击即用)
-  - [3.2 方式二：Docker / Docker Compose 一键部署（推荐服务器/NAS）](#32-方式二docker--docker-compose-一键部署推荐服务器nas)
-  - [3.3 方式三：源码构建与跨平台编译（Windows / Linux / macOS）](#33-方式三源码构建与跨平台编译windows--linux--macos)
-  - [3.4 应用内一键检查更新与自动升级](#34-应用内一键检查更新与自动升级)
-- [4. 前台赛博门户与后台控制台](#4-前台赛博门户与后台控制台)
-  - [4.1 前台赛博门户 (`/`)](#41-前台赛博门户-)
-  - [4.2 运维控制中枢 (`/console` 或 `/dashboard`)](#42-运维控制中枢-console-或-dashboard)
-  - [4.3 控制台全功能操作指南](#43-控制台全功能操作指南)
-- [5. 安全防御体系与 Web 管理密码](#5-安全防御体系与-web-管理密码)
-  - [5.1 单机免密模式 vs 密码验证模式](#51-单机免密模式-vs-密码验证模式)
-  - [5.2 密码管理与合规校验逻辑](#52-密码管理与合规校验逻辑)
-  - [5.3 前端防暴力探测与网络安全加固](#53-前端防暴力探测与网络安全加固)
-- [6. 双域融合调度与同邮箱多渠道隔离机制](#6-双域融合调度与同邮箱多渠道隔离机制)
+- [1. 项目简介与定位](#1-项目简介与定位)
+- [2. 系统架构与核心特性全览 (v1.2.52)](#2-系统架构与核心特性全览-v1252)
+- [3. 多环境安装与部署指南](#3-多环境安装与部署指南)
+  - [3.1 Windows 原生桌面客户端（WebView2）](#31-windows-原生桌面客户端webview2)
+  - [3.2 Docker / Docker Compose 部署](#32-docker--docker-compose-部署)
+  - [3.3 源码构建与跨平台编译](#33-源码构建与跨平台编译)
+  - [3.4 应用内检查更新与热升级](#34-应用内检查更新与热升级)
+- [4. 前台门户与新版 Console 控制台详解](#4-前台门户与新版-console-控制台详解)
+  - [4.1 前台门户 (`/`)](#41-前台门户-)
+  - [4.2 新版 Console 控制中枢 (`/console` / `/dashboard`)](#42-新版-console-控制中枢-console--dashboard)
+  - [4.3 账户余额与双域积分明细体系 (v1.2.49–v1.2.50)](#43-账户余额与双域积分明细体系-v1249v1250)
+- [5. 纵深安全防御体系](#5-纵深安全防御体系)
+  - [5.1 AI 接口 IP 白名单与运行 IP 面板 (v1.2.51)](#51-ai-接口-ip-白名单与运行-ip-面板-v1251)
+  - [5.2 错 Key 爆破防扫描与登录频控 (`authRateLimiter`)](#52-错-key-爆破防扫描与登录频控-authratelimiter)
+  - [5.3 单机免密 vs Web 管理密码与安全响应头](#53-单机免密-vs-web-管理密码与安全响应头)
+- [6. 双域融合调度、免费模型护盾与同邮箱多渠道隔离](#6-双域融合调度免费模型护盾与同邮箱多渠道隔离)
   - [6.1 国内版 (CN) 与国际版 (Global) 双域容灾](#61-国内版-cn-与国际版-global-双域容灾)
-  - [6.2 国际版 Google 与 Twitter/X 同邮箱并存隔离机制 (v1.2.17 突破)](#62-国际版-google-与-twitterx-同邮箱并存隔离机制-v1217-突破)
-  - [6.3 磁盘凭证文件智能命名算法](#63-磁盘凭证文件智能命名算法)
-- [7. 多租户隔离与 RBAC 权限系统](#7-多租户隔离与-rbac-权限系统)
-  - [7.1 用户角色（Admin 与 User）](#71-用户角色admin-与-user)
-  - [7.2 专属 API Key 隔离与账号池调度保障](#72-专属-api-key-隔离与账号池调度保障)
-  - [7.3 内存优先与磁盘故障自愈体系](#73-内存优先与磁盘故障自愈体系)
-- [8. DeepSeek Harness (dsh) AI Agent 智能体集成](#8-deepseek-harness-dsh-ai-agent-智能体集成)
-  - [8.1 免环境一键安装绿色运行时](#81-免环境一键安装绿色运行时)
-  - [8.2 浏览器安全栅栏穿透与反向代理](#82-浏览器安全栅栏穿透与反向代理)
-  - [8.3 虚拟模型代理 direct-call (`dsh`)](#83-虚拟模型代理-direct-call-dsh)
-- [9. 全模态视觉推理与模型体系](#9-全模态视觉推理与模型体系)
-  - [9.1 视觉推理与文档分析能力](#91-视觉推理与文档分析能力)
-  - [9.2 核心模型目录与专属视频模型透视](#92-核心模型目录与专属视频模型透视)
-    - [9.2.1 💬 语言与多模态推理模型 (LLM & Vision)](#921--语言与多模态推理模型-llm--vision)
-    - [9.2.2 🎬 官方专属视频大模型矩阵 (Dedicated Video Models)](#922--官方专属视频大模型矩阵-dedicated-video-models)
-  - [9.3 内置演练场 (Playground)](#93-内置演练场-playground)
-- [10. 客户端接入实战指南](#10-客户端接入实战指南)
-  - [10.1 cURL 与通用 HTTP 规范](#101-curl-与通用-http-规范)
-  - [10.2 Python (OpenAI SDK)](#102-python-openai-sdk)
-  - [10.3 Node.js / TypeScript (OpenAI SDK)](#103-nodejs--typescript-openai-sdk)
-  - [10.4 主流客户端配置 (NextChat / Cherry Studio / Cursor / Cline)](#104-主流客户端配置-nextchat--cherry-studio--cursor--cline)
-  - [10.5 官方专属视频大模型 (Kling 3.0 & MiniMax-H3) 全协议接入指南](#105-官方专属视频大模型-kling-30--minimax-h3-全协议接入指南)
-    - [10.5.1 海内外双版本底层视频架构深度解析](#1051-海内外双版本底层视频架构深度解析)
-    - [10.5.2 视频模型全参数与规格透视表](#1052-视频模型全参数与规格透视表)
-    - [10.5.3 文生视频 (Text-to-Video) 调用规范与同步直出](#1053-文生视频-text-to-video-调用规范与同步直出)
-    - [10.5.4 图生视频 (Image-to-Video) 首尾帧驱动规范](#1054-图生视频-image-to-video-首尾帧驱动规范)
-    - [10.5.5 异步任务轮询与全生命周期状态查询](#1055-异步任务轮询与全生命周期状态查询)
-    - [10.5.6 对话窗口智能桥接与视频模型直出 (Chat Completions Video Bridge)](#1056-对话窗口智能桥接与视频模型直出-chat-completions-video-bridge)
-    - [10.5.7 Python / Node.js 客户端实战代码](#1057-python--nodejs-客户端实战代码)
-- [11. 配置全集参考 (`config.json`)](#11-配置全集参考-configjson)
-- [12. 架构设计与底层机制原理解析](#12-架构设计与底层机制原理解析)
-  - [12.1 调度池三因子加权随机算法](#121-调度池三因子加权随机算法)
-  - [12.2 模型级独立软限流与熔断退避](#122-模型级独立软限流与熔断退避)
-  - [12.3 会话粘性机制 (Session Sticky)](#123-会话粘性机制-session-sticky)
-- [13. 常见问题排查与运维指南 (FAQ)](#13-常见问题排查与运维指南-faq)
-- [14. 开源协议与致谢](#14-开源协议与致谢)
+  - [6.2 免费模型路由修正与扣费/超额自动熔断 (v1.2.47–v1.2.48)](#62-免费模型路由修正与扣费超额自动熔断-v1247v1248)
+  - [6.3 同邮箱跨渠道多账号隔离 (`Google / Twitter / GitHub`)](#63-同邮箱跨渠道多账号隔离-google--twitter--github)
+- [7. 多租户 RBAC、配额与 Memory-First 持久化](#7-多租户-rbac配额与-memory-first-持久化)
+- [8. 自动签到、纯 Go 成长任务引擎与猫猫旅行](#8-自动签到纯-go-成长任务引擎与猫猫旅行)
+  - [8.1 每日定时排程与启动顺序联动（CST 北京时间）](#81-每日定时排程与启动顺序联动cst-北京时间)
+  - [8.2 签到 401 强刷重试与控制台实时状态展示 (v1.2.52)](#82-签到-401-强刷重试与控制台实时状态展示-v1252)
+  - [8.3 内置纯 Go 成长任务与猫猫旅行引擎 (v1.2.44–v1.2.46)](#83-内置纯-go-成长任务与猫猫旅行引擎-v1244v1246)
+- [9. DeepSeek Harness (`dsh`) 智能体集成](#9-deepseek-harness-dsh-智能体集成)
+- [10. 全模态视觉推理与专属视频大模型矩阵](#10-全模态视觉推理与专属视频大模型矩阵)
+  - [10.1 视觉与多格式文档解析](#101-视觉与多格式文档解析)
+  - [10.2 语言、免费与专属视频模型目录](#102-语言免费与专属视频模型目录)
+- [11. 客户端接入实战与 HTTP API 端点参考](#11-客户端接入实战与-http-api-端点参考)
+  - [11.1 OpenAI / Anthropic / 视频接口示例](#111-openai--anthropic--视频接口示例)
+  - [11.2 完整 HTTP 路由表](#112-完整-http-路由表)
+- [12. 配置全集与环境变量参考 (`config.json` / `WB2A_*`)](#12-配置全集与环境变量参考-configjson--wb2a_)
+- [13. 底层调度与熔断机制原理](#13-底层调度与熔断机制原理)
+- [14. 常见问题排查 (FAQ)](#14-常见问题排查-faq)
+- [15. 版本演进与开源许可](#15-版本演进与开源许可)
 
 ---
 
-## 1. 项目简介与核心定位
+## 1. 项目简介与定位
 
-`workbuddy2api` 是一款针对腾讯云 CodeBuddy（国内版）以及 WorkBuddy（国际版）生态深度定制的高性能、生产级 AI 接口网关。
-
-它通过逆向协议与轻量级代理技术，将用户持有的多个 CodeBuddy / WorkBuddy 账号汇聚成高可用账号调度池，对外提供 **100% 兼容 OpenAI 标准** 的 RESTful API（如 `/v1/chat/completions`、`/v1/models`）。
-
-无论您是个人开发者希望在日常编辑器（如 Cursor、VS Code Cline）中使用 DeepSeek、Claude、GPT-4o，还是团队希望在统一的中继平台（如 OneAPI / NewAPI）上聚合大模型资源，`workbuddy2api` 均可提供开箱即用、无缝接管的极佳体验。
+`workbuddy2api` 是针对腾讯云 **CodeBuddy（国内版）** 与 **WorkBuddy AI（国际版）** 生态打造的高可用 AI 协议转换与账号池调度网关。它将多账号凭证整合为单一的本地或私有化接口集群，原生兼容 **OpenAI (`/v1/chat/completions`, `/v1/models`, `/v1/videos/*`)** 与 **Anthropic (`/v1/messages`)** 协议，可直接接入 Cherry Studio、Cursor、Cline、Roo Code、NextChat、Dify、OneAPI / NewAPI 等各类客户端与中继平台。
 
 ---
 
-## 2. 核心特性全览 (v1.2.52)
+## 2. 系统架构与核心特性全览 (v1.2.52)
 
 ```mermaid
 flowchart TD
-    Client["各类客户端 (Cursor / NextChat / Python SDK)"] -->|"OpenAI 协议 (/v1/chat/completions)"| Gateway["WorkBuddy 2API 网关"]
-    
-    subgraph GatewayCore ["网关核心治理架构"]
-        Auth["鉴权 & RBAC (Admin / User API Key)"]
-        Sticky["会话粘性 Session Sticky"]
-        Scheduler["三因子加权池调度器 (积分/临期/空闲)"]
-        CircuitBreaker["模型级独立限流 (429/6004) & 熔断器"]
-        MultiModal["全模态协议清洗 (Vision / Doc / Base64)"]
-        AgentBridge["DeepSeek Harness (dsh) 反代桥接"]
+    Client["下游客户端 (Cursor / Cherry Studio / Claude Code / SDK)"] -->|HTTP / SSE| SecurityGate["安全防御网关"]
+
+    subgraph SecurityLayer ["纵深安全校验 (withAuth)"]
+        IPWL["IP 白名单校验 (IPWhitelist & 反代头防伪造)"]
+        ScanGuard["防 Key 扫描爆破锁 (25次错Key -> 429 锁定)"]
+        KeyAuth["RBAC 多租户 / 全局 API Key 校验 + RPM / 日配额"]
     end
-    
-    Gateway --> Auth
-    Auth --> Sticky
-    Sticky --> Scheduler
-    Scheduler --> CircuitBreaker
-    CircuitBreaker --> MultiModal
-    
-    subgraph UpstreamPool ["上游高可用账号池"]
-        CN["国内版账号池 (copilot.tencent.com)"]
-        GlobalGoogle["国际版 Google 账号 (workbuddy.ai)"]
-        GlobalTwitter["国际版 Twitter/X 账号 (workbuddy.ai)"]
-        GlobalGithub["国际版 GitHub / 其他账号"]
+
+    SecurityGate --> IPWL --> ScanGuard --> KeyAuth
+
+    subgraph GatewayCore ["核心路由与调度中枢"]
+        AliasRouter["模型别名 / 路由组 / 免费模型映射 (hy4free / auto-free)"]
+        Sticky["Session Sticky 会话粘性路由"]
+        Queue["并发满载排队 & 3s SSE 心跳保活 (: ping)"]
+        Picker["三因子加权调度 (余量 + 7日临期优先 + 空闲补偿)"]
+        Breaker["模型级冷却 (6004/429) · 免费额度扣费护盾 · 熔断与降权"]
     end
-    
-    MultiModal -->|"纯净 X-User-Id / 原始 Token"| CN
-    MultiModal -->|"纯净 X-User-Id / 原始 Token"| GlobalGoogle
-    MultiModal -->|"纯净 X-User-Id / 原始 Token"| GlobalTwitter
-    MultiModal -->|"纯净 X-User-Id / 原始 Token"| GlobalGithub
-    
-    Gateway -->|"dsh 虚拟模型代理"| AgentBridge
+
+    KeyAuth --> AliasRouter --> Sticky --> Queue --> Picker --> Breaker
+
+    subgraph Automation ["后台自动化与观测引擎"]
+        Scheduler["CST 排程器 (签到 401 重试 -> 纯 Go 成长任务 -> 猫猫旅行)"]
+        CreditSync["精确资源包解析 (基础 / 奖励 / 购买 / 将到期)"]
+        AlertMgr["Webhook 告警 (飞书 / 企微 / 钉钉 / Telegram)"]
+    end
+
+    Breaker -->|CN| UpstreamCN["国内版 (copilot.tencent.com / codebuddy.cn)"]
+    Breaker -->|Global| UpstreamGlobal["国际版 (www.workbuddy.ai)"]
+    Scheduler --> UpstreamCN
+    Scheduler --> UpstreamGlobal
 ```
 
-1. **单文件原生桌面窗口**：
-   - 彻底摆脱多可执行文件碎片与批处理黑框，Windows 端基于原生 Edge WebView2 驱动，打包为单文件 `workbuddy2api.exe`（~9.5MB），双击直接呈现 1280x820 桌面交互窗口。
-2. **全新赛博炫酷前台门户与后台控制中枢分离**：
-   - 首页根路径 `/` 渲染全新设计的赛博朋克极客门户，实时展示网关脱敏健康指标、双域可达性与模型清单，优雅对外展示；
-   - 运维控制台收拢于 `/console` 与 `/dashboard`，配齐完备的流量监控、会话分析与账号管理功能。
-3. **安全防御体系与 Web 密码认证**：
-   - 支持单机免密模式与密码保护模式一键切换；
-   - 5 分钟 5 次错误密码暴力探测自动封锁 IP，全站注入安全响应头（`nosniff`、`SAMEORIGIN`、`strict-origin-when-cross-origin` 等）。
-4. **同邮箱跨渠道多账号共存机制（v1.2.17 特性）**：
-   - 彻底解决国际版中 Google 登录与 Twitter/X 登录绑定同一邮箱导致的文件与内存池相互覆盖问题；
-   - 文件命名按登录渠道自动分流，内存池分配独立并发与积分槽位，向上游发起请求时自动还原纯净 `X-User-Id` 邮箱。
-5. **多租户隔离与 RBAC 权限体系**：
-   - 支持管理员（Admin）与普通用户（User）多级角色；
-   - 支持为每个用户签发独立 API Key 与独立限额；
-   - 内存优先（Memory-First）与磁盘权限自愈，杜绝容器环境文件写入错误导致的请求中断。
-6. **全模态与文档解析**：
-   - 完美支持 OpenAI 标准视觉协议（`image_url`）与 Claude 专用 Base64 协议（`type: image`）；
-   - 支持直接向大模型传递 `.txt` / `.md` / `.pdf` / `.py` 等代码与文本文件，网关自动提取清洗为规范上下文；
-   - 内置演练场（Playground）支持一键拖拽附件与剪贴板截图粘贴（`Ctrl+V`）。
-7. **DeepSeek Harness (dsh) AI Agent 深度内嵌**：
-   - 零依赖全自动安装便携式绿色 Node.js 运行时；
-   - 自动反向代理穿透桥接，自动注入 Cookie 与鉴权 Token，攻破浏览器跨域与信任栅栏；
-   - 注册虚拟 `dsh` 大模型，任何兼容客户端均可将 Agent 当作普通大模型直接调用。
-8. **跨平台一键自动升级与内置纯 Go 福利任务引擎**：
-   - 支持 Windows、Linux、macOS 全平台原生二进制，集成应用内一键版本检测与在线平滑热更新；
-   - 内置纯 Go 成长任务引擎（免 Python 即可完成每日签到、猫猫自动领养与旅行、技能分享与活动补偿领取），并在控制台实时展示今日签到状态。
-9. **双域余额与资源包精确明细 + 免费模型扣费保护**：
-   - 精确解析官方 `/billing/meter/get-user-resource` 小数额度与包明细（套餐基础 / 平台奖励 / 购买积分 / 7日内到期），支持全池、CN、Global 三栏对比及单号包明细钻取；
-   - `hy4free` 等免费模型直连官方免费节点，若发现账号免费额度耗尽（`quota.percent >= 100`）或触发扣费（`credit > 0`），自动对该账号该模型限流冷却并无缝切号。
-10. **IP 白名单防扫描与运行 IP 面板**：
-    - 支持配置单个 IPv4/IPv6 与 CIDR 网段拦截未授权 AI 接口请求（`403`），防反代请求头伪造与错 Key 爆破自动锁定（`429`）。
-
 ---
 
-## 3. 快速安装与多环境部署
+## 3. 多环境安装与部署指南
 
-### 3.1 方式一：Windows 原生桌面客户端（双击即用）
+### 3.1 Windows 原生桌面客户端（WebView2）
+1. 前往 [Releases](https://github.com/XCool-603/wrokbuddy2api/releases) 下载 `workbuddy2api.exe`。
+2. 放置到单独目录下直接双击运行：程序自动生成默认 `config.json` 与 `./auths`、`./data` 目录，并拉起内置 Edge WebView2 桌面窗口。
+3. 关闭窗口时触发优雅停机，自动将账号池状态、指标快照落盘至 `./data/state.json`。
 
-适用于个人开发者在本地 Windows 环境日常使用：
-
-1. 前往 GitHub [Releases 页面](https://github.com/XCool-603/wrokbuddy2api/releases) 下载最新版的 `workbuddy2api.exe`。
-2. 将程序放入一个专属目录（例如 `D:\Tools\workbuddy2api\`）。
-3. **直接双击运行 `workbuddy2api.exe`**：
-   - 客户端将自动唤起桌面管理窗口；
-   - 首次启动会自动创建 `config.json`、`auths/` 与 `data/` 目录；
-   - 点击界面顶部的 **「一键登录」** 按钮，系统会调起浏览器完成授权，刷新即可看到账号就绪。
-4. 在您喜爱的第三方客户端中填入配置：
-   - **API Base URL**: `http://127.0.0.1:7863/v1`
-   - **API Key**: 留空（默认）或输入您设置的系统 Key。
-
----
-
-### 3.2 方式二：Docker / Docker Compose 一键部署（推荐服务器/NAS）
-
-适用于 VPS、私有云服务器、群晖 NAS 或 Linux 生产环境：
-
+### 3.2 Docker / Docker Compose 部署
 ```bash
-# 1. 克隆代码仓库
-git clone https://github.com/XCool-603/wrokbuddy2api.git
-cd wrokbuddy2api
-
-# 2. 复制默认配置
+git clone https://github.com/XCool-603/wrokbuddy2api.git workbuddy2api
+cd workbuddy2api
 cp config.example.json config.json
-
-# 3. 启动容器集群
-docker compose up -d --build
+docker compose up -d
 ```
-
-#### 容器更新与升级（保留所有配置与账号）
+常用运维命令：
 ```bash
-git pull origin main
-docker compose up -d --build
+docker compose logs -f workbuddy2api          # 实时查看日志
+curl -s http://127.0.0.1:7863/healthz         # 健康检查
+docker compose --profile agent up -d          # 连同 dsh Agent 一起启动
 ```
 
-#### 容器卷持久化与自动权限自愈说明
-- 挂载路径：
-  - `./auths:/app/auths`：账号授权 JSON 凭证存储；
-  - `./data:/app/data`：状态快照、多用户数据库、缓存与设置；
-  - `./config.json:/app/config.json:ro`：只读核心配置文件。
-- **自动权限自愈**：容器内置 `docker-entrypoint.sh`，在初始化时自动检测并递归赋予 `/app/auths` 与 `/app/data` 全权访问（`umask 000` / `chmod -R 777`），彻底解决宿主机 UID/GID 与容器进程不一致引发的 `permission denied` 错误。
-
----
-
-### 3.3 方式三：源码构建与跨平台编译（Windows / Linux / macOS）
-
-本项目基于标准 Go 1.24+ 构建：
-
+### 3.3 源码构建与跨平台编译
+要求 Go `1.22+`（项目 `go.mod` 为 `go 1.22.5`）：
 ```bash
-# 克隆仓库
-git clone https://github.com/XCool-603/wrokbuddy2api.git
-cd wrokbuddy2api
+# Windows 桌面 GUI 版（隐藏命令行黑框）
+go build -ldflags="-s -w -H windowsgui" -o workbuddy2api.exe ./cmd/server
 
-# 1. 编译 Windows 原生无控制台桌面 GUI 版本
-go build -trimpath -ldflags "-H windowsgui -s -w" -o workbuddy2api.exe ./cmd/server
-
-# 2. 编译 Linux 无头服务器版本 (Headless Server)
-CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -trimpath -ldflags "-s -w" -o workbuddy2api-linux-amd64 ./cmd/server
-
-# 3. 编译 macOS 原生版本 (Apple Silicon)
-CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o workbuddy2api-darwin-arm64 ./cmd/server
+# 无头服务端版（Windows / Linux / macOS）
+go build -ldflags="-s -w" -o workbuddy2api-headless ./cmd/server
 ```
 
----
-
-### 3.4 应用内一键检查更新与自动升级
-
-网关内置自动更新引擎：
-- 控制台顶部常驻 **「检查更新」** 按钮；
-- 后台通过 GitHub Releases API 检索最新发行版，当检测到新版本时，自动弹出更新日志与一键下载/替换升级选项，无需手动下载替换二进制。
+### 3.4 应用内检查更新与热升级
+控制台左上角版本徽章（如 `v1.2.52`）支持一键检测 GitHub Release 更新（`/ui/system/update/check`）并执行在线下载替换平滑升级（`/ui/system/update/do`）。
 
 ---
 
-## 4. 前台赛博门户与后台控制台
+## 4. 前台门户与新版 Console 控制台详解
 
-### 4.1 前台赛博门户 (`/`)
+### 4.1 前台门户 (`/`)
+根路径 `/` 为对外展示的极客门户页面，通过免鉴权的脱敏接口 `/ui/public/status` 展示网关在线状态、当前版本、就绪账号数、模型总数及 cURL / Python / Node.js / Go / Claude / 视频接入代码示例，右上角提供「进入控制台」直达入口。
 
-访问 `http://127.0.0.1:7863/` 会呈现经过全新美学设计的赛博朋克极客门户：
-- **极客视觉体验**：采用深色渐变网格背景与琉璃毛玻璃面板（Glassmorphism），科技感拉满；
-- **公开指标透视**：通过安全脱敏端点 `/ui/public/status` 实时显示服务在线状态、当前版本、就绪账号容量数、可用模型总数，以及国内版 (CN) 与国际版 (Global) 的双轨可达性；
-- **一键复制代码示例**：提供 cURL、Python、Node.js 及 NextChat/Cherry Studio 等主流客户端的一键拷贝配置代码；
-- **GitHub 开源直通车**：页面显著位置提供 GitHub 仓库直达与 Release 追溯；
-- **管理中枢导航按钮**：右上角提供直通 `/console` 控制台的快速入口。
+### 4.2 新版 Console 控制中枢 (`/console` / `/dashboard`)
+自 `v1.2.50` 起控制台经过全面精简重构，消除多行按钮堆积，划分为五个主标签页：
+1. **账号池矩阵**：
+   - 顶部 **6 项精简 KPI 卡片**：总账号资产、健康可调度、限流冷却中、异常/停用、会话粘性、在途满载。
+   - 紧随其后的 **「账户余额与双域额度摘要条」**：一行展示全池余额、CN 余额、Global 余额、同步覆盖数、**今日自动签到状态胶囊**，以及右侧两个核心弹窗按钮 **「💰 账户余额」** 与 **「📊 积分明细」**。
+   - **账号矩阵工具栏**：支持 **`全部 / CN / Global`** 域筛选切换；右侧收敛为 `授权国内版`、`授权国际版`、`导入 / 备份 ▾`、`🎁 一键吃满福利`、`更多任务 ▾`（派猫猫、成长任务、签到、试用包、邀请指南）。
+   - **账号行操作列**：每行简化为 **`余额`**、**`明细`** 与悬浮 **`操作 ▾`** 菜单（领福利、做任务、派猫猫、重填 Token、解除冷却/复活、启用/停用、删除）。
+2. **客户端接入 & Key**：配置 API Key、控制台管理密码、**🛡️ AI 接口 IP 白名单与运行 IP**，以及查看全部可路由聚合模型列表（含多模态/视频/倍率徽章及模型级可用数）。
+3. **用量分析看板**：按日持久化统计（`./data/metrics.json`）消耗积分、单次平均积分、Prompt/Completion Token、缓存命中率、请求成功率与分模型消耗表。
+4. **在线调试 & 流水**：内置流式对话 Playground（支持附件与 `Ctrl+V` 截图粘贴）与最近请求流水表。
+5. **Agent (dsh) & 用户权限管理**：管理内嵌 `@deepseek-ai/dsh` 进程与多租户账号、配额、RPM 限制。
 
-### 4.2 运维控制中枢 (`/console` 或 `/dashboard`)
-
-控制台是网关的核心运维后台，提供多维度管理能力：
-
-| 功能模块 | 说明 |
-| :--- | :--- |
-| **实时指标大盘** | 监控在途并发请求数、24小时/14天请求吞吐、分模型调用占比、平均响应耗时、缓存命中率 |
-| **账号池列表** | 呈现所有账号的头像、昵称、UID、所属域（CN/Global）、登录渠道徽标（Google/Twitter/GitHub）、剩余积分、过期时间与实时状态 |
-| **余额与积分明细体系** | 顶部摘要条提供 **「💰 账户余额」** 与 **「📊 积分明细」** 快捷双按钮；账号列表支持 `全部 / CN / Global` 筛选与每行 `余额` / `明细` / `操作 ▾` 菜单，精分套餐基础、平台奖励、购买积分、7日到期与模型限流单价 |
-| **OAuth 授权登录** | 支持在控制台内一键唤起官方扫码或网页登录，自动拦截回调并持久化凭证 |
-| **全格式批量导入** | 支持 `.json`、`.txt`、`.zip` 备份包、卡密、宽松非标准 JSON 的无痛解析与并发校验 |
-| **一键备份导出** | 一键将所有账号凭证打包导出为 `.zip` 归档包，跨机迁移与灾备秒级完成 |
-| **日常签到与成长任务** | 内置纯 Go 引擎执行日常签到（支持 `401` 强刷重试）、新手福利、成长任务与猫猫自动领养旅行；顶部摘要条与账号列实时显示今日已签状态 |
-| **IP 白名单与运行 IP** | 「客户端接入 & Key」页展示本机网卡运行 IP、监听端口与当前来访 IP，支持一键加白名单与 CIDR 网段拦截防扫描 |
-| **冷却透明与一键解除**| 实时透出当前被限流账号的倒计时（如 `限流冷却中 (42s)`），提供 **「解除冷却」** 按钮秒级重回调度池 |
-| **多用户租户管理** | 管理员开通租户账号、分配角色、重置租户 API Key、修改密码 |
-| **在线演练场 (Playground)** | 调试流式对话、视觉图片上传、多格式文档附件解析、实时测速与 Token 消耗监控 |
-| **DeepSeek Harness (dsh)** | 启动/停止 Agent 进程，iframe 无缝内嵌智能体网页 UI，直连控制台 |
+### 4.3 账户余额与双域积分明细体系 (`v1.2.49` – `v1.2.50`)
+后端通过 `upstream.Client.UserResourceBreakdown` 解析官方 `/billing/meter/get-user-resource` 返回的全部包明细（优先读取 `*Precise` 精确小数字符串）：
+- **分类统计**：
+  - **`base`（套餐基础积分）**：识别 `SubProductCode == "sp_tcaca_codebuddy_ide"` 或体验版/套餐名；
+  - **`bonus`（平台奖励积分）**：识别 `sp_tcaca_codebuddyide_bonus_pack`、权益/拉新/奖励包；
+  - **`purchased`（购买积分）**：其余付费购买资源包；
+  - **`expiring_remain`（7日内到期）**：`CycleEndTime` 在 7 天窗口内的活跃剩余积分。
+- **双快捷弹窗**：
+  - 点击 **`💰 账户余额`** 打开 `#balanceOverviewModal`：按全池 / CN / Global 三栏对比总余量/累计总额/已消耗与健康账号数，并支持分账号余量表高亮定位。
+  - 点击 **`📊 积分明细`** 打开 `#creditDetailOverviewModal`：支持切换 `🌐 全池 / 🇨🇳 CN / 🌍 Global`，查看 6 项积分分桶指标、域内模型限流与实测单价表（`cost_per_1k`），并可钻取单个账号的 `#creditDetailModal` 查看其全部资源包明细（名称、代码、分类、生效状态、余量进度、到期时间）。
 
 ---
 
-## 5. 安全防御体系与 Web 管理密码
+## 5. 纵深安全防御体系
 
-为防止服务部署在公网或局域网时控制台被未授权篡改，系统配备了完整的安全防御机制。
+### 5.1 AI 接口 IP 白名单与运行 IP 面板 (`v1.2.51`)
+实现位于 `internal/server/ip_whitelist.go`：
+- **保护范围**：覆盖 `withAuth` 包裹的全部 AI 与管理 API 端点（`/v1/chat/completions`、`/v1/messages`、`/v1/videos/*`、`/v2/videos/*`、`/v1/models`、`/status`、`/v1/stats*`、`/admin/*`）。
+- **规则支持**：支持单个 IPv4/IPv6（如 `203.0.113.10`）及 CIDR 网段（如 `192.168.1.0/24`、`2001:db8::/32`），保存前使用 `net/netip` 严格校验格式，未命中请求直接返回 HTTP `403`（`ip_not_allowed`）。
+- **防转发头伪造 (`extractTrustedClientIP`)**：仅当直连 TCP 对端 (`r.RemoteAddr`) 属于本机回环或私网/链路本地代理地址时，才采信 `X-Forwarded-For` / `X-Real-IP`；若直接暴露在公网收到外网连接，一律只认真实 `RemoteAddr`，杜绝攻击者伪造 `X-Forwarded-For: 127.0.0.1` 绕过白名单。
+- **本机回环策略**：默认 `allow_localhost: true`，避免本机工具、Playground 或容器健康检查误锁，也可显式关闭。
+- **运行 IP 实时展示**：控制台 **「客户端接入 & Key」** 实时展示服务监听地址（`listen_addr`）、宿主机网卡运行 IP（`running_ips`）与当前访问端 IP（`client_ip`），支持一键点击 **「+ 加入白名单」**，保存后同步持久化至 `./data/settings.json` 与 `config.json`。
 
-### 5.1 单机免密模式 vs 密码验证模式
+### 5.2 错 Key 爆破防扫描与登录频控 (`authRateLimiter`)
+- **API 接口防扫描**：同一 IP 在 2 分钟内向 `/v1/*` 等接口连续提交 **25 次错误 API Key**，自动锁定该 IP 2 分钟（返回 HTTP `429 rate_limit_exceeded`）。
+- **控制台登录防爆破**：同一 IP 在 5 分钟内连续输错 Web 密码 **5 次**，自动锁定 5 分钟；注册接口每 10 分钟限制同一 IP 最多注册 5 次。
 
-```mermaid
-stateDiagram-v2
-    [*] --> 启动检测
-    启动检测 --> 单机免密模式: web_password 为空
-    启动检测 --> 密码保护模式: web_password 非空
-    
-    state 单机免密模式 {
-        全功能直接开放 --> 具备管理员admin最高权限
-    }
-    
-    state 密码保护模式 {
-        未登录访客 --> 拦截敏感API并重定向输密
-        输入密码验证 --> 签发HttpOnly会话Cookie
-        签发HttpOnly会话Cookie --> 保持24小时管理员会话
-    }
-```
-
-1. **单机免密模式（默认开箱即用）**：
-   - 当 `config.json` 中的 `web_password` 为空时，网关运行于本地单机免密模式；
-   - 访问 `/console` 无需输密，操作直接以内置管理员（admin）身份执行。
-2. **密码保护模式（公网/多租户必备）**：
-   - 一旦设置了管理密码，任何访问 `/console`、查询账号敏感数据、导入凭证或重置密钥的操作均要求认证；
-   - 验证通过后签发加密 `wb2a_session` 会话 Cookie，支持 24 小时免密续期。
-
-### 5.2 密码管理与合规校验逻辑
-
-在控制台「系统设置」中，支持动态设置或清除管理密码：
-- **修改或新增密码**：新密码长度**至少 6 位**；
-- **清除密码恢复免密**：若希望将网关恢复为单机免密模式，**只需将「新密码」输入框留空并提交**；
-- **旧密码核验安全兜底**：在已设置管理密码的情况下，无论是修改新密码还是留空清除密码，均强制校验「原管理密码」，防止越权篡改；
-- **即时持久化**：密码变更后同时同步至内存、`data/settings.json` 及 `config.json`。
-
-### 5.3 前端防暴力探测与网络安全加固
-
-1. **防暴力破解频率限制 (`authRateLimiter`)**：
-   - 针对单个客户端 IP，5 分钟内连续输错密码达到 5 次，系统将自动锁定该 IP 的登录尝试 5 分钟，有效阻断字典爆破。
-2. **企业级安全响应头 (Security Headers)**：
-   网关对所有 HTTP 响应注入以下标准防护头：
-   ```http
-   X-Content-Type-Options: nosniff
-   X-Frame-Options: SAMEORIGIN
-   X-XSS-Protection: 1; mode=block
-   Referrer-Policy: strict-origin-when-cross-origin
-   Permissions-Policy: camera=(), microphone=(), geolocation=()
-   ```
-3. **AI 接口 IP 白名单与错 Key 爆破防扫描 (`ip_whitelist.go` + `authRateLimiter`)**：
-   - **IP 白名单拦截**：启用后对 `/v1/*`、`/v2/videos/*`、`/status`、`/admin/*` 强制校验来源 IP（支持单 IPv4/IPv6 与 CIDR 网段、可选放行本机回环 `127.0.0.1 / ::1`），未命中直接返回 HTTP `403`（`ip_not_allowed`）；
-   - **抗请求头伪造**：仅当 TCP 直连对端为本机回环或私网/链路代理地址时才采信 `X-Forwarded-For` / `X-Real-IP`；公网直连一律以 `RemoteAddr` 为准，防止通过伪造转发头绕过白名单；
-   - **错 Key 扫描自动锁定**：同一来源 IP 在 2 分钟内累计提交 25 次错误 API Key 自动锁定 2 分钟（返回 `429 rate_limit_exceeded`），阻断字典扫描爆破。
-   - **运行 IP 观测面板**：控制台「客户端接入 & Key」实时显示服务网卡运行 IP、监听端口及当前访问端 IP，支持一键点击「+ 加入白名单」并持久化至 `data/settings.json` 与 `config.json`。
+### 5.3 单机免密 vs Web 管理密码与安全响应头
+- `web_password` 为空时进入单机免密模式（直接具备管理员权限）；设置 6 位以上密码后即激活全控制台鉴权，签发 24 小时有效期 `wb2a_session` Cookie（持久化于 `./data/`）。
+- 全站响应自动注入 `X-Content-Type-Options: nosniff`、`X-Frame-Options: SAMEORIGIN`、`X-XSS-Protection: 1; mode=block`、`Referrer-Policy`、`Permissions-Policy`。
 
 ---
 
-## 6. 双域融合调度与同邮箱多渠道隔离机制
+## 6. 双域融合调度、免费模型护盾与同邮箱多渠道隔离
 
 ### 6.1 国内版 (CN) 与国际版 (Global) 双域容灾
+- **国内版 (CN)**：对接 `copilot.tencent.com` 与 `www.codebuddy.cn`。
+- **国际版 (Global)**：对接 `www.workbuddy.ai`（支持无 `/v2` 优先路径并在 404 时兼容 `/v2` fallback）。
+- 网关支持模型前缀路由（`cn:...` / `global:...`）以及默认双域智能容灾。当某域下仅特定后缀可用时自动按配置优先挑选对应健康池节点；若需要严格锁定纯 CN 运行，可将 `global.enabled` 设为 `false`。
 
-系统自动识别国内版（`copilot.tencent.com`）与国际版（`www.workbuddy.ai`）凭证：
-- **域隔离调度**：调度池支持按模型所属域优先路由；
-- **跨域容灾降级**：若请求的模型在国内版遭遇限流，系统支持自动无缝故障转移至国际版可用账号池，保障业务连续性；
-- **模型前缀灵活指定**：支持在请求模型名前增加 `cn:` 或 `global:` 显式指定路由（例如 `cn:deepseek-v3` 或 `global:claude-3-5-sonnet`）。
+### 6.2 免费模型路由修正与扣费/超额自动熔断 (`v1.2.47` – `v1.2.48`)
+- **`hy4free` 直连免费节点 (`v1.2.47`)**：修复原先将 `hy4free` 重写到付费预览模型 `hy4-preview` 导致持续扣除积分的问题，`hy4free`（及 `global:hy4free`）现在直接命中官方免费端点 `hy4free`（`x0.00`）。
+- **免费模型实时扣费熔断 (`v1.2.48`)**：针对免费层模型（如 `hy4free`、`deepseek-v4.1-flash`、`glm-4-flash`、`freeModels` 列表模型），每次上游流返回 `usage.credit > 0` 或 `usage.quota.percent >= 100` 时，立即调用 `Pool.CooldownFreeQuotaModel` 将该账号的该模型冷却至官方重置窗口，并在请求层触发自动切换下一个健康账号（若全部免费账号额度耗尽则返回 `429`），彻底防止免费模型悄悄花光付费积分。
 
----
-
-### 6.2 国际版 Google 与 Twitter/X 同邮箱并存隔离机制 (v1.2.17 突破)
-
-#### 问题背景
-在 WorkBuddy 国际版中，用户经常使用同一个 Gmail 邮箱分别通过 Google 授权和 Twitter/X 授权登录，上游接口返回的用户唯一标识（UID）均为该邮箱地址（例如 `daixinhr@gmail.com`），且 Realm 同为 `global`。
-在以往版本中：
-1. 磁盘文件固定命名为 `workbuddy-global-<safeUID>.json`，后登录的渠道会直接覆盖先登录的渠道凭证；
-2. 内存池以 UID 作为唯一 Key，导致两个账号互相顶替，无法同时享有各自独立的并发限额与免费额度。
-
-#### v1.2.17 解决方案架构
-```mermaid
-flowchart LR
-    OAuthIn["OAuth 授权 / 批量导入凭证"] --> TokenMatch{"Refresh Token 是否与现有文件匹配?"}
-    TokenMatch -->|"是 (同一凭证刷新)"| InPlaceUpdate["原地更新对应凭证文件"]
-    TokenMatch -->|"否 (同邮箱不同渠道)"| ProviderDetect{"提取登录提供商 (Google / Twitter / GitHub)"}
-    
-    ProviderDetect -->|"Google 渠道"| FileGoogle["workbuddy-global-google-xxx.json"]
-    ProviderDetect -->|"Twitter / X 渠道"| FileTwitter["workbuddy-global-twitter-xxx.json"]
-    ProviderDetect -->|"无明确渠道"| FileSeq["workbuddy-global-xxx-2.json (递增序号)"]
-    
-    FileGoogle --> MemoryPool["内存调度池 (按独立凭证槽位隔离)"]
-    FileTwitter --> MemoryPool
-    FileSeq --> MemoryPool
-    
-    MemoryPool --> CleanUID["向上游发包: RawUID 剥离所有渠道前缀，透出纯净邮箱"]
-```
-
-1. **登录渠道智能识别**：从 OAuth 握手回调、账号信息接口与 JWT Claims 中解析出登录提供方（`google`、`twitter`、`github`、`wechat`、`qq` 等）并持久化；
-2. **磁盘文件智能路由 (`resolveAuthFilePath`)**：
-   - 优先比对 Token，同一账号再次授权时**原地更新**；
-   - 相同邮箱不同渠道时，自动添加渠道前缀（如 `workbuddy-global-google-xxx.json` 与 `workbuddy-global-twitter-xxx.json`），实现物理隔离；
-3. **内存池独立并发与额度追踪**：
-   - 内存池支持同邮箱多凭证并存，独立维护健康状态、在途并发计数与额度刷新；
-4. **纯净透传保持兼容**：
-   - 向上游转发 API 请求时，通过 `RawUID()` 彻底剥离内部的渠道前缀与序号后缀，确保请求头 `X-User-Id` 始终为用户真实的纯净邮箱，绝不触发上游反作弊拦截。
+### 6.3 同邮箱跨渠道多账号隔离 (`Google / Twitter / GitHub`)
+国际版中同一邮箱可通过 Google、Twitter/X、GitHub 等渠道分别注册登录。系统内置指纹识别与文件名分流（如 `workbuddy-global-google-xxx.json`、`workbuddy-global-twitter-xxx.json`），在内存调度池内独立分配账号槽位、并发计数与积分状态，向上游发包时再还原原始 `X-User-Id` 邮箱，消除账号相互覆盖冲突。
 
 ---
 
-## 7. 多租户隔离与 RBAC 权限系统
+## 7. 多租户 RBAC、配额与 Memory-First 持久化
 
-网关内建多租户管理系统，适合团队内多人共享使用或中继对外分发场景。
-
-### 7.1 用户角色（Admin 与 User）
-
-- **管理员 (Admin)**：
-  - 拥有控制台完整管理权限；
-  - 可调度全局所有账号（包括系统公共账号与私有绑定账号）；
-  - 可查看全站流量报表，增删改查租户，重置任意用户 API Key。
-- **普通用户 (User)**：
-  - 拥有专属用户控制台视图与独立 API Key；
-  - 仅可使用系统公共账号（Public Accounts）及该用户自行导入/绑定的私有账号；
-  - 无法查看和操作其他租户的账号，流量统计独立隔离。
-
-### 7.2 专属 API Key 隔离与账号池调度保障
-
-- 每个用户均可签发独立的 `sk-wb2a-user-...` 密钥；
-- **全员可用兜底调度**：存量凭证与系统默认账号全员开放给普通用户调度，杜绝旧账号因权限标注缺失引发 `503 no healthy account available` 异常。
-
-### 7.3 内存优先与磁盘故障自愈体系
-
-为解决容器跨卷部署可能出现的宿主机权限只读或写拒绝问题：
-- **内存优先生效 (Memory-First)**：所有租户新增、修改密码、重置 API Key 操作首先在内存状态机中生效，外部 API 鉴权与调用零延迟响应；
-- **磁盘异步落盘与容错自愈**：落盘遭遇异常时仅记录日志而不中断业务，容器下一次挂载自愈后自动同步持久化。
+- **Admin（管理员）**：全局管控所有公共/私有账号池、IP 白名单、全局 API Key、系统升级与全部租户管理。
+- **User（普通用户）**：拥有独立生成和可重置的专属 API Key；请求只路由到属于该用户自己名下的账号或系统公共账号；支持为每个租户单独设置 **每日积分配额（Daily Credit Quota）** 与 **每分钟请求频控（RPM）**。
+- **Memory-First 容错**：用户与密钥写操作优先实时生效于内存并原子写入 `./data/users.json` 与 `./data/settings.json`，即使宿主机目录遭遇瞬时写权限限制也不会中断鉴权服务；可选配合 Upstash Redis 做跨实例状态镜像。
 
 ---
 
-## 8. DeepSeek Harness (dsh) AI Agent 智能体集成
+## 8. 自动签到、纯 Go 成长任务引擎与猫猫旅行
 
-DeepSeek Harness (`@deepseek-ai/dsh`) 是官方推出的高阶 Agent 智能体框架。`workbuddy2api` 实现了深度原生内嵌。
+### 8.1 每日定时排程与启动顺序联动（CST 北京时间）
+`internal/scheduler` 所有触发时刻严格按 **北京时间（CST UTC+8）** 计算，容器部署在 UTC 时区也无 8 小时漂移。服务启动 3 秒后自动按序联动执行：
+1. **每日签到与余额刷新**（`CheckinHours` 默认 `[9, 21]`）
+2. **全量成长任务与 5 连对话门槛解锁**（`TasksHours` 默认 `[11]`）
+3. **猫猫旅行巡检与首次自动领养**（`TravelHours` 默认 `[9, 21]`）
 
-```mermaid
-sequenceDiagram
-    participant User as 客户端 / 浏览器
-    participant WB2A as WorkBuddy 2API 网关
-    participant DSH as DeepSeek Harness 运行时
-    participant Upstream as 上游大模型服务
-    
-    User->>WB2A: 访问 /console Agent 标签页
-    WB2A->>DSH: 本地 TCP/HTTP 桥接 (0.0.0.0 反代)
-    Note over WB2A,DSH: 自动注入 Cookie 与 Token，重写 Origin/Sec-Fetch 绕过跨域栅栏
-    DSH-->>WB2A: 返回 Agent Web 界面 (iframe 内嵌)
-    WB2A-->>User: 无缝呈现 Agent 操作界面
-    
-    User->>WB2A: API 调用 model="dsh" (虚拟模型直连)
-    WB2A->>DSH: 内部转发 Agent 任务流
-    DSH->>WB2A: Agent 内部多轮大模型调用
-    WB2A->>Upstream: 账号池最优调度
-    Upstream-->>WB2A: 返回推理
-    WB2A-->>DSH: 返回推理结果
-    DSH-->>WB2A: Agent 任务完成
-    WB2A-->>User: 流式输出完整 Agent 执行链
-```
+其余独立排程包括：`ActivityHours`（`[10]`，活跃上报与连登奖励兑换/抽奖）、`KeepaliveHours`（`[22]`，Token 定时保活刷新）、`SchoolHours`（`[12]`）、`CatHours`（`[1]`）。
 
-### 8.1 免环境一键安装绿色运行时
-- 控制台提供 **「一键全自动安装环境」** 按钮；
-- 系统会自动从国内镜像源静默下载解压免安装的便携式 Node.js 运行时（v22.14.0），Windows 与 Linux 服务器均免去全局安装配置 Node 环境的繁琐步骤。
+### 8.2 签到 401 强刷重试与控制台实时状态展示 (`v1.2.52`)
+- **为什么官方全球版不参与签到**：仅国内版（CN）支持 `/v2/billing/meter/daily-checkin` 每日签到（每次约 +6~+10 积分）；国际版（Global）官方无每日签到，调度器自动标记为 `skipped (global)`。
+- **Token 提前失效自愈**：`CheckinAll` 与手动 `POST /ui/action/signin` 遇 HTTP `401` 或 `ErrSessionDead` 时，不再直接失败，而是自动强刷 `RefreshToken` 并重放签到请求一次。
+- **今日状态实时回显**：[internal/pool/checkin.go](internal/pool/checkin.go) 按 CST 自然日记录每号与全池签到摘要（次日 00:00 自动刷新为待签），控制台摘要条实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号状态列显示 `✓ 今日已签` 或 `✗ 签到失败`。
 
-### 8.2 浏览器安全栅栏穿透与反向代理
-- 自动建立本地安全反代网桥，重写请求中的 `Origin` 与 `Sec-Fetch-Site` 标识，彻底解决官方 Agent 在外部浏览器中出现的 401 Unauthorized 与 403 Forbidden 信任栅栏问题。
-
-### 8.3 虚拟模型代理 direct-call (`dsh`)
-- 网关直接在模型列表 `/v1/models` 中注册虚拟模型 `dsh`；
-- 在任何接入的客户端中选择 `dsh` 模型，即可将普通对话直接转化为 Agent 任务驱动，自动调用当前网关的最优账号池执行推理。
+### 8.3 内置纯 Go 成长任务与猫猫旅行引擎 (`v1.2.44` – `v1.2.46`)
+- **免 Python 原生运行 (`internal/upstream/tasks.go`)**：当独立二进制环境缺少 `python` 或 `scripts/task_runner.py` 时，自动使用内置纯 Go 引擎执行全量成长任务。
+- **任务覆盖与状态核验**：支持按官方任务清单核对完成进度并主动领取已达成奖励，覆盖技能分享（`skill_share_entry_click` + `skill_share_channel_action`）、腾讯云轻量云专家（`Expert_lighthouse`）、发现应用（`Buddy_App`）、5 个模板对话（`template_5`）、微信公众号关注任务（`wb_wechat_oa_subscribe_task`）等。
+- **猫猫领养与旅行**：先补齐 5 连活跃对话解锁门槛，再调用 `BuddyFirst` 自动领养第一只猫（+300 积分），并定时巡检到站领奖、重新派出。
 
 ---
 
-## 9. 全模态视觉推理与模型体系
+## 9. DeepSeek Harness (`dsh`) 智能体集成
 
-### 9.1 视觉推理与文档分析能力
-
-系统全兼容业内主流多模态协议：
-1. **OpenAI 视觉格式**：
-   - 兼容 `image_url`（支持 Base64 Data URL 与网络图片 URL）；
-2. **Claude 视觉格式**：
-   - 兼容 `type: image` 与 `source: {type: "base64", data: "..."}`；
-3. **多格式文档解析**：
-   - 支持向模型发送 `.txt`、`.md`、`.pdf`、`.json`、`.py` 等文本或代码文件；
-   - 网关自动在本地清洗、提取文本，并拼装为标准上下文注入提示词。
-
-### 9.2 核心模型目录与专属视频模型透视
-
-网关全面兼容两大多模态能力体系：**通用语言与视觉推理大模型 (LLM & Vision)** 与 **官方专属视频生成大模型 (Video Generation Models)**。在 API `/v1/models`、前台极客门户与控制台中均进行明确的分类与模态标签标注。
-
-#### 9.2.1 💬 语言与多模态推理模型 (LLM & Vision)
-
-在控制台与 API 模型列表中，每个语言模型均标注了官方消耗倍率与多模态支持状态：
-
-| 模型名称 / ID | 官方标识 | 消耗倍率 | 模态支持 | 核心场景与优势 |
-| :--- | :---: | :---: | :---: | :--- |
-| **`deepseek-v4-flash`** | `[✨ 多模态]` | **x0.05** | 文本 / 视觉 | 极低消耗、秒级响应日常问答、轻量级视觉分析 |
-| **`deepseek-v3`** | `[✨ 多模态]` | **x0.29** | 文本 / 视觉 | 代码编写、逻辑推理、极高性价比全能开发主力 |
-| **`deepseek-r1`** | `[✨ 多模态]` | **x1.00** | 文本 / 深度推理 | 复杂算法、数学证明、长思维链 (Thinking) 深度推理 |
-| **`claude-3-5-sonnet`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 / 代码 | 顶级全栈架构设计、复杂工程重构与代码生成 |
-| **`gpt-4o`** | `[✨ 多模态]` | 官方指定 | 文本 / 视觉 | 综合通用多模态图文解析与通用智能助手 |
-| **`dsh`** | `[🤖 智能体]` | - | Agent 虚拟模型 | 深度集成 DeepSeek Harness 自主规划与执行智能体 |
-
-#### 9.2.2 🎬 官方专属视频大模型矩阵 (Dedicated Video Models)
-
-针对高阶短视频生成与创意视觉制作，网关完整逆向并接入 WorkBuddy 官方底层的**双旗舰视频生成引擎**，并在系统中全部注入 **`【视频专属】`**、`category: "video"` 与 `supports_video: true` 标记：
-
-| 专属视频模型 ID | 厂商与模型全称 | 核心标识 | 模态支持 | 最高分辨率 | 画幅与比例 | 原生音频 | 海内外兼容性 |
-| :--- | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
-| **`kling-video-v3`**<br>*(别名 `kling-v3` / `kling` / `keling`)* | **快手可灵 3.0**<br>全功能视频生成旗舰 | `[🎬 国内专属]` | 文生视频 / 图生视频<br>*(自动按入参路由)* | **1080P / 4K** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
-| **`minimax-video-h3`** | **MiniMax-H3 海螺**<br>原生电影级视频大模型 | `[🎬 国内专属]` | 文生视频 / 图生视频 | **768P / 2K** 电影级 | 自适应 / 21:9 宽银幕 | ✅ 原生生成 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
-| **`kling-v3-t2v`** | **快手可灵 3.0**<br>专属文生视频通道 | `[🎬 国内专属]` | 纯文生视频 | **720P / 1080P** | 16:9 / 9:16 / 1:1 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
-| **`kling-v3-i2v`** | **快手可灵 3.0**<br>专属图生视频通道 | `[🎬 国内专属]` | 纯图生视频<br>*(首帧/首尾帧驱动)* | **720P / 1080P** | 保持原图画幅 | ✅ 支持 | **🇨🇳 国内版专属**<br>(国际版官方暂无视频模型) |
-
-> 💡 **核心技术提示**：**视频大模型（快手可灵 Kling 3.0 与 MiniMax-H3）目前仅国内版 WorkBuddy（`codebuddy.cn` / `copilot.tencent.com`）官方支持**。WorkBuddy 国际版（`workbuddy.ai`）官方当前暂未开放视频大模型。网关已在路由层实现严格隔离，所有视频请求统一由国内版账号池供给，杜绝请求误投国际版导致报错。
-
-### 9.3 内置演练场 (Playground)
-
-控制台提供原生调试演练场：
-- 支持单轮与多轮连续流式对话；
-- 支持**直接上传图片或文档文件**，或直接在输入框中按 **`Ctrl+V`** 粘贴剪贴板截图；
-- 实时打印输出流、首字延迟（TTFT）、总耗时与 Token 统计。
+- **一键绿色环境安装**：控制台「Agent (dsh)」标签支持自动拉取并安装便携式 Node.js 运行时与 `@deepseek-ai/dsh`。
+- **内嵌反向代理与鉴权穿透**：`internal/dshmgr` 管理子进程并在 `/ui/dsh/*` 与 Web 控制台间代理流量。
+- **虚拟模型 `dsh` 直连**：启动或安装就绪后，`/v1/models` 会暴露 `dsh` 虚拟模型，外部客户端可直接选取 `dsh` 发起对话。
 
 ---
 
-## 10. 客户端接入实战指南
+## 10. 全模态视觉推理与专属视频大模型矩阵
 
-任何支持自定义 OpenAI API 接口的工具均可秒级接入：
-- **API Base URL**: `http://<服务器IP>:7863/v1`
-- **API Key**: 填入管理员 Key 或租户专属 Key（免密时可任意填写）。
+### 10.1 视觉与多格式文档解析
+- 支持 OpenAI `type: "image_url"`（含远程图片抓取转 Base64 Data URL 与本地 Data URL）及 Anthropic `type: "image"`（Base64）。
+- 支持文本与代码文件（`.txt` / `.md` / `.pdf` / `.json` / `.csv` / 源码）自动抽取并清洗为上下文。
 
-### 10.1 cURL 与通用 HTTP 规范
+### 10.2 语言、免费与专属视频模型目录
+具体可用模型由账号池启动及运行期向国内版与国际版上游实时探测动态聚合，并通过模型开关、别名字典（`model_aliases`）及路由组（`model_routes`）扩展：
+- **代表性语言 / 推理 / 免费模型**：`hy4free`（官方免费节点 `x0.00`）、`deepseek-v4.1-flash`、`deepseek-v4-flash`、`deepseek-v3`、`deepseek-r1`、`glm-5.3`、`glm-4-flash`、`kimi-k3-1`、`kimi-k2.8`、`minimax-m3`、国际版 `gpt-*` / `gemini-*` 等，支持虚拟路由池 `auto-free`。
+- **专属视频模型（仅国内版 CN 支持）**：
+  - `kling-video-v3`（兼容别名 `kling-v3`、`kling`、`keling`、`kling-v3-t2v`、`kling-v3-i2v`）：快手可灵 3.0，支持文生/图生视频与 720P / 1080P / 4K。
+  - `minimax-video-h3`（兼容别名 `hailuo-video`）：MiniMax 海螺视频，支持 768P / 2K 与自适应 / 21:9 画幅。
+  - 同时支持专用异步端点及在 `/v1/chat/completions` 对话窗口中直接桥接输出 MP4 直链卡片。
 
-#### 基础流式对话
+---
+
+## 11. 客户端接入实战与 HTTP API 端点参考
+
+### 11.1 OpenAI / Anthropic / 视频接口示例
+- **OpenAI Base URL**: `http://<主机>:7863/v1`
+- **Anthropic Messages API**: `POST http://<主机>:7863/v1/messages`（兼容 Claude Code 等 Anthropic 客户端，支持 `x-api-key` 或 `Authorization: Bearer`）
+
 ```bash
+# 1. OpenAI 标准流式对话
 curl -N http://127.0.0.1:7863/v1/chat/completions \
-  -H "Authorization: Bearer test_key" \
+  -H "Authorization: Bearer sk-workbuddy2api" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-v4-flash",
-    "messages": [
-      {"role": "user", "content": "你好，请用一句话介绍你自己。"}
-    ],
-    "stream": true
-  }'
-```
+  -d '{"model":"hy4free","messages":[{"role":"user","content":"Hello"}],"stream":true}'
 
-#### 多模态图片视觉请求
-```bash
-curl -N http://127.0.0.1:7863/v1/chat/completions \
-  -H "Authorization: Bearer test_key" \
+# 2. Anthropic /v1/messages 兼容调用
+curl -N http://127.0.0.1:7863/v1/messages \
+  -H "x-api-key: sk-workbuddy2api" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "deepseek-v3",
-    "messages": [
-      {
-        "role": "user",
-        "content": [
-          {"type": "text", "text": "描述这张图片的内容"},
-          {
-            "type": "image_url",
-            "image_url": {
-              "url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII="
-            }
-          }
-        ]
-      }
-    ],
-    "stream": true
-  }'
-```
+  -d '{"model":"claude-3-7-sonnet","max_tokens":1024,"messages":[{"role":"user","content":"你好"}],"stream":true}'
 
----
-
-### 10.2 Python (OpenAI SDK)
-
-```python
-from openai import OpenAI
-
-client = OpenAI(
-    base_url="http://127.0.0.1:7863/v1",
-    api_key="test_key"  # 填入您的 API Key
-)
-
-response = client.chat.completions.create(
-    model="deepseek-v3",
-    messages=[
-        {"role": "system", "content": "你是一位优秀的架构师。"},
-        {"role": "user", "content": "微服务与单体架构各自的适用场景是什么？"}
-    ],
-    stream=True
-)
-
-for chunk in response:
-    if chunk.choices and chunk.choices[0].delta.content:
-        print(chunk.choices[0].delta.content, end="", flush=True)
-print()
-```
-
----
-
-### 10.3 Node.js / TypeScript (OpenAI SDK)
-
-```typescript
-import OpenAI from "openai";
-
-const client = new OpenAI({
-  baseURL: "http://127.0.0.1:7863/v1",
-  apiKey: "test_key",
-});
-
-async function main() {
-  const stream = await client.chat.completions.create({
-    model: "deepseek-v4-flash",
-    messages: [{ role: "user", content: "请写一段快速排序算法" }],
-    stream: true,
-  });
-
-  for await (const chunk of stream) {
-    process.stdout.write(chunk.choices[0]?.delta?.content || "");
-  }
-}
-
-main();
-```
-
----
-
-### 10.4 主流客户端配置 (NextChat / Cherry Studio / Cursor / Cline)
-
-1. **NextChat / ChatGPT-Next-Web**:
-   - 接口地址 (URL): `http://127.0.0.1:7863`
-   - API Key: `test_key`
-   - 自定义模型: `deepseek-v3,deepseek-r1,deepseek-v4-flash,claude-3-5-sonnet`
-2. **Cherry Studio**:
-   - 添加提供商 -> 选择 `OpenAI`
-   - API 地址: `http://127.0.0.1:7863/v1`
-   - API 密钥: `test_key`
-   - 点击「拉取模型」即可自动获取包含倍率与模态标识的完整模型清单。
-3. **Cursor**:
-   - Settings -> Models -> OpenAI API Key
-   - Base URL: `http://127.0.0.1:7863/v1`
-   - Override OpenAI Base URL: 勾选并填入
-4. **VS Code Cline**:
-   - Provider: `OpenAI Compatible`
-   - Base URL: `http://127.0.0.1:7863/v1`
-   - API Key: `test_key`
-   - Model ID: `deepseek-v3`
-
----
-
-### 10.5 官方专属视频大模型 (Kling 3.0 & MiniMax-H3) 全协议接入指南
-
-网关对官方专属视频大模型进行了显式标注与全功能代理，模型均带有 `category: "video"`、`modality: "video"` 与 `supports_video: true` 标记，支持标准 OpenAI 协议风格接口与官方原生协议双向透传。
-
-#### 10.5.1 海内外双版本底层视频架构深度解析
-
-经过对 WorkBuddy 国内版与海外版（`workbuddy.ai` / `WorkBuddy AI`）的深度逆向拆解发现：
-1. **国内外版本视频能力差异与隔离策略**：
-   - 官方在版本规划上存在明确区分：**视频生成（快手可灵 Kling 3.0 与 MiniMax 海螺）当前仅在国内版 WorkBuddy 官方上线支持**；
-   - **WorkBuddy 国际版（`workbuddy.ai`）当前官方暂未提供视频大模型**（其路由网关未配置视频模型通道，请求会返回 `14407 route config not found`）；
-   - 为避免混用导致调用失败，本网关在调度层已将**视频模型与国际版完全切分**：所有可灵/海螺视频任务自动锁定并调度到国内版（CN realm）账号池，杜绝分配到国际版账号。
-2. **两套 API 端点无缝兼容**：
-   - **行业标准端点**：`POST /v1/videos/generations`，响应结构对齐业内视频生成标准；
-   - **状态查询端点**：`GET /v1/videos/tasks/{task_id}`；
-   - **官方原生端点**：`POST /v2/videos/generations` 与 `POST /v2/videos/tasks`，百分百原生透传。
-
-#### 10.5.2 视频模型全参数与规格透视表
-
-| 参数名称 | 类型 | 必填 | 默认值 | 可选值 / 格式 | 说明 |
-| :--- | :---: | :---: | :---: | :--- | :--- |
-| **`model`** | `string` | 否 | `kling-video-v3` | `kling-video-v3`, `minimax-video-h3`, `kling-v3-t2v`, `kling-v3-i2v` | 视频大模型 ID，若缺省则自动根据是否包含 `image_url` 智能路由 |
-| **`prompt`** | `string` | 是 | - | 自然语言提示词（建议包含主体、运镜、光影） | 视频画面的核心描述文本，最大支持 2500 字符 |
-| **`image_url`** | `string` | 否 | - | HTTP(S) 图片链接或 Base64 Data URL | **图生视频首帧参考图**。提供该参数时自动走图生视频管道 |
-| **`last_image_url`** | `string` | 否 | - | HTTP(S) 图片链接或 Base64 Data URL | **图生视频尾帧参考图**（首尾帧运镜接力） |
-| **`seconds`** | `integer` | 否 | `5` | `3` ～ `15` | 生成视频的目标时长（秒） |
-| **`resolution`** | `string` | 否 | `1080P` | `720P`, `1080P`, `4K` (Kling) / `768P`, `2K` (MiniMax) | 视频分辨率规格 |
-| **`aspect_ratio`** | `string` | 否 | `16:9` | `16:9` (横屏), `9:16` (竖屏短视频), `1:1` (方形), `21:9` (宽银幕) | 画面宽高比 |
-| **`enable_audio`** | `boolean` | 否 | `true` | `true` / `false` | 是否生成与视频动作协同的原生音效 / 环境音 |
-| **`negative_prompt`**| `string` | 否 | `""` | 负向描述词（如模糊、扭曲、畸变） | 过滤不希望出现的画面元素 |
-| **`wait`** | `boolean` | 否 | `false` | `true` / `false` | **同步直出开关**。为 `true` 时网关将阻塞直到视频渲染完成并直接返回 MP4 链接 |
-
----
-
-#### 10.5.3 文生视频 (Text-to-Video) 调用规范与同步直出
-
-##### 模式 A：同步直出模式（推荐单步脚本，直接拿到 MP4）
-传入 `"wait": true`，网关将在后台自动维持任务轮询，直至官方渲染完成，并在单次 HTTP 响应中直接返回完整的视频播放/下载地址：
-
-```bash
-curl http://127.0.0.1:7863/v1/videos/generations \
-  -H "Authorization: Bearer test_key" \
+# 3. 异步视频生成与查询
+curl -X POST http://127.0.0.1:7863/v1/videos/generations \
+  -H "Authorization: Bearer sk-workbuddy2api" \
   -H "Content-Type: application/json" \
-  -d '{
-    "model": "kling-video-v3",
-    "prompt": "一段赛博朋克雨夜街道的电影级运镜，霓虹灯倒映在湿漉漉的柏油路面上，镜头缓缓低角度向前推进，带原生环境音",
-    "seconds": 5,
-    "resolution": "1080P",
-    "aspect_ratio": "16:9",
-    "enable_audio": true,
-    "wait": true
-  }'
+  -d '{"model":"kling-video-v3","prompt":"无人机航拍雪山日出，电影质感","duration":5,"resolution":"1080P"}'
 ```
 
-**同步返回 JSON 响应示例**：
-```json
-{
-  "id": "task_20261022_91a0c4f8",
-  "object": "video",
-  "created": 1753601200,
-  "model": "kling-video-v3",
-  "status": "completed",
-  "data": [
-    {
-      "url": "https://v-download.workbuddy.tencent.com/generated/video_cyberpunk_20261022.mp4",
-      "cover_url": "https://v-download.workbuddy.tencent.com/generated/cover_cyberpunk_20261022.jpg",
-      "duration": 5.0
-    }
-  ],
-  "usage": {
-    "credit": 10
-  }
-}
-```
+### 11.2 完整 HTTP 路由表
+
+| 分类 | 方法与路径 | 鉴权方式 | 说明 |
+| :--- | :--- | :---: | :--- |
+| **门户与健康** | `GET /`、`GET /ui/public/status`、`GET /healthz` | 公开 | 赛博门户页、脱敏健康指标、存活性探针 |
+| **控制台页面** | `GET /console`、`GET /dashboard` | 页面直出 + API 鉴权 | Web 管理控制台静态外壳（`no-store`） |
+| **AI 核心推理** | `POST /v1/chat/completions`、`POST /v1/messages`、`GET /v1/models` | `withAuth` (IP白名单+Key+配额) | OpenAI/Anthropic 对话与视频桥接、动态模型清单 |
+| **视频生成** | `POST /v1/videos/generations`、`POST /v2/videos/generations`<br>`POST /v1/videos/tasks`、`GET /v1/videos/tasks/{id}` | `withAuth` | 同步/异步视频提交与任务状态轮询 |
+| **状态与指标** | `GET /status`、`GET /v1/stats`、`POST /v1/stats/reset` | `withAuth` | 账号池与请求统计快照（重置需 `withAuth`） |
+| **运维管理 API** | `POST /admin/accounts/{uid}/{disable,enable,revive}` | `withAuth`（需 `admin.enabled=true`） | 账号启用/停用/复活（未开启时返回 404） |
+| **控制台认证** | `POST /ui/auth/login`、`logout`、`register` | 公开（带频控） | Web 会话 Cookie 登录与租户注册 |
+| **控制台数据** | `GET /ui/data`、`GET /ui/inflight/data` | `withWebAuth` | 账号池/双域积分汇总/签到摘要/IP白名单/运行IP/在途流 |
+| **账号与动作** | `POST /ui/oauth/*`、`/ui/account/*`、`/ui/action/{signin,trial,welfare,travel,tasks,bind_invite,delete}`、`/ui/backup/*` | `withWebAuth` | OAuth 授权、多格式导入导出、福利/任务/猫猫/签到操作 |
+| **系统安全设置** | `POST /ui/config/apikey`、`password`、`ip_whitelist` | `withWebAuth` (Admin) | 动态更新并持久化主 Key、控制台密码、IP 白名单 |
+| **Agent / 租户 / 升级** | `/ui/dsh/*`、`/ui/admin/user*`、`/ui/system/update/*` | `withWebAuth` | dsh 进程管控、多租户配额管理、应用在线升级 |
 
 ---
 
-#### 10.5.4 图生视频 (Image-to-Video) 首尾帧驱动规范
+## 12. 配置全集与环境变量参考 (`config.json` / `WB2A_*`)
 
-支持提供起始帧（`image_url`）以及可选的结束帧（`last_image_url`），驱动静止图片产生生动连贯的物理运镜与微表情：
-
-```bash
-curl http://127.0.0.1:7863/v1/videos/generations \
-  -H "Authorization: Bearer test_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "kling-v3-i2v",
-    "image_url": "https://example.com/character_portrait.png",
-    "prompt": "角色自然眨眼微笑，微风吹拂发丝，背景樱花花瓣缓缓飘落，电影级柔光",
-    "resolution": "1080P",
-    "aspect_ratio": "9:16",
-    "enable_audio": true,
-    "wait": true
-  }'
-```
-
----
-
-#### 10.5.5 异步任务轮询与全生命周期状态查询
-
-若未传 `wait: true`，创建接口将以 **202 Accepted** 极速返回包含任务 ID 的凭据：
-
-```bash
-# 1. 提交异步任务
-curl http://127.0.0.1:7863/v1/videos/generations \
-  -H "Authorization: Bearer test_key" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "model": "minimax-video-h3",
-    "prompt": "浩瀚星空下的极光流转，冰山倒影，4K超清画质",
-    "wait": false
-  }'
-```
-
-**返回初始状态**：
-```json
-{
-  "id": "video_task_8931bfa28e",
-  "status": "processing",
-  "model": "minimax-video-h3",
-  "created": 1753601300
-}
-```
-
-```bash
-# 2. 查询任务状态（支持 GET 标准端点）
-curl http://127.0.0.1:7863/v1/videos/tasks/video_task_8931bfa28e \
-  -H "Authorization: Bearer test_key"
-```
-
-当 `status` 变更为 `completed` 时，`data[0].url` 即为生成的 MP4 视频直链。
-
----
-
-#### 10.5.6 对话窗口智能桥接与视频模型直出 (Chat Completions Video Bridge)
-
-在以往的调用中，若用户在通用客户端（如 NextChat、Cherry Studio、Chatbox 等）的聊天对话框中直接选择视频模型（如 `kling-video-v3`），上游官方会因为视频模型未挂载在聊天流水线而返回 `11103 Backend [maas] is not supported`。
-
-**自 `v1.2.27` 起，网关内置了全自动视频智能桥接器 (Chat Video Bridge)**：
-1. **自动识别**：当请求发往 `POST /v1/chat/completions` 且模型属于专属视频模型时，网关就地接管；
-2. **多模态与提示词解析**：自动从 `messages` 消息流中提取最后一条文本作为生成 `prompt`，并自动提取上传的参考图片作为图生视频首帧；
-3. **流式状态回传**：在 SSE 流中先发送任务已提交的提示与 Task ID，在等待渲染期间自动打点保持心跳，防止客户端等待超时断流；
-4. **视频渲染直出**：渲染完成后，直接在对话框中吐出带有 `🎥 [下载 MP4 视频]` 直链与原生 HTML5 `<video>` 播放标签的 Markdown 卡片，实现聊天窗口内的「即聊即生成视频」！
-
-#### 10.5.7 Python / Node.js 客户端实战代码
-
-##### Python 完整调用脚本 (带自动轮询与 MP4 下载)
-
-```python
-import time
-import requests
-
-API_BASE = "http://127.0.0.1:7863/v1"
-API_KEY = "test_key"  # 填入你的网关 Key
-
-headers = {
-    "Authorization": f"Bearer {API_KEY}",
-    "Content-Type": "application/json"
-}
-
-# 1. 提交视频生成任务
-payload = {
-    "model": "kling-video-v3",
-    "prompt": "一艘太空飞船掠过巨大的土星环，引力透镜扭曲星光，科幻史诗大片，配原生低频引擎轰鸣",
-    "seconds": 5,
-    "resolution": "1080P",
-    "aspect_ratio": "16:9",
-    "enable_audio": True,
-    "wait": False  # 也可设为 True 走同步直出
-}
-
-resp = requests.post(f"{API_BASE}/videos/generations", json=payload, headers=headers)
-task_data = resp.json()
-task_id = task_data.get("id")
-print(f"🎬 视频生成任务已提交，Task ID: {task_id}")
-
-# 2. 轮询直到完成
-while True:
-    status_resp = requests.get(f"{API_BASE}/videos/tasks/{task_id}", headers=headers)
-    status_data = status_resp.json()
-    status = status_data.get("status")
-    print(f"⏳ 任务状态: {status}...")
-    
-    if status == "completed":
-        video_url = status_data["data"][0]["url"]
-        print(f"✅ 视频生成成功！下载链接: {video_url}")
-        
-        # 下载视频到本地
-        video_bytes = requests.get(video_url).content
-        with open("generated_space.mp4", "wb") as f:
-            f.write(video_bytes)
-        print("🎉 视频已成功保存到本地: generated_space.mp4")
-        break
-    elif status == "failed":
-        print("❌ 视频生成失败！")
-        break
-        
-    time.sleep(5)
-```
-
----
-
-## 11. 配置全集参考 (`config.json`)
-
-系统启动时会自动读取工作目录下的 `config.json`，若文件不存在会自动生成推荐模板：
+### 12.1 完整 `config.json` 示例
 
 ```json
 {
   "listen": ":7863",
-  "api_key": "test_key",
+  "api_key": "sk-workbuddy2api",
   "web_password": "",
   "ip_whitelist_enabled": false,
   "allowed_ips": [],
   "allow_localhost": true,
   "auth_dir": "./auths",
   "state_file": "./data/state.json",
+  "admin": {
+    "enabled": false
+  },
   "global": {
-    "enabled": true
+    "enabled": true,
+    "chat_base": "",
+    "billing_base": ""
   },
   "pool": {
     "max_in_flight": 3,
     "max_in_flight_global": 2,
     "breaker_threshold": 3,
     "breaker_cooldown": "30m",
+    "breaker_cooldown_max": "6h",
+    "degrade_threshold": 5,
+    "degrade_cooldown": "10m",
+    "degrade_cooldown_max": "2h",
     "idle_weight_per_hour": 0.5,
     "idle_weight_max": 5.0,
-    "expiring_soon": "168h"
+    "expiring_soon": "168h",
+    "cost_explore_interval": "30m",
+    "queue_timeout_seconds": 60
   },
   "cooldown": {
     "soft_rate": "600s",
@@ -855,147 +348,123 @@ while True:
     "travel_hours": [9, 21],
     "activity_enabled": true,
     "activity_hours": [10],
+    "keepalive_enabled": true,
+    "keepalive_hours": [22],
+    "school_enabled": true,
+    "school_hours": [12],
+    "cat_enabled": true,
+    "cat_hours": [1],
     "tasks_enabled": true,
-    "tasks_hours": [11]
+    "tasks_hours": [11],
+    "activity_report_count": 5
   },
   "session_sticky": {
     "enabled": true,
-    "ttl": "30m"
+    "ttl": "30m",
+    "gc_interval": "5m"
+  },
+  "upstream": {
+    "timeout_seconds": 120,
+    "header_timeout_seconds": 120,
+    "idle_timeout_seconds": 300,
+    "client_name": "WorkBuddy",
+    "passthrough_ip": false,
+    "proxy": ""
+  },
+  "features": {
+    "sanitize_blacklist_fingerprints": true
+  },
+  "prompt": {
+    "mode": "passthrough",
+    "file": ""
+  },
+  "alert": {
+    "enabled": false,
+    "webhooks": [],
+    "events": [],
+    "min_credit": 100
   }
 }
 ```
 
-### 字段释义表
+### 12.2 环境变量完整对照表 (`cmd/server/config.go`)
 
-| 字段路径 | 类型 | 默认值 | 详细功能说明 |
-| :--- | :---: | :---: | :--- |
-| `listen` | string | `":7863"` | 服务监听的地址与端口 |
-| `api_key` | string | `""` | 全局管理员 API Bearer 鉴权 Key，留空表示不开启 API 鉴权 |
-| `web_password` | string | `""` | 控制台管理保护密码，留空为单机免密模式，设置后开启访问拦截 |
-| `ip_whitelist_enabled` | bool | `false` | 是否启用 AI 接口 IP 白名单防扫描（也可通过 `WB2A_IP_WHITELIST_ENABLED` 配置） |
-| `allowed_ips` | array | `[]` | 允许访问 AI 接口的 IPv4/IPv6 或 CIDR 网段列表（支持 `WB2A_ALLOWED_IPS` 逗号分隔） |
-| `allow_localhost` | bool | `true` | 开启白名单时是否始终允许本机回环 `127.0.0.1` / `::1` |
-| `auth_dir` | string | `"./auths"` | 账号凭证 JSON 文件的存放目录 |
-| `state_file` | string | `"./data/state.json"` | 账号池熔断状态、指标统计快照持久化路径 |
-| `global.enabled` | bool | `true` | 是否启用对国际版（`workbuddy.ai`）的支持与调度 |
-| `pool.max_in_flight` | int | `3` | 单个国内版账号允许的最大并发在途请求数 |
-| `pool.max_in_flight_global` | int | `2` | 单个国际版账号允许的最大并发在途请求数 |
-| `pool.breaker_threshold` | int | `3` | 连续请求失败触发熔断的错误阈值次数 |
-| `pool.breaker_cooldown` | string | `"30m"` | 账号连续硬失败后的熔断隔离冷却时长 |
-| `pool.idle_weight_per_hour` | float | `0.5` | 空闲账号每空闲 1 小时增加的调度权重 |
-| `pool.idle_weight_max` | float | `5.0` | 空闲补偿算法增加的最大权重上限 |
-| `pool.expiring_soon` | string | `"168h"` | 临期积分判定窗口，优先调度剩余 7 天内即将过期的账号积分 |
-| `cooldown.soft_rate` | string | `"600s"` | 账号触发官方 429 限流时的初始软避让冷却时长 |
-| `cooldown.soft_rate_max` | string | `"2h"` | 连续触发 429 限流时的指数退避最大冷却上限 |
-| `schedule.checkin_enabled` | bool | `true` | 是否开启每日自动定时签到任务 |
-| `schedule.checkin_hours` | array | `[9, 21]` | 每日自动执行签到的小时时刻（北京时间 CST，24小时制） |
-| `schedule.tasks_enabled` | bool | `true` | 是否开启每日定时全量成长任务（内置纯 Go 引擎 + 可选脚本回退） |
-| `schedule.tasks_hours` | array | `[11]` | 每日自动执行成长任务的小时时刻（北京时间 CST） |
-| `session_sticky.enabled` | bool | `true` | 是否开启会话粘性绑定机制 |
-| `session_sticky.ttl` | string | `"30m"` | 会话粘性存活有效期，多轮对话期间保持稳定路由至同一账号 |
+| 环境变量 | 对应配置 / 作用 | 说明 |
+| :--- | :--- | :--- |
+| `WB2A_LISTEN` | `listen` | 监听地址与端口，如 `:7863` |
+| `WB2A_API_KEY` | `api_key` | 主 API Key（覆盖文件与 `settings.json`） |
+| `WB2A_WEB_PASSWORD` | `web_password` | 控制台登录密码 |
+| `WB2A_ALLOWED_IPS` | `allowed_ips` | 逗号分隔的允许 IP/CIDR；非空时默认自动启用白名单 |
+| `WB2A_IP_WHITELIST_ENABLED` | `ip_whitelist_enabled` | 显式控制白名单开关（`true`/`1`/`false`/`0`） |
+| `WB2A_ALLOW_LOCALHOST` | `allow_localhost` | 是否始终允许本机回环 `127.0.0.1 / ::1` |
+| `WB2A_AUTH_DIR` / `WB2A_STATE_FILE` | `auth_dir` / `state_file` | 凭证目录与状态持久化文件路径 |
+| `WB2A_ADMIN_ENABLED` | `admin.enabled` | 是否启用 `/admin/accounts/*` 运维 API |
+| `WB2A_UPSTREAM_PROXY` / `WB2A_PROXY` | `upstream.proxy` | 出站代理 URL（`http://`/`https://`/`socks5://`） |
+| `WB2A_QUEUE_TIMEOUT` / `WB2A_QUEUE_TIMEOUT_SECONDS` | `pool.queue_timeout_seconds` | 并发满载排队超时秒数（默认 `60`） |
+| `WB2A_EXPIRING_SOON` | `pool.expiring_soon` | 临期积分判定窗口（默认 `168h` = 7天） |
+| `WB2A_SOFT_RATE` / `WB2A_SOFT_RATE_MAX` | `cooldown.soft_rate*` | 429 软冷却基数与退避封顶 |
+| `WB2A_TIMEOUT_SECONDS` / `HEADER_*` / `IDLE_*` | `upstream.*` | 上游短 RPC、首字节及流空闲超时 |
+| `WB2A_USER_AGENT` / `CLIENT_NAME` / `CLIENT_VERSION` / `CLI_VERSION` | `upstream.*` | 出站指纹头覆盖配置 |
+| `WB2A_DEVICE_TOKEN` / `WB2A_DEVICE_TOKEN_FILE` | `upstream.*` | 设备风控 `X-Device-Token` 注入与文件读取 |
+| `WB2A_PASSTHROUGH_IP` | `upstream.passthrough_ip` | 是否向官方透传客户端 IP（默认 `false`） |
+| `WB2A_SANITIZE_FINGERPRINTS` | `features.sanitize_blacklist_fingerprints` | 出站请求黑名单指纹脱敏开关 |
+| `WB2A_PROMPT_MODE` / `WB2A_PROMPT_FILE` | `prompt.mode` / `prompt.file` | `passthrough` / `custom` / `append` 与提示词文件 |
+| `WB2A_ALERT_ENABLED` / `WB2A_ALERT_WEBHOOKS` | `alert.*` | Webhook 告警开关与逗号分隔地址列表 |
+| `WB2A_MODEL_ALIASES` | `model_aliases` | JSON 字典覆盖模型别名映射 |
 
 ---
 
-## 12. 架构设计与底层机制原理解析
+## 13. 底层调度与熔断机制原理
 
-### 12.1 调度池三因子加权随机算法
-
-网关摒弃了简单的轮询（Round-Robin），引入兼顾积分利用率与高可用的三因子调度算法：
-$$\text{Weight} = W_{\text{credits}} + W_{\text{expiring}} + W_{\text{idle}}$$
-
-1. **积分余量因子 ($W_{\text{credits}}$)**：账号可用积分越多，基础命中权重越高；
-2. **临期消耗优先因子 ($W_{\text{expiring}}$)**：当账号内含有 7 天内即将清零的限时活动积分时，赋予巨额提升权重，确保限时积分在过期前被充分消耗；
-3. **空闲补偿因子 ($W_{\text{idle}}$)**：长时间未被调用的账号随空闲时间线性累计权重，防止请求过度倾斜至单一热点账号引发并发限流。
-
-### 12.2 模型级独立软限流与熔断退避
-
-官方错误码中，`429` 与 `6004` 通常表示速率限制。
-- **模型级精准隔离**：传统网关会将整个账号拉黑，而 `workbuddy2api` **仅对触发限流的单一模型实施冷却**，同账号下的其他模型依然正常参与调度；
-- **指数退避**：首次软限流冷却基数为 600 秒，连续触发时按指数逐步放大，最高退避至 2 小时；
-- **控制台一键解封**：运维人员若知晓限流已解除，可在控制台卡片上直接点击「解除冷却」，瞬间重置冷却倒计时。
-
-### 12.3 会话粘性机制 (Session Sticky)
-
-在大模型长文本对话中，上游官方具备 Prompt Cache 机制。
-- 网关通过识别请求会话签名，在 30 分钟生命周期内将该会话的后续交互**稳定绑定至同一个账号**；
-- 极大提升上游缓存命中率，使首字响应延迟降低 50% 以上，并显著节约计费 Token。
+1. **三因子加权随机调度 + 成本分层**：
+   - 基于可用积分余量（$W_{\text{credits}}$）、7 天内临期积分加成（$W_{\text{expiring}}$，优先清零活动限时包）与空闲时长补偿（$W_{\text{idle}}$）计算综合权重。
+   - 结合 `ModelCosts`（EMA 实测单价 `cost_per_1k`）优先命中已知免费或低成本通道，并按 `cost_explore_interval` 周期性探测未观测节点。
+2. **模型级独立冷却 & 免费额度护盾**：
+   - 遭遇 429/6004 或免费模型触发扣费/额度用尽时，仅把 `(账号, 模型)` 条目写入 `modelCooldowns`，不影响同账号其他模型。
+   - 指数退避（600s 起步，默认封顶 2h）；连续非账户级异常按 `degrade_threshold` 触发降权；硬性账号故障按 `breaker_threshold` 触发长冷却熔断。
+3. **Session Sticky & 排队保活**：
+   - 会话签名稳定绑定账号（默认 `30m`），最大化复用上游 Prompt Cache 命中率；满载排队期间每 3s 向 SSE 写入 `: ping` 注释防止下游断连。
 
 ---
 
-## 13. 常见问题排查与运维指南 (FAQ)
+## 14. 常见问题排查 (FAQ)
 
 ### Q1: Docker 部署提示 `open data/users.json.tmp: permission denied` 怎么办？
-- **原因**：宿主机挂载目录的 UID 与容器内进程不一致导致文件写权限受限。
-- **解决**：新版本已在 `docker-entrypoint.sh` 中加入自动权限自愈。若使用旧版卷，只需在宿主机项目根目录执行一次放行：
-  ```bash
-  chmod -R 777 ./data ./auths
-  ```
+- 宿主机挂载卷目录 UID 不一致时，在宿主机执行 `chmod -R 777 ./data ./auths`；同时网关启用 Memory-First 策略，新创建/注册用户与密钥会优先在内存中生效。
+
+### Q2: 为什么自动签到看起来像没签？国际版支持每日签到吗？
+- **仅国内版（CN）支持每日签到**（每次约 +6~+10 积分）；国际版（Global）官方无每日签到入口，调度器会自动跳过。
+- 国内版每日于北京时间 `09:00` 与 `21:00` 及服务启动 3 秒后执行；自 `v1.2.52` 起控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执，遇到 `401` 会自动强刷 `RefreshToken` 并重试。
+
+### Q3: 如何开启 IP 白名单并查看运行 IP 防止别人扫描使用我的 Key？
+- 在控制台进入 **「客户端接入 & Key」 -> 「🛡️ AI 接口 IP 白名单 & 运行 IP」**，查看服务网卡运行 IP、监听端口与当前来访客户端 IP；点击 **「+ 加入白名单」** 或输入允许的 IP / CIDR 网段并启用保存，非白名单 IP 将被直接拦截返回 `403`。
+
+### Q4: 免费模型（如 `hy4free`）为什么有时会扣积分或提示 429？
+- 若你开启了 `v1.2.47+`，`hy4free` 会直连官方免费节点 `hy4free`（不经过收费的 `hy4-preview`）。自 `v1.2.48` 起，一旦某个账号在任意免费模型上出现 `credit > 0` 扣费或 `quota.percent >= 100`，网关会立刻冷却该账号该模型并切换下一账号；若全池免费账号均已耗尽则会返回 `429` 保护付费积分不被扣光。
+
+### Q5: 批量导入支持哪些格式？
+- 支持拖拽或选择多个 `.json` / `.txt` 文件、上传 `.zip` 备份包、C 风格注释宽松 JSON、常见中继导出嵌套 JSON（`data` / `accounts` / `tokens`）以及每行 `accessToken----refreshToken` 卡密格式，导入后自动并发刷新测试并同步余额。
+
+### Q6: 请求出现 503 且提示 `no healthy account available` 怎么排查？
+- 检查账号池是否有未过期可用账号（可查看 `💰 账户余额` 及 `运行状态` 列是否全池冷却/禁用）；
+- 对国际版账号若长期未用返回 `12153 Invalid refresh token`，需点击操作菜单中的「重填 Token」或重新授权登录；
+- 普通租户调用需确认自己名下有可用账号或池内存在公共账号。
+
+### Q7: 视频生成为何仅国内版可用，大概耗时多久？
+- 官方目前仅在国内版开放可灵 3.0 与 MiniMax-H3 视频模型，国际版暂无视频路由，网关已自动在路由层严格隔离至 CN 池；
+- 生成耗时通常为 30 秒 ~ 3 分钟（高峰期可能达 5~10 分钟），自动化调用建议使用异步模式（不传 `wait: true`）并轮询 `GET /v1/videos/tasks/{id}`。
+
+### Q8: 忘记控制台管理密码如何恢复？
+- 编辑 `config.json` 与 `./data/settings.json`（若存在），将 `"web_password"` 设为空字符串 `""` 后重启服务，即可恢复为单机免密模式。
 
 ---
 
-### Q2: 批量导入账号支持哪些文件？格式不合规如何处理？
-- **全格式支持**：
-  - 支持多选拖入多个 `.json` 凭证；
-  - 支持将包含凭证的 `.zip` 压缩包直接上传，系统自动解压扫描；
-  - 支持 `.txt` 卡密文本（每行 `token----refreshToken` 或单行纯 Token）；
-  - 支持含有 `//` 注释的宽松 JSON 与包含外层包裹结构（如 `data: [...]`）的第三方结构。
-- **实时回显**：导入后控制台弹窗会清晰回显导入成功数、失败数以及每一条的失败原因。
+## 15. 版本演进与开源许可
 
----
-
-### Q3: 为什么请求出现 503 且提示 `no healthy account available`？
-- **检查项**：
-  1. 所有账号的并发在途请求是否已达到上限；
-  2. 账号是否由于 429 限流全部处于冷却倒计时中（可在控制台查看，支持点击「解除冷却」）；
-  3. 普通租户发起的请求，系统中是否存在可供调度的系统公共账号。
-
----
-
-### Q4: 国际版同一邮箱登录 Google 和 Twitter 账号，会发生覆盖吗？
-- **不会**！自 `v1.2.17` 起，系统已彻底升级底层凭证解析与调度池。系统会自动为 Google 渠道生成 `workbuddy-global-google-xxx.json`，为 Twitter 渠道生成 `workbuddy-global-twitter-xxx.json`，并在内存中维持完全独立的两个账号实例与独立积分。
-
----
-
-### Q5: 管理密码忘记了如何找回？
-- 如果忘记了 Web 管理密码导致无法登录控制台：
-  1. 打开 `config.json`，将 `"web_password": ""` 修改为空字符串 `""`；
-  2. 若 `data/settings.json` 中存在该字段，同样将其修改为 `""`；
-  3. 重启程序即可瞬间恢复为单机免密模式，重新进入控制台设置新密码。
-
----
-
-### Q6: 国际版（WorkBuddy AI）支持视频模型吗？如何区分？
-- **经过深度实测与架构排查**：
-  - **国内版（CodeBuddy / 腾讯版）**：官方完整支持快手可灵 Kling 3.0（`kling-video-v3`）与 MiniMax 海螺（`minimax-video-h3`）的高清视频生成；
-  - **国际版（WorkBuddy AI，`workbuddy.ai`）**：**官方当前暂未开放视频大模型**，没有配置视频模型上游路由；
-  - **网关自动隔离**：网关在调度层已将视频大模型与国际版彻底隔离，视频生成任务严格只在健康国内版账号中挑选，保证 100% 成功率。若池内无国内账号，会给出清晰指引。
-
----
-
-### Q7: 视频生成大概需要多长时间？为什么有时会超时？
-- 视频生成是大规模扩散与运动物理模拟计算，耗时远高于普通文本对话：
-  - **720P / 5 秒**：通常在 30 秒 ～ 90 秒内完成；
-  - **1080P / 10 秒**：通常在 1.5 分钟 ～ 3 分钟内完成；
-  - **高峰期**：若遇到上游算力排队，最长可能需要 5 ～ 10 分钟。
-- **推荐策略**：
-  - 在自动化批量生成或后端调用时，建议使用异步模式（不传 `wait: true`），提交后获取 `task_id`，每隔 5 秒轮询一次 `GET /v1/videos/tasks/{id}`，体验最稳健！
-
----
-
-### Q8: 为什么自动签到看起来像没签？国际版支持每日签到吗？
-- **仅国内版（CN）支持每日签到**：国内版账号每日会在北京时间（CST）`09:00` 与 `21:00` 及服务启动 3 秒后自动签到（约 +6~+10 积分）；国际版（Global）官方无每日签到入口，调度器会自动跳过。
-- **控制台状态回显**：自 `v1.2.52` 起，控制台顶部摘要条展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执；遇到 `401` 会自动强刷 `RefreshToken` 并重试一次。
-
----
-
-### Q9: 如何开启 IP 白名单并查看运行 IP 防止 Key 被扫描盗用？
-- 进入控制台 **「客户端接入 & Key」**，在 **「🛡️ AI 接口 IP 白名单 & 运行 IP」** 面板查看服务网卡运行 IP、监听端口与当前来访客户端 IP；
-- 点击 **「+ 加入白名单」** 或手动填入允许的 IP / CIDR 网段，勾选开启并保存，即可拦截未授权 IP 的 API 访问与扫描。
-
----
-
-## 14. 开源协议与致谢
-
-- **开源协议**：本项目基于 [MIT License](LICENSE) 协议发布，自由商用与个人使用。
-- **项目维护者**：[XCool-603](https://github.com/XCool-603)
-- **特别致谢**：感谢开源社区在逆向协议、调度模型与智能体生态探索中的所有先驱贡献者！
+- **`v1.2.52`**：每日签到新增 `401` 强刷 Token 重试机制，控制台顶部摘要条与账号列实时显示今日签到状态与下轮时刻。
+- **`v1.2.51`**：新增 AI 接口 IP 白名单防扫描（CIDR/单 IP + 防 XFF 伪造）、错 Key 爆破防扫描锁定（25 次/2 分钟 -> `429`）与运行 IP 面板。
+- **`v1.2.50`**：Console 页面精简重构，新增顶部「💰 账户余额 / 📊 积分明细」双快捷按钮、域名筛选与每行「余额 / 明细 / 操作 ▾」浮层菜单。
+- **`v1.2.49`**：精确资源包拆分解析（套餐基础 / 平台奖励 / 购买积分 / 7日内到期）及全池 / CN / Global 三域汇总面板。
+- **`v1.2.47` – `v1.2.48`**：修正 `hy4free` 直连免费端点，落地免费模型扣费/额度耗尽自动限流切号护盾。
+- **`v1.2.42` – `v1.2.46`**：新增纯 Go 内置成长任务引擎、单号/批量任务 UI、猫猫自动领养与技能分享等 18+ 项活动任务收割。
+- **开源协议**：[MIT License](LICENSE) · 维护者：[XCool-603](https://github.com/XCool-603)
