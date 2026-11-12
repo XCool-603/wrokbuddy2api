@@ -6,8 +6,8 @@
 </p>
 
 <p align="center">
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.32-blue?style=flat-square">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white&style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
@@ -28,22 +28,20 @@
    - 所有逻辑（OAuth 登录授权、批量日常签到、领取国际版试用额度、账号管理）全部**在进程内（In-Process）原生实现**。
    - 单文件体积仅 ~9.5MB，随下随用，无任何外部环境依赖。
 
-2. **赛博炫酷前台门户 & 现代化原生桌面 GUI / Web 管理中枢**
+2. **赛博炫酷前台门户 & 现代化原生桌面 GUI / 精简双域控制台**
    - **全新前台极客门户 (`/`)**：琉璃毛玻璃设计，实时透出服务脱敏健康指标、就绪账号容量、双域可达性与模型清单，优雅对外展示并支持一键复制代码。
-   - **运维控制中枢 (`/console` 或 `/dashboard`)**：全功能深色控制台收拢于独立路径，提供全维度流量分析与账号运维。
+   - **运维控制中枢 (`/console` 或 `/dashboard`)**：精简顶部指标条与分组工具栏，支持 `全部 / CN / Global` 域筛选；提供 **「💰 账户余额」** 与 **「📊 积分明细」** 快捷双按钮（全池/国内版/国际版精确小数余量、套餐基础 / 平台奖励 / 购买积分 / 7日内到期拆分、资源包明细与模型限流单价台账）以及顶部实时 **今日自动签到状态胶囊**。
    - **Windows 原生 Edge WebView2 驱动**：Windows GUI 模式编译（`-H windowsgui`），**双击直接弹出 1280x820 桌面窗口**，无黑框命令行干扰。
-   - **一键全功能运维**：一键授权登录、批量日常签到、国际版试用加速包领取、手动导入/删除/停用。
-   - **智能冷却与一键解除**：倒计时透明展示（如 `限流冷却中 (45s)`、限流模型透视），支持**一键「解除冷却」**秒级重回选号池。
+   - **一键全功能与成长任务运维**：内置纯 Go 成长任务引擎（免 Python 即可跑全量活动与领猫），支持 OAuth 扫码登录、一键吃满新手福利、单号/全量做任务、猫猫自动领养与旅行、批量每日签到（支持 `401` 强刷 Token 重试）。
+   - **智能冷却与一键解除**：倒计时透明展示，每行提供「余额」「明细」「操作 ▾」浮层菜单，支持**一键「解除冷却」**秒级重回选号池。
    - **友好授权流程**：OAuth 授权弹窗增设底部取消/关闭按钮与精准错误透出，防止超时假死。
    - 关闭桌面窗口即自动优雅停机并持久化保存数据状态。
 
-3. **安全防御体系与多租户权限系统 (Security & Multi-Tenant RBAC)**
+3. **纵深安全防御体系：IP 白名单防扫描 + 防爆破 + 多租户 RBAC**
+   - **AI 接口 IP 白名单与运行 IP 面板 (v1.2.51)**：支持配置单个 IPv4/IPv6 与 CIDR 网段拦截非白名单 IP 扫描或盗用 API Key（返回 `403`）；严格仅当直连对端为可信内网/回环代理时采信 `X-Forwarded-For` / `X-Real-IP`，公网直连严防请求头伪造绕过；控制台实时展示服务网卡运行 IP、监听端口与当前来访客户端 IP（支持一键「+ 加入白名单」）。
+   - **错 Key 扫描与登录防爆破 (`authRateLimiter`)**：同一 IP 在 2 分钟内累计 25 次错误 API Key 尝试自动锁定 2 分钟（返回 `429`）；控制台登录连续 5 次输错密码自动锁定 5 分钟；全站注入标准安全响应头（`nosniff`、`SAMEORIGIN` 等）。
    - **单机免密 vs 密码保护模式**：支持一键设置管理密码保护控制台；新密码至少 6 位，留空自动恢复单机免密，改密严格核验原密码。
-   - **防暴力破解与网络安全加固**：单 IP 5 分钟内连续 5 次输错密码自动锁定 5 分钟；全站注入标准安全响应头（`nosniff`、`SAMEORIGIN` 等）。
-   - **多用户全生命周期**：支持管理员后台增删改查租户、重置用户专属 API Key、修改密码与角色权限。
-   - **双重角色权限（Admin / User）**：
-     - **管理员（Admin）**：全权调度全局所有账号池，查看全站流量流水与全部账号状态。
-     - **普通用户（User）**：拥有独立专属的 API Key 凭证与账号池隔离，仅可查看和调度属于自己的私有账号或系统公共账号，不同用户会话互不串扰。
+   - **多用户全生命周期与 RBAC 隔离**：支持管理员（Admin）与普通用户（User）权限分级、独立专属 API Key、RPM 限频与每日积分配额限制。
    - **内存优先与磁盘容错自愈 (Memory-First)**：即使在容器卷或宿主机遭遇文件系统权限限制，新创建/注册的用户与 API Key 依然保证在内存中即时激活生效，外部 API 调用与控制台操作绝不受阻！
 
 4. **全格式一键导入与凭证容错备份 (Batch & Multi-Format Import & Export)**
@@ -75,7 +73,7 @@
 8. **生产级流式中继与流量治理**
    - **全兼容 OpenAI 接口**：标准 `/v1/chat/completions` 与 `/v1/models`，支持流式 SSE 输出与思维链（DeepSeek Reasoning Content）自动注入。
    - **三因子加权随机选号**：积分余量、快过期积分优先、空闲补偿多维度调度。
-   - **故障自愈与模型级独立限流**：支持 429 智能软避让与**模型级独立限流（错误码 6004）**，单一模型被限流自动隔离该模型而不影响同账号其他模型。
+   - **故障自愈、模型级独立限流与免费模型扣费熔断 (v1.2.48)**：支持 429 智能软避让与**模型级独立限流（错误码 6004）**，单一模型被限流自动隔离该模型而不影响同账号其他模型；对于免费模型（如 `hy4free`、`deepseek-v4.1-flash`、`glm-4-flash` 等），一旦发现扣费（`credit > 0`）或免费额度耗尽（`quota.percent >= 100`），立即按重置窗口限流该账号该模型并自动切号，杜绝白白耗尽付费积分。
    - **透明倒计时与一键解除**：控制台透明呈现限流冷却倒计时，并支持一键解除冷却立刻恢复调度。
    - **会话粘性路由**：基于会话上下文的稳定号绑定，保证多轮长对话不换号、Prompt Cache 命中最大化。
    - **全链路诊断日志**：请求分发、上游状态码透出、限流熔断轨迹全量记录，毫秒级定位问题。
@@ -202,6 +200,9 @@ go build -trimpath -ldflags "-s -w" -o workbuddy2api-server ./cmd/server
   "listen": ":7863",
   "api_key": "test_key",
   "web_password": "",
+  "ip_whitelist_enabled": false,
+  "allowed_ips": [],
+  "allow_localhost": true,
   "auth_dir": "./auths",
   "state_file": "./data/state.json",
   "global": {
@@ -226,7 +227,9 @@ go build -trimpath -ldflags "-s -w" -o workbuddy2api-server ./cmd/server
     "travel_enabled": true,
     "travel_hours": [9, 21],
     "activity_enabled": true,
-    "activity_hours": [10]
+    "activity_hours": [10],
+    "tasks_enabled": true,
+    "tasks_hours": [11]
   },
   "session_sticky": {
     "enabled": true,
@@ -238,6 +241,7 @@ go build -trimpath -ldflags "-s -w" -o workbuddy2api-server ./cmd/server
 - **`listen`**：服务监听端口，默认 `:7863`。
 - **`api_key`**：访问网关接口所需的默认系统级 Bearer Token，留空时不开启 API 鉴权。
 - **`web_password`**：Web 管理控制台保护密码，设置后访问前端需输密登录，公网部署必备。
+- **`ip_whitelist_enabled`** / **`allowed_ips`** / **`allow_localhost`**：AI 接口 IP 白名单开关、允许的 IP/CIDR 列表及是否放行本机回环（也可在控制台实时配置并持久化至 `data/settings.json`，或通过环境变量 `WB2A_ALLOWED_IPS`、`WB2A_IP_WHITELIST_ENABLED`、`WB2A_ALLOW_LOCALHOST` 注入）。
 - **`auth_dir`**：保存账号授权文件的目录，默认 `./auths`。
 - **`state_file`**：账号池状态、熔断信息与指标持久化路径，默认 `./data/state.json`。
 - **`global.enabled`**：是否启用国际版（`workbuddy.ai`）支持，默认 `true`。
@@ -449,10 +453,16 @@ while True:
 
 ---
 
-### Q5: 自动签到与定时任务未执行？
-- 请确认 `config.json` 中配置项 `"schedule.checkin_enabled": true`；
-- 签到任务默认在每日北京时间 9:00 与 21:00 定时执行（可通过 `schedule.checkin_hours` 自定义多时间点）；
-- 若刚导入账号希望立即获得每日积分，可在 Web 管理控制台中点击 **「一键签到」** 手动即时触发。
+### Q5: 自动签到与定时任务未执行或看起来像没签到？
+- 签到排程默认在每日北京时间（CST）`09:00` 与 `21:00` 自动执行，服务启动 3 秒后也会按「签到 → 成长任务 → 猫猫旅行」顺序自动执行一次自检；
+- 注意：**仅国内版 (CN) 账号支持官方每日签到**（每次约 +6~+10 积分），国际版 (Global) 官方无每日签到入口，会被调度器主动跳过；
+- 自 `v1.2.52` 起，控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`** 状态胶囊（点击可手动立即签到），账号列表状态列也会显示今日签到回执，并在遇到 `401` 时自动强刷 Token 重试。
+
+---
+
+### Q9: 如何开启 IP 白名单防止他人扫描并盗用我的 API Key？
+- 进入控制台 **「客户端接入 & Key」** 标签页，在 **「🛡️ AI 接口 IP 白名单 & 运行 IP」** 区域勾选启用白名单，支持查看当前服务端网卡运行 IP、监听端口以及来访客户端 IP（可一键点击 **「+ 加入白名单」**）；
+- 填写允许访问的单个 IP（如 `203.0.113.10`）或 CIDR 网段（如 `192.168.1.0/24`）并保存，配置立即生效并同步持久化至 `data/settings.json` 与 `config.json`。
 
 ---
 

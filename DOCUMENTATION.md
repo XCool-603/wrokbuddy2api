@@ -1,13 +1,13 @@
-# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.29)
+# WorkBuddy 2API · 全功能官方用户与开发架构手册 (v1.2.52)
 
 <p align="center">
   <b>一键将 WorkBuddy / CodeBuddy 账号转化为标准 OpenAI 兼容接口的高性能本地/跨平台网关</b><br>
-  双域容灾调度 · 多渠道同邮箱智能共存与严格去重 · 赛博前台门户 · 原生桌面窗口 · 账号池多维轮询 · 熔断冷却自愈 · 视觉全模态 · DeepSeek Harness 智能体内嵌
+  双域容灾调度 · 精确积分明细与双域额度总览 · IP 白名单防扫描 · 多渠道同邮箱共存 · 赛博前台门户 · 原生桌面窗口 · 视觉全模态 · DeepSeek Harness 智能体内嵌
 </p>
 
 <p align="center">
-  <img alt="Go" src="https://img.shields.io/badge/Go-1.24-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.29-blue?style=flat-square">
+  <img alt="Go" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white&style=flat-square">
+  <img alt="Version" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI_Compatible-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -19,7 +19,7 @@
 ## 目录 (Table of Contents)
 
 - [1. 项目简介与核心定位](#1-项目简介与核心定位)
-- [2. 核心特性全览 (v1.2.19)](#2-核心特性全览-v1219)
+- [2. 核心特性全览 (v1.2.52)](#2-核心特性全览-v1252)
 - [3. 快速安装与多环境部署](#3-快速安装与多环境部署)
   - [3.1 方式一：Windows 原生桌面客户端（双击即用）](#31-方式一windows-原生桌面客户端双击即用)
   - [3.2 方式二：Docker / Docker Compose 一键部署（推荐服务器/NAS）](#32-方式二docker--docker-compose-一键部署推荐服务器nas)
@@ -84,7 +84,7 @@
 
 ---
 
-## 2. 核心特性全览 (v1.2.19)
+## 2. 核心特性全览 (v1.2.52)
 
 ```mermaid
 flowchart TD
@@ -143,8 +143,14 @@ flowchart TD
    - 零依赖全自动安装便携式绿色 Node.js 运行时；
    - 自动反向代理穿透桥接，自动注入 Cookie 与鉴权 Token，攻破浏览器跨域与信任栅栏；
    - 注册虚拟 `dsh` 大模型，任何兼容客户端均可将 Agent 当作普通大模型直接调用。
-8. **跨平台一键自动升级**：
-   - 支持 Windows、Linux、macOS 全平台原生二进制，集成应用内一键版本检测与在线平滑热更新。
+8. **跨平台一键自动升级与内置纯 Go 福利任务引擎**：
+   - 支持 Windows、Linux、macOS 全平台原生二进制，集成应用内一键版本检测与在线平滑热更新；
+   - 内置纯 Go 成长任务引擎（免 Python 即可完成每日签到、猫猫自动领养与旅行、技能分享与活动补偿领取），并在控制台实时展示今日签到状态。
+9. **双域余额与资源包精确明细 + 免费模型扣费保护**：
+   - 精确解析官方 `/billing/meter/get-user-resource` 小数额度与包明细（套餐基础 / 平台奖励 / 购买积分 / 7日内到期），支持全池、CN、Global 三栏对比及单号包明细钻取；
+   - `hy4free` 等免费模型直连官方免费节点，若发现账号免费额度耗尽（`quota.percent >= 100`）或触发扣费（`credit > 0`），自动对该账号该模型限流冷却并无缝切号。
+10. **IP 白名单防扫描与运行 IP 面板**：
+    - 支持配置单个 IPv4/IPv6 与 CIDR 网段拦截未授权 AI 接口请求（`403`），防反代请求头伪造与错 Key 爆破自动锁定（`429`）。
 
 ---
 
@@ -245,10 +251,12 @@ CGO_ENABLED=0 GOOS=darwin GOARCH=arm64 go build -trimpath -ldflags "-s -w" -o wo
 | :--- | :--- |
 | **实时指标大盘** | 监控在途并发请求数、24小时/14天请求吞吐、分模型调用占比、平均响应耗时、缓存命中率 |
 | **账号池列表** | 呈现所有账号的头像、昵称、UID、所属域（CN/Global）、登录渠道徽标（Google/Twitter/GitHub）、剩余积分、过期时间与实时状态 |
+| **余额与积分明细体系** | 顶部摘要条提供 **「💰 账户余额」** 与 **「📊 积分明细」** 快捷双按钮；账号列表支持 `全部 / CN / Global` 筛选与每行 `余额` / `明细` / `操作 ▾` 菜单，精分套餐基础、平台奖励、购买积分、7日到期与模型限流单价 |
 | **OAuth 授权登录** | 支持在控制台内一键唤起官方扫码或网页登录，自动拦截回调并持久化凭证 |
 | **全格式批量导入** | 支持 `.json`、`.txt`、`.zip` 备份包、卡密、宽松非标准 JSON 的无痛解析与并发校验 |
 | **一键备份导出** | 一键将所有账号凭证打包导出为 `.zip` 归档包，跨机迁移与灾备秒级完成 |
-| **日常定时运维** | 一键批量签到、一键领取国际版试用加速包 |
+| **日常签到与成长任务** | 内置纯 Go 引擎执行日常签到（支持 `401` 强刷重试）、新手福利、成长任务与猫猫自动领养旅行；顶部摘要条与账号列实时显示今日已签状态 |
+| **IP 白名单与运行 IP** | 「客户端接入 & Key」页展示本机网卡运行 IP、监听端口与当前来访 IP，支持一键加白名单与 CIDR 网段拦截防扫描 |
 | **冷却透明与一键解除**| 实时透出当前被限流账号的倒计时（如 `限流冷却中 (42s)`），提供 **「解除冷却」** 按钮秒级重回调度池 |
 | **多用户租户管理** | 管理员开通租户账号、分配角色、重置租户 API Key、修改密码 |
 | **在线演练场 (Playground)** | 调试流式对话、视觉图片上传、多格式文档附件解析、实时测速与 Token 消耗监控 |
@@ -307,6 +315,11 @@ stateDiagram-v2
    Referrer-Policy: strict-origin-when-cross-origin
    Permissions-Policy: camera=(), microphone=(), geolocation=()
    ```
+3. **AI 接口 IP 白名单与错 Key 爆破防扫描 (`ip_whitelist.go` + `authRateLimiter`)**：
+   - **IP 白名单拦截**：启用后对 `/v1/*`、`/v2/videos/*`、`/status`、`/admin/*` 强制校验来源 IP（支持单 IPv4/IPv6 与 CIDR 网段、可选放行本机回环 `127.0.0.1 / ::1`），未命中直接返回 HTTP `403`（`ip_not_allowed`）；
+   - **抗请求头伪造**：仅当 TCP 直连对端为本机回环或私网/链路代理地址时才采信 `X-Forwarded-For` / `X-Real-IP`；公网直连一律以 `RemoteAddr` 为准，防止通过伪造转发头绕过白名单；
+   - **错 Key 扫描自动锁定**：同一来源 IP 在 2 分钟内累计提交 25 次错误 API Key 自动锁定 2 分钟（返回 `429 rate_limit_exceeded`），阻断字典扫描爆破。
+   - **运行 IP 观测面板**：控制台「客户端接入 & Key」实时显示服务网卡运行 IP、监听端口及当前访问端 IP，支持一键点击「+ 加入白名单」并持久化至 `data/settings.json` 与 `config.json`。
 
 ---
 
@@ -814,6 +827,9 @@ while True:
   "listen": ":7863",
   "api_key": "test_key",
   "web_password": "",
+  "ip_whitelist_enabled": false,
+  "allowed_ips": [],
+  "allow_localhost": true,
   "auth_dir": "./auths",
   "state_file": "./data/state.json",
   "global": {
@@ -838,7 +854,9 @@ while True:
     "travel_enabled": true,
     "travel_hours": [9, 21],
     "activity_enabled": true,
-    "activity_hours": [10]
+    "activity_hours": [10],
+    "tasks_enabled": true,
+    "tasks_hours": [11]
   },
   "session_sticky": {
     "enabled": true,
@@ -854,6 +872,9 @@ while True:
 | `listen` | string | `":7863"` | 服务监听的地址与端口 |
 | `api_key` | string | `""` | 全局管理员 API Bearer 鉴权 Key，留空表示不开启 API 鉴权 |
 | `web_password` | string | `""` | 控制台管理保护密码，留空为单机免密模式，设置后开启访问拦截 |
+| `ip_whitelist_enabled` | bool | `false` | 是否启用 AI 接口 IP 白名单防扫描（也可通过 `WB2A_IP_WHITELIST_ENABLED` 配置） |
+| `allowed_ips` | array | `[]` | 允许访问 AI 接口的 IPv4/IPv6 或 CIDR 网段列表（支持 `WB2A_ALLOWED_IPS` 逗号分隔） |
+| `allow_localhost` | bool | `true` | 开启白名单时是否始终允许本机回环 `127.0.0.1` / `::1` |
 | `auth_dir` | string | `"./auths"` | 账号凭证 JSON 文件的存放目录 |
 | `state_file` | string | `"./data/state.json"` | 账号池熔断状态、指标统计快照持久化路径 |
 | `global.enabled` | bool | `true` | 是否启用对国际版（`workbuddy.ai`）的支持与调度 |
@@ -867,7 +888,9 @@ while True:
 | `cooldown.soft_rate` | string | `"600s"` | 账号触发官方 429 限流时的初始软避让冷却时长 |
 | `cooldown.soft_rate_max` | string | `"2h"` | 连续触发 429 限流时的指数退避最大冷却上限 |
 | `schedule.checkin_enabled` | bool | `true` | 是否开启每日自动定时签到任务 |
-| `schedule.checkin_hours` | array | `[9, 21]` | 每日自动执行签到的小时时刻（24小时制） |
+| `schedule.checkin_hours` | array | `[9, 21]` | 每日自动执行签到的小时时刻（北京时间 CST，24小时制） |
+| `schedule.tasks_enabled` | bool | `true` | 是否开启每日定时全量成长任务（内置纯 Go 引擎 + 可选脚本回退） |
+| `schedule.tasks_hours` | array | `[11]` | 每日自动执行成长任务的小时时刻（北京时间 CST） |
 | `session_sticky.enabled` | bool | `true` | 是否开启会话粘性绑定机制 |
 | `session_sticky.ttl` | string | `"30m"` | 会话粘性存活有效期，多轮对话期间保持稳定路由至同一账号 |
 
@@ -956,10 +979,18 @@ $$\text{Weight} = W_{\text{credits}} + W_{\text{expiring}} + W_{\text{idle}}$$
   - **高峰期**：若遇到上游算力排队，最长可能需要 5 ～ 10 分钟。
 - **推荐策略**：
   - 在自动化批量生成或后端调用时，建议使用异步模式（不传 `wait: true`），提交后获取 `task_id`，每隔 5 秒轮询一次 `GET /v1/videos/tasks/{id}`，体验最稳健！
-- 如果忘记了 Web 管理密码导致无法登录控制台：
-  1. 打开 `config.json`，将 `"web_password": "..."` 修改为空字符串 `""`；
-  2. 若 `data/settings.json` 中存在该字段，同样将其修改为 `""`；
-  3. 重启程序即可瞬间恢复为单机免密模式，重新进入控制台设置新密码。
+
+---
+
+### Q8: 为什么自动签到看起来像没签？国际版支持每日签到吗？
+- **仅国内版（CN）支持每日签到**：国内版账号每日会在北京时间（CST）`09:00` 与 `21:00` 及服务启动 3 秒后自动签到（约 +6~+10 积分）；国际版（Global）官方无每日签到入口，调度器会自动跳过。
+- **控制台状态回显**：自 `v1.2.52` 起，控制台顶部摘要条展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执；遇到 `401` 会自动强刷 `RefreshToken` 并重试一次。
+
+---
+
+### Q9: 如何开启 IP 白名单并查看运行 IP 防止 Key 被扫描盗用？
+- 进入控制台 **「客户端接入 & Key」**，在 **「🛡️ AI 接口 IP 白名单 & 运行 IP」** 面板查看服务网卡运行 IP、监听端口与当前来访客户端 IP；
+- 点击 **「+ 加入白名单」** 或手动填入允许的 IP / CIDR 网段，勾选开启并保存，即可拦截未授权 IP 的 API 访问与扫描。
 
 ---
 
