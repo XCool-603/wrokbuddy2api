@@ -282,6 +282,14 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		// 若池中已有健康备用候选模型，且当前候选模型在所有允许域均已无任何健康账号，
+		// 跳过“全冷却兜底”试探并秒切至下一个健康候选模型。
+		hasBackupHealthy := h.hasHealthyCandidateAfter(candidates, candIdx, peek.Model, reqOwner)
+		if candIdx < len(candidates)-1 && hasBackupHealthy && h.cfg.Pool != nil && !h.hasHealthyForCandidate(candModel, peek.Model, reqOwner) {
+			log.Printf("INFO: [failover] model %s has no healthy accounts, fast switching to next candidate", candModel)
+			continue
+		}
+
 		// 重写出站请求体中的模型为当前候选的 bareModel
 		candBody := body
 		if bareModel != peek.Model {
@@ -289,7 +297,20 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 		}
 		tried = map[string]bool{}
 
-		for i := 0; i < h.cfg.MaxRotate; i++ {
+		maxRetry := h.cfg.MaxRotate
+		if maxRetry <= 0 {
+			maxRetry = 1
+		}
+		maxTotal := maxRetry
+		if maxRetry > 1 && h.cfg.Pool != nil {
+			poolTotal, _, _, _, _ := h.cfg.Pool.CountsDetailed()
+			if poolTotal > 0 {
+				maxTotal = maxRetry + poolTotal + 3
+			}
+		}
+		retryUsed := 0
+
+		for i := 0; retryUsed < maxRetry && i < maxTotal; i++ {
 			// 选号：粘性号优先（PickByUIDForModel 已校验该模型可用性 + 在途未满），否则普通轮换。
 			var acct *auth.Auth
 			if stickyUID != "" {
@@ -315,8 +336,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				// 则动态故障转移到另一个域（如 cn <-> global），实现双域容灾互补。
 				// 仅在显式指定了域前缀且池中根本没有任何该域账号时，严格返回 503（测试 TestChatRealmGlobalAbortedNoGlobalAccount 保险契约）。
 				totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
-				hasExplicitPrefix := strings.HasPrefix(peek.Model, "cn:") || strings.HasPrefix(peek.Model, "global:")
-				canFailover := !hasExplicitPrefix || totalInRealm > 0
+				canFailover := canCandidateCrossFailover(candModel, peek.Model, realm, bareModel, totalInRealm)
 				otherRealm := "global"
 				if realm == "global" {
 					otherRealm = "cn"
@@ -331,8 +351,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				// 3. 全冷却兜底：若两个域均无任何健康账号，才落入最早到期的冷却账号碰运气
-				if acct == nil {
+				// 3. 全冷却兜底：仅当后续已无健康候选模型时，才落入最早到期的冷却账号碰运气；
+				// 否则立即跳出当前候选，秒切下一个健康模型（避免在冷却模型上空转退避）。
+				if acct == nil && !hasBackupHealthy {
 					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
 					if acct == nil && canFailover {
 						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
@@ -346,7 +367,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				// 并发流量排队容灾：若池中有健康账号但当前全部在途满载（常见于多项目同时用多角色流水线），
 				// 在轮转第 1 轮内排队等待名额释放（最长等待 queue_timeout 秒，微轮询 60ms），一旦有在途请求完成释放租约，
 				// 立即接管执行，绝不在突发高并发时粗暴返回 503 打崩客户端流水线！流式长排队期间每 3 秒下发 SSE ping 注释心跳防客户端超时。
-				if i == 0 && (h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) || h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner)) {
+				if i == 0 && !hasBackupHealthy && (h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) || h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner)) {
 					waitStart := time.Now()
 					waitTimeout := h.cfg.QueueTimeout
 					if waitTimeout <= 0 {
@@ -446,7 +467,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				if stickyUID != "" && acct.UID == stickyUID {
 					unbindSticky()
 				}
-				if !rotateBackoff(i, r.Context()) {
+				retryUsed++
+				if !rotateBackoff(retryUsed-1, r.Context()) {
 					// 客户端已断连：换号重试无意义，终止轮转走末端错误透传。
 					break
 				}
@@ -485,8 +507,9 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 							h.cfg.Pool.NoteError(acct.UID)
 						}
 						fail(acct.UID)
-						if !rotateBackoff(i, r.Context()) {
-							break // ctx 取消：终止轮转（refresh 失败换号退避，WAF P0-2）
+						// token 刷新失败属确定性单号失效，立即零退避切换下一号
+						if r.Context().Err() != nil {
+							break
 						}
 						continue
 					}
@@ -536,7 +559,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				lastErr = terr
 				h.cfg.Pool.NoteFailures(acct.UID)
 				fail(acct.UID)
-				if !rotateBackoff(i, r.Context()) {
+				retryUsed++
+				if !rotateBackoff(retryUsed-1, r.Context()) {
 					break // ctx 取消：终止轮转（传输层错误换号退避，WAF P0-2）
 				}
 				continue
@@ -558,7 +582,8 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 							log.Printf("INFO: [server] acct=%s recovered from 401 via token refresh", logfmt.Label(acct.UID, acct.Nickname))
 							h.cfg.Pool.ClearSessionDead(acct.UID)
 							fail(acct.UID)
-							if !rotateBackoff(i, r.Context()) {
+							retryUsed++
+							if !rotateBackoff(retryUsed-1, r.Context()) {
 								break
 							}
 							continue
@@ -568,7 +593,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					log.Printf("WARN: [server] acct=%s session dead (401 unauthorized), disabling account", logfmt.Label(acct.UID, acct.Nickname))
 					h.cfg.Pool.Disable(acct.UID, "401 unauthorized session dead")
 					fail(acct.UID)
-					if !rotateBackoff(i, r.Context()) {
+					if r.Context().Err() != nil {
 						break
 					}
 					continue
@@ -670,12 +695,27 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 				if kind == upstream.ErrWafBlock && h.wafIP.noteWaf(acct.UID) {
 					break
 				}
-				if !rotateBackoff(i, r.Context()) {
+				// 确定性账号/模型限制（6004 明确重置时间、11102 无此模型、402 余额耗尽、401 会话死亡）
+				// 零退避秒级切换下一健康账号或备用模型，不再人为睡眠 500ms-2s 拖慢“熔断秒接”。
+				if isDeterministicAccountFailure(kind, string(respBody)) {
+					if r.Context().Err() != nil {
+						break
+					}
+					continue
+				}
+				retryUsed++
+				if !rotateBackoff(retryUsed-1, r.Context()) {
 					break // ctx 取消：终止轮转（分类错误换号退避，WAF P0-2）
 				}
 				continue
 			}
 			h.cfg.Pool.NoteSuccess(acct.UID)
+			if h.modelBreaker != nil {
+				h.modelBreaker.NoteSuccess(candModel)
+				if acct.Realm() != "" {
+					h.modelBreaker.NoteSuccess(acct.Realm() + ":" + bareModel)
+				}
+			}
 			st.errDetail = "" // 成功则清空之前可能残留的轮转尝试错误信息
 			// 11102 负缓存清命：该账号该模型实测成功，立即解除避让（不必等 TTL 到期）。
 			// BlockModelClear 按 "11102" reason 前缀识别，只清 11102 条目、不碰 6004 独立冷却。
@@ -770,7 +810,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 
 		// 当前候选模型在当前尝试中失败，直接触发模型熔断避让并在还有后备模型时自动故障转移
 		if h.modelBreaker != nil {
-			h.modelBreaker.Trip(candModel, 60*time.Second)
+			h.modelBreaker.Trip(candModel, modelBreakerCooldown(lastErr, h.cfg.SoftCooldown))
 		}
 		if candIdx < len(candidates)-1 {
 			log.Printf("WARN: [failover] candidate model %s failed, automatically switching to %s (failover %d/%d)",
@@ -874,6 +914,62 @@ func rotateBackoff(i int, ctx context.Context) bool {
 		return false
 	}
 	return true
+}
+
+// isDeterministicAccountFailure 报告当前上游失败是否属于确定性的账号或模型限制（如 6004、
+// 带明确 resetAt 的限流、11102 无此模型、402 余额耗尽、12153 会话失效）。此类失败无需睡眠等待
+// 退避，应零延迟立即切换至下一个健康账号或备用候选模型。
+func isDeterministicAccountFailure(kind upstream.ErrKind, body string) bool {
+	switch kind {
+	case upstream.ErrModelBlocked, upstream.ErrHardCredit, upstream.ErrSessionDead:
+		return true
+	case upstream.ErrSoftRate:
+		if upstream.IsModelRateLimit(body) {
+			return true
+		}
+		_, hasReset := upstream.ParseRateReset(body)
+		return hasReset
+	}
+	return false
+}
+
+// modelBreakerCooldown 根据末端失败原因计算模型级熔断冷却时长：
+// 对带明确重置墙钟的 6004 对齐到重置时刻（钳制在 [60s, 2h]），11102 固定 10m，其余维持 60s。
+func modelBreakerCooldown(lastErr error, softCooldown time.Duration) time.Duration {
+	const defaultCooldown = 60 * time.Second
+	const maxBreakerCooldown = 2 * time.Hour
+
+	var ue *upstream.Error
+	if !errors.As(lastErr, &ue) {
+		return defaultCooldown
+	}
+	if ue.Kind == upstream.ErrModelBlocked {
+		return 10 * time.Minute
+	}
+	if ue.Kind == upstream.ErrSoftRate && upstream.IsModelRateLimit(ue.Msg) {
+		if resetAt, ok := upstream.ParseRateReset(ue.Msg); ok {
+			d := time.Until(resetAt)
+			if d > defaultCooldown {
+				if d > maxBreakerCooldown {
+					return maxBreakerCooldown
+				}
+				return d
+			}
+		}
+		if ue.RetryAfter > defaultCooldown {
+			if ue.RetryAfter > maxBreakerCooldown {
+				return maxBreakerCooldown
+			}
+			return ue.RetryAfter
+		}
+		if softCooldown > defaultCooldown {
+			if softCooldown > 10*time.Minute {
+				return 10 * time.Minute
+			}
+			return softCooldown
+		}
+	}
+	return defaultCooldown
 }
 
 // applyErrorPolicy 按错误分类对账号施加冷却/禁用/熔断策略（最终版状态机）。

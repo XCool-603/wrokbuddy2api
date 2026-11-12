@@ -42,3 +42,33 @@ func (p *Pool) AvailableUIDsForModelRealm(model, realm string) []string {
 	return p.availableUIDsLocked(realm,
 		func(e *entry, now time.Time) bool { return e.healthyForModel(now, model) })
 }
+
+// HasHealthyForModelRealmAndOwner 报告指定 realm/owner 下是否存在当前健康可用的账号
+// （含 6004 模型级冷却与 11102 负缓存过滤，忽略 inFlight 仅判断账号+模型可服务性）。
+func (p *Pool) HasHealthyForModelRealmAndOwner(reqModel, realm, owner string) bool {
+	if p == nil {
+		return false
+	}
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	now := time.Now()
+	for _, e := range p.byUID {
+		if realm != "" && e.a.Realm() != realm {
+			continue
+		}
+		if owner != "" && owner != "admin" && owner != "u_admin" {
+			acctOwner := e.a.OwnerValue()
+			if acctOwner != "public" && !IsOwnerMatch(acctOwner, owner) {
+				continue
+			}
+		}
+		if reqModel != "" {
+			if e.healthyForModel(now, reqModel) {
+				return true
+			}
+		} else if e.healthy(now) {
+			return true
+		}
+	}
+	return false
+}

@@ -215,9 +215,62 @@ func (h *Handler) SortCandidatesByHealth(candidates []string) []string {
 		}
 	}
 
-	result := append(healthyActive, backupNormal...)
+	result := make([]string, 0, len(candidates))
+	result = append(result, healthyActive...)
+	result = append(result, backupNormal...)
 	result = append(result, coolingModels...)
 	return result
+}
+
+// canCandidateCrossFailover 报告 candidate model 是否允许在主域无健康账号时跨域补位。
+func canCandidateCrossFailover(candModel, origModel, realm, bareModel string, totalInRealm int) bool {
+	if realm == "cn" && strings.HasPrefix(strings.ToLower(bareModel), "hy4flash-exp") {
+		return false // CN 实验免费变体仅 CN 存在，避免无效路由到 global 撞 11102
+	}
+	hasExplicitPrefix := strings.HasPrefix(origModel, "cn:") || strings.HasPrefix(origModel, "global:")
+	if strings.HasPrefix(candModel, "cn:") || strings.HasPrefix(candModel, "global:") {
+		hasExplicitPrefix = true
+	}
+	return !hasExplicitPrefix || totalInRealm > 0
+}
+
+// hasHealthyForCandidate 报告单个候选模型（含其允许的跨域补位）当前在池中是否有健康可用账号。
+func (h *Handler) hasHealthyForCandidate(candModel, origModel, owner string) bool {
+	if h == nil || h.cfg.Pool == nil {
+		return false
+	}
+	realm, bare := resolveModel(candModel)
+	if h.cfg.Pool.HasHealthyForModelRealmAndOwner(bare, realm, owner) {
+		return true
+	}
+	totalInRealm, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+	if canCandidateCrossFailover(candModel, origModel, realm, bare, totalInRealm) {
+		otherRealm := "global"
+		if realm == "global" {
+			otherRealm = "cn"
+		}
+		if h.cfg.Pool.HasHealthyForModelRealmAndOwner(bare, otherRealm, owner) {
+			return true
+		}
+	}
+	return false
+}
+
+// hasHealthyCandidateAfter 报告 candidates[afterIdx+1:] 中是否存在未熔断且当前有健康账号的备用模型。
+func (h *Handler) hasHealthyCandidateAfter(candidates []string, afterIdx int, origModel, owner string) bool {
+	if h == nil || h.cfg.Pool == nil {
+		return false
+	}
+	for j := afterIdx + 1; j < len(candidates); j++ {
+		m := candidates[j]
+		if h.modelBreaker != nil && h.modelBreaker.IsCooling(m) {
+			continue
+		}
+		if h.hasHealthyForCandidate(m, origModel, owner) {
+			return true
+		}
+	}
+	return false
 }
 
 // ResolveHunyuanFreeCandidates 解析混元等免费模型的跨域同名等价候选列表。
@@ -282,10 +335,10 @@ func (h *Handler) ResolveModelCandidates(model string) []string {
 	// 2. 命中用户在 ModelRoutes 中自定义的路由组
 	if h != nil && h.cfg.ModelRoutes != nil {
 		if list, ok := h.cfg.ModelRoutes[clean]; ok && len(list) > 0 {
-			return list
+			return h.SortCandidatesByHealth(list)
 		}
 		if list, ok := h.cfg.ModelRoutes[strings.ToLower(clean)]; ok && len(list) > 0 {
-			return list
+			return h.SortCandidatesByHealth(list)
 		}
 	}
 
@@ -308,7 +361,7 @@ func (h *Handler) ResolveModelCandidates(model string) []string {
 					}
 				}
 				if len(res) > 0 {
-					return res
+					return h.SortCandidatesByHealth(res)
 				}
 			} else if IsFreeRouteAlias(targetStr) {
 				return h.GetFreeModelCandidates()
