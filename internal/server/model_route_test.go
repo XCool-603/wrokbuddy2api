@@ -370,3 +370,76 @@ func TestSkipsCoolingFallbackWhenHealthyBackupCandidateExists(t *testing.T) {
 		t.Fatalf("expected 200 OK from cn:model-b without poking gl1 cooling fallback on model-a, got %d: %s", w.Code, w.Body.String())
 	}
 }
+
+func TestNoCoolingProbeWhenPoolHasHealthyAccountsTried(t *testing.T) {
+	// 8 账号池：2 个健康 + 6 个冷却中（非全冷却）。
+	// 2 个健康号失败后，绝不允许去试探那 6 个冷却号！
+	var called []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = append(called, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"code":6004,"msg":"usage exceeds frequency limit, your usage will reset at 2099-01-01 00:00:00 UTC+8"}`))
+	}))
+	defer srv.Close()
+
+	up := upstream.New()
+	up.ChatBaseCN = srv.URL
+	up.BillingBaseCN = srv.URL
+
+	p := pool.New("")
+	for i := 1; i <= 8; i++ {
+		uid := "u" + string(rune('0'+i))
+		p.Add(&auth.Auth{UID: uid, AccessToken: "at-" + uid, ExpiresAt: 9999999999})
+		if i >= 3 {
+			p.Cooldown(uid, pool.CoolSoft, 10*time.Minute, "429")
+		}
+	}
+
+	h := NewHandler(Config{Pool: p, Upstream: up, MaxRotate: 3})
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader([]byte(`{"model":"glm-5.3","messages":[{"role":"user","content":"hi"}],"stream":false}`)))
+	w := httptest.NewRecorder()
+	h.chatCompletions(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(called) != 2 {
+		t.Fatalf("expected only the 2 healthy accounts tried (zero cooling probes), got %d calls: %v", len(called), called)
+	}
+}
+
+func TestAllCoolingProbesOnlySingleEarliestAccount(t *testing.T) {
+	// 8 账号全冷却：只允许试探最早到期那 1 个冷却账号；试探失败立刻结束，绝不逐个试探其余 7 个。
+	var called []string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		called = append(called, r.Header.Get("Authorization"))
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"code":429,"msg":"rate limited"}`))
+	}))
+	defer srv.Close()
+
+	up := upstream.New()
+	up.ChatBaseCN = srv.URL
+	up.BillingBaseCN = srv.URL
+
+	p := pool.New("")
+	for i := 1; i <= 8; i++ {
+		uid := "u" + string(rune('0'+i))
+		p.Add(&auth.Auth{UID: uid, AccessToken: "at-" + uid, ExpiresAt: 9999999999})
+		p.Cooldown(uid, pool.CoolSoft, time.Duration(i)*time.Minute, "429")
+	}
+
+	h := NewHandler(Config{Pool: p, Upstream: up, MaxRotate: 3})
+	req := httptest.NewRequest(http.MethodPost, "/v1/chat/completions", bytes.NewReader([]byte(`{"model":"glm-5.3","messages":[{"role":"user","content":"hi"}],"stream":false}`)))
+	w := httptest.NewRecorder()
+	h.chatCompletions(w, req)
+
+	if w.Code != http.StatusTooManyRequests {
+		t.Fatalf("expected 429, got %d: %s", w.Code, w.Body.String())
+	}
+	if len(called) != 1 || called[0] != "Bearer at-u1" {
+		t.Fatalf("expected single probe on earliest-expiring u1 only, got %v", called)
+	}
+}

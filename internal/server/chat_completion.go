@@ -309,6 +309,7 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		retryUsed := 0
+		coolingProbed := false
 
 		for i := 0; retryUsed < maxRetry && i < maxTotal; i++ {
 			// 选号：粘性号优先（PickByUIDForModel 已校验该模型可用性 + 在途未满），否则普通轮换。
@@ -351,15 +352,24 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 
-				// 3. 全冷却兜底：仅当后续已无健康候选模型时，才落入最早到期的冷却账号碰运气；
-				// 否则立即跳出当前候选，秒切下一个健康模型（避免在冷却模型上空转退避）。
-				if acct == nil && !hasBackupHealthy {
+				hasBusyHealthy := h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) ||
+					(canFailover && h.cfg.Pool.HasInFlightBusy(bareModel, otherRealm, reqOwner))
+
+				// 3. 全冷却兜底试探（严格限定条件）：
+				// 仅当后续已无健康候选模型、无在途健康账号、且本轮尚未尝试任何健康账号
+				// （len(tried)==0 && i==0，即池内所有符合条件的账号在请求开始时已全部处于冷却中）
+				// 时，才允许按最早到期顺序试探最多 1 个冷却账号；只要曾经试过健康账号，
+				// 或已经试探过 1 个冷却账号仍失败，就绝不逐个试探池内其余冷却账号。
+				if acct == nil && !hasBackupHealthy && !hasBusyHealthy && !coolingProbed && i == 0 && len(tried) == 0 {
 					acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
 					if acct == nil && canFailover {
 						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
 						if acct == nil {
 							acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
 						}
+					}
+					if acct != nil {
+						coolingProbed = true
 					}
 				}
 			}
@@ -375,6 +385,12 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 					}
 					lastPing := waitStart
 					flusher, _ := w.(http.Flusher)
+					totalInRealmQueue, _, _, _, _ := h.cfg.Pool.CountsDetailedForRealm(realm)
+					canFailoverQueue := canCandidateCrossFailover(candModel, peek.Model, realm, bareModel, totalInRealmQueue)
+					otherRealmQueue := "global"
+					if realm == "global" {
+						otherRealmQueue = "cn"
+					}
 					for time.Since(waitStart) < waitTimeout {
 						select {
 						case <-r.Context().Done():
@@ -398,24 +414,17 @@ func (h *Handler) chatCompletions(w http.ResponseWriter, r *http.Request) {
 							flusher.Flush()
 							lastPing = time.Now()
 						}
-						// 重试选号
-						acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
-						if acct == nil {
-							otherRealm := "global"
-							if realm == "global" {
-								otherRealm = "cn"
-							}
-							acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, otherRealm, reqOwner)
-							if acct == nil {
-								acct = h.cfg.Pool.PickExcludingForRealmAndOwner(tried, bareModel, "", reqOwner)
-							}
+						// 排队重试仅从健康池抢槽位，绝不捞取冷却账号试探
+						acct = h.cfg.Pool.PickHealthyOnlyExcludingForRealmAndOwner(tried, bareModel, realm, reqOwner)
+						if acct == nil && canFailoverQueue {
+							acct = h.cfg.Pool.PickHealthyOnlyExcludingForRealmAndOwner(tried, bareModel, otherRealmQueue, reqOwner)
 						}
 						if acct != nil {
 							log.Printf("INFO: [server] concurrency queue slot acquired after %v: acct=%s",
 								time.Since(waitStart).Round(time.Millisecond), logfmt.Label(acct.UID, acct.Nickname))
 							break
 						}
-						if !h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) && !h.cfg.Pool.HasInFlightBusy(bareModel, "", reqOwner) {
+						if !h.cfg.Pool.HasInFlightBusy(bareModel, realm, reqOwner) && (!canFailoverQueue || !h.cfg.Pool.HasInFlightBusy(bareModel, otherRealmQueue, reqOwner)) {
 							// 已无在途忙碌账号，不必继续等待
 							break
 						}
