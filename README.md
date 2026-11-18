@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.56-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI%20%26%20Anthropic-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="GUI" src="https://img.shields.io/badge/GUI-Native%20WebView2-teal?style=flat-square">
@@ -21,18 +21,18 @@
 
 ---
 
-## 🌟 核心能力（截至 `v1.2.52`）
+## 🌟 核心能力（截至 `v1.2.56`）
 
 1. **双协议兼容 + 视频大模型代理 + DeepSeek Harness (`dsh`)**
    - **OpenAI & Anthropic 双协议**：提供标准 `/v1/chat/completions`、`/v1/messages`、`/v1/models`，完整支持 SSE 流式输出、Thinking 思维链、Function Calling 与多模态输入（图片 URL 自动转 Base64、Claude `image` 块及文本/代码文档清洗）。
    - **专属视频大模型 (`v1.2.27+`)**：接入国内版 **快手可灵 3.0**（`kling-video-v3` / `kling-v3-t2v` / `kling-v3-i2v` / `keling`）与 **MiniMax-H3 海螺**（`minimax-video-h3`），支持 `POST /v1/videos/generations`、`GET /v1/videos/tasks/{id}` 以及在 `/v1/chat/completions` 对话窗口中直接生成并回传 MP4 视频。
    - **DeepSeek Harness (`dsh`) 内嵌**：支持一键免环境安装便携 Node.js 运行时，直接在控制台标签页使用 Agent UI，或通过虚拟模型 `dsh` 直接调度执行。
 
-2. **简洁现代的 Console 与双域余额 / 积分明细体系（`v1.2.49` – `v1.2.52`）**
+2. **简洁现代的 Console 与双域余额 / 积分明细体系（`v1.2.49` – `v1.2.56`）**
    - **前台门户 (`/`) + 控制台 (`/console` / `/dashboard`) 分离**：门户安全脱敏对外展示服务状态、模型矩阵与接入代码；控制台聚焦生产运维。
    - **紧凑布局与域筛选**：支持 `全部 / CN / Global` 一键筛选，顶部摘要条集中展示全池/CN/Global 可用余额与 **「💰 账户余额」「📊 积分明细」** 双入口弹窗，操作列收敛为 **「余额」「明细」「操作 ▾」** 浮层菜单。
    - **精确资源包分桶解析**：精确解析 `/billing/meter/get-user-resource` 小数额度与每个资源包，拆分为 **套餐基础 (`base`) / 平台奖励 (`bonus`) / 购买积分 (`purchased`) / 7日内到期 (`expiring`)**，并汇总结算各模型限流账号数与实测单价（`cost_per_1k`）。
-   - **今日自动签到状态胶囊 (`v1.2.52`)**：控制台顶部实时显示 `✓ 今日已签 X/Y CN · 下次 HH:MM`，账号列表同步显示今日签到回执，点击状态胶囊可手动触发全池签到。
+   - **今日自动签到状态胶囊 (`v1.2.56`)**：控制台顶部实时显示 `✓ 今日已签 X/Y CN · 下次 HH:MM`，账号列表同步显示今日签到回执，点击状态胶囊可手动触发全池签到。
 
 3. **AI 接口 IP 白名单防扫描 + 纵深安全防御（`v1.2.51`）**
    - **IP 白名单拦截**：支持单个 IPv4/IPv6 与 CIDR 网段（如 `192.168.1.0/24`）过滤 `/v1/*`、`/v2/videos/*`、`/status`、`/admin/*` 请求，非白名单 IP 直接返回 `403`（`ip_not_allowed`），并支持切换是否始终放行本机回环（`127.0.0.1 / ::1`）。
@@ -45,7 +45,7 @@
    - **双域隔离 & 同邮箱多渠道共存**：支持国内版（`copilot.tencent.com` / `www.codebuddy.cn`）与国际版（`www.workbuddy.ai`）融合调度与跨域兜底；Google / Twitter(X) / GitHub 同邮箱登录自动独立分流落盘，互不覆盖。
    - **三因子加权随机 + 排队 SSE 心跳**：综合余量、7 日临期积分（优先消耗）、空闲时长三因子调度；模型级独立限流（`6004`）；并发满载排队期间每 3 秒发送 `: ping` SSE 心跳防止客户端断连。
 
-5. **全自动日常签到、纯 Go 成长任务引擎与猫猫旅行（`v1.2.33` – `v1.2.46`, `v1.2.52`）**
+5. **全自动日常签到、纯 Go 成长任务引擎与猫猫旅行（`v1.2.33` – `v1.2.46`, `v1.2.56`）**
    - **内置纯 Go 成长任务引擎**：即使无 Python 环境的单文件桌面版/服务器也可直接完成 18+ 项成长任务与活动奖励收割（包括技能分享、腾讯云轻量云专家、发现应用、公众号关注、5 模板对话等）。
    - **全自动流水线**：服务启动后 3 秒按 `签到 -> 成长任务（解锁 5 连对话门槛）-> 猫猫旅行（自动领养首只猫 +300 积分 / 派出 / 领奖）` 顺序执行；定时排程严格对齐北京时间（CST UTC+8）；遇到 `401` 自动强刷 `RefreshToken` 并重试签到。
 
@@ -211,7 +211,7 @@ curl http://127.0.0.1:7863/v1/videos/tasks/<task_id> \
 
 ### Q2: 自动签到为什么看起来像没签？国际版支持每日签到吗？
 - **仅国内版 (CN) 支持官方每日签到**（每次约 +6~+10 积分）；国际版 (Global) 官方无每日签到接口，调度器按规则跳过。
-- 默认每天北京时间（CST）`09:00` 与 `21:00` 及服务启动 3 秒后执行。自 `v1.2.52` 起，控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执，遇到 `401` 会自动强刷 `RefreshToken` 重试。
+- 默认每天北京时间（CST）`09:00` 与 `21:00` 及服务启动 3 秒后执行。自 `v1.2.56` 起，控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执，遇到 `401` 会自动强刷 `RefreshToken` 重试。
 
 ### Q3: 如何防止别人扫描端口并盗用我的 API Key？
 - 进入控制台 **「客户端接入 & Key」** -> **「🛡️ AI 接口 IP 白名单 & 运行 IP」**：查看服务端运行 IP、监听端口与当前来访客户端 IP，可一键 **「+ 加入白名单」**，填写允许的 IP/CIDR 网段并启用即可（非白名单 IP 直接返回 `403`）；同时连续 25 次错 Key 会自动触发防爆破锁定（`429`）。

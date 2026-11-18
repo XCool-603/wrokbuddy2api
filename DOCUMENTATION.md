@@ -1,4 +1,4 @@
-# WorkBuddy 2API · 完整用户与架构开发手册 (`v1.2.52`)
+# WorkBuddy 2API · 完整用户与架构开发手册 (`v1.2.56`)
 
 <p align="center">
   <b>将 WorkBuddy / CodeBuddy 多账号汇聚为标准 OpenAI / Anthropic 兼容接口的生产级双域智能网关</b><br>
@@ -7,7 +7,7 @@
 
 <p align="center">
   <img alt="Go" src="https://img.shields.io/badge/Go-1.22%2B-00ADD8?logo=go&logoColor=white&style=flat-square">
-  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.52-blue?style=flat-square">
+  <img alt="Release" src="https://img.shields.io/badge/Release-v1.2.56-blue?style=flat-square">
   <img alt="API" src="https://img.shields.io/badge/API-OpenAI%20%26%20Anthropic-412991?style=flat-square">
   <img alt="Platform" src="https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-emerald?style=flat-square">
   <img alt="Deploy" src="https://img.shields.io/badge/Deploy-Single%20EXE%20%7C%20Docker-2496ED?logo=docker&logoColor=white&style=flat-square">
@@ -19,7 +19,7 @@
 ## 目录 (Table of Contents)
 
 - [1. 项目简介与定位](#1-项目简介与定位)
-- [2. 系统架构与核心特性全览 (v1.2.52)](#2-系统架构与核心特性全览-v1252)
+- [2. 系统架构与核心特性全览 (v1.2.56)](#2-系统架构与核心特性全览-v1252)
 - [3. 多环境安装与部署指南](#3-多环境安装与部署指南)
   - [3.1 Windows 原生桌面客户端（WebView2）](#31-windows-原生桌面客户端webview2)
   - [3.2 Docker / Docker Compose 部署](#32-docker--docker-compose-部署)
@@ -40,7 +40,7 @@
 - [7. 多租户 RBAC、配额与 Memory-First 持久化](#7-多租户-rbac配额与-memory-first-持久化)
 - [8. 自动签到、纯 Go 成长任务引擎与猫猫旅行](#8-自动签到纯-go-成长任务引擎与猫猫旅行)
   - [8.1 每日定时排程与启动顺序联动（CST 北京时间）](#81-每日定时排程与启动顺序联动cst-北京时间)
-  - [8.2 签到 401 强刷重试与控制台实时状态展示 (v1.2.52)](#82-签到-401-强刷重试与控制台实时状态展示-v1252)
+  - [8.2 签到 401 强刷重试与控制台实时状态展示 (v1.2.56)](#82-签到-401-强刷重试与控制台实时状态展示-v1252)
   - [8.3 内置纯 Go 成长任务与猫猫旅行引擎 (v1.2.44–v1.2.46)](#83-内置纯-go-成长任务与猫猫旅行引擎-v1244v1246)
 - [9. DeepSeek Harness (`dsh`) 智能体集成](#9-deepseek-harness-dsh-智能体集成)
 - [10. 全模态视觉推理与专属视频大模型矩阵](#10-全模态视觉推理与专属视频大模型矩阵)
@@ -62,7 +62,7 @@
 
 ---
 
-## 2. 系统架构与核心特性全览 (v1.2.52)
+## 2. 系统架构与核心特性全览 (v1.2.56)
 
 ```mermaid
 flowchart TD
@@ -132,7 +132,7 @@ go build -ldflags="-s -w" -o workbuddy2api-headless ./cmd/server
 ```
 
 ### 3.4 应用内检查更新与热升级
-控制台左上角版本徽章（如 `v1.2.52`）支持一键检测 GitHub Release 更新（`/ui/system/update/check`）并执行在线下载替换平滑升级（`/ui/system/update/do`）。
+控制台左上角版本徽章（如 `v1.2.56`）支持一键检测 GitHub Release 更新（`/ui/system/update/check`）并执行在线下载替换平滑升级（`/ui/system/update/do`）。
 
 ---
 
@@ -220,7 +220,7 @@ go build -ldflags="-s -w" -o workbuddy2api-headless ./cmd/server
 
 其余独立排程包括：`ActivityHours`（`[10]`，活跃上报与连登奖励兑换/抽奖）、`KeepaliveHours`（`[22]`，Token 定时保活刷新）、`SchoolHours`（`[12]`）、`CatHours`（`[1]`）。
 
-### 8.2 签到 401 强刷重试与控制台实时状态展示 (`v1.2.52`)
+### 8.2 签到 401 强刷重试与控制台实时状态展示 (`v1.2.56`)
 - **为什么官方全球版不参与签到**：仅国内版（CN）支持 `/v2/billing/meter/daily-checkin` 每日签到（每次约 +6~+10 积分）；国际版（Global）官方无每日签到，调度器自动标记为 `skipped (global)`。
 - **Token 提前失效自愈**：`CheckinAll` 与手动 `POST /ui/action/signin` 遇 HTTP `401` 或 `ErrSessionDead` 时，不再直接失败，而是自动强刷 `RefreshToken` 并重放签到请求一次。
 - **今日状态实时回显**：[internal/pool/checkin.go](internal/pool/checkin.go) 按 CST 自然日记录每号与全池签到摘要（次日 00:00 自动刷新为待签），控制台摘要条实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号状态列显示 `✓ 今日已签` 或 `✗ 签到失败`。
@@ -434,7 +434,7 @@ curl -X POST http://127.0.0.1:7863/v1/videos/generations \
 
 ### Q2: 为什么自动签到看起来像没签？国际版支持每日签到吗？
 - **仅国内版（CN）支持每日签到**（每次约 +6~+10 积分）；国际版（Global）官方无每日签到入口，调度器会自动跳过。
-- 国内版每日于北京时间 `09:00` 与 `21:00` 及服务启动 3 秒后执行；自 `v1.2.52` 起控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执，遇到 `401` 会自动强刷 `RefreshToken` 并重试。
+- 国内版每日于北京时间 `09:00` 与 `21:00` 及服务启动 3 秒后执行；自 `v1.2.56` 起控制台顶部摘要条会实时展示 **`✓ 今日已签 X/Y CN · 下次 HH:MM`**，账号列表状态列也会显示今日已签回执，遇到 `401` 会自动强刷 `RefreshToken` 并重试。
 
 ### Q3: 如何开启 IP 白名单并查看运行 IP 防止别人扫描使用我的 Key？
 - 在控制台进入 **「客户端接入 & Key」 -> 「🛡️ AI 接口 IP 白名单 & 运行 IP」**，查看服务网卡运行 IP、监听端口与当前来访客户端 IP；点击 **「+ 加入白名单」** 或输入允许的 IP / CIDR 网段并启用保存，非白名单 IP 将被直接拦截返回 `403`。
@@ -461,7 +461,11 @@ curl -X POST http://127.0.0.1:7863/v1/videos/generations \
 
 ## 15. 版本演进与开源许可
 
-- **`v1.2.52`**：每日签到新增 `401` 强刷 Token 重试机制，控制台顶部摘要条与账号列实时显示今日签到状态与下轮时刻。
+- **1.2.56**：文档与前台控制台版本统一升级，包含快过期积分绝对优先调度、全冷却精准试探与 6004 熔断秒接。
+- **1.2.55**：快过期积分权重提升至 50.0，实现临期积分强压倒性优先消耗。
+- **1.2.54**：严格收紧全冷却兜底试探，禁止逐号轮流试探冷却账号，单请求最多仅试探 1 个最早到期账号。
+- **1.2.53**：6004 确定性错误 0ms 零退避秒级故障转移，模型熔断冷却对齐上游 resetAt 墙钟。
+- **1.2.52**：每日签到新增 401 强刷 Token 重试机制，控制台顶部摘要条与账号列实时显示今日签到状态与下轮时刻。
 - **`v1.2.51`**：新增 AI 接口 IP 白名单防扫描（CIDR/单 IP + 防 XFF 伪造）、错 Key 爆破防扫描锁定（25 次/2 分钟 -> `429`）与运行 IP 面板。
 - **`v1.2.50`**：Console 页面精简重构，新增顶部「💰 账户余额 / 📊 积分明细」双快捷按钮、域名筛选与每行「余额 / 明细 / 操作 ▾」浮层菜单。
 - **`v1.2.49`**：精确资源包拆分解析（套餐基础 / 平台奖励 / 购买积分 / 7日内到期）及全池 / CN / Global 三域汇总面板。
