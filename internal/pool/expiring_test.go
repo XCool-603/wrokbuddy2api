@@ -27,10 +27,10 @@ func TestExpiringCreditBoostsWeight(t *testing.T) {
 	if wExp <= wSta {
 		t.Errorf("expiring-heavy weight %.3f <= stable-heavy %.3f; 快过期积分应加权", wExp, wSta)
 	}
-	// 差值应约等于 (0.9-0.05)*expiringWeight = 0.85*8 = 6.8
+	// 差值应约等于 (0.9-0.05)*expiringWeight = 0.85*50 = 42.5
 	diff := wExp - wSta
-	if diff < 6.0 || diff > 7.5 {
-		t.Errorf("weight diff %.3f, want ~6.8 (0.85*expiringWeight)", diff)
+	if diff < 40.0 || diff > 45.0 {
+		t.Errorf("weight diff %.3f, want ~42.5 (0.85*expiringWeight)", diff)
 	}
 }
 
